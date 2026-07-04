@@ -27,6 +27,8 @@ module RailsDependencyPruner
         run_audit
       when "index"
         run_index
+      when "explain"
+        run_explain
       when "profile"
         run_profile
       when "help", "-h", "--help"
@@ -52,6 +54,26 @@ module RailsDependencyPruner
           puts JSON.pretty_generate(payload)
         else
           print_index(index)
+        end
+
+        0
+      end
+
+      def run_explain
+        options = parse_options(require_app: true)
+        target = @argv.shift
+        raise ArgumentError, "CONSTANT is required" if blank?(target)
+
+        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
+        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
+        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        explanation = planner.explain_constant(target)
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(explanation)
+        else
+          print_explanation(explanation)
         end
 
         0
@@ -272,6 +294,7 @@ module RailsDependencyPruner
           Commands:
             index  Build a Rails constant dependency tree
             audit  Scan an app and find unused Rails constants
+            explain CONSTANT  Explain why a Rails constant is used or unused
             profile validate  Validate a deterministic profile against current inputs
 
           Required:
@@ -329,6 +352,39 @@ module RailsDependencyPruner
         puts "Top Rails class instance memory:"
         summary.rails_class_instance_sizes.first(10).each do |entry|
           puts "  #{entry.fetch("name")}: #{entry.fetch("bytes")} bytes / #{entry.fetch("count")} objects"
+        end
+      end
+
+      def print_explanation(explanation)
+        puts "#{explanation.fetch("constant")}: #{explanation.fetch("decision")}"
+        puts "Seed: #{explanation.fetch("seed") || "no"}"
+        puts "Defined: #{explanation.fetch("defined")}"
+        puts "Component: #{explanation.fetch("component") || "(unknown)"}"
+        puts "Path: #{explanation.fetch("path") || "(unknown)"}"
+
+        unless explanation.fetch("dependencies").empty?
+          puts
+          puts "Dependencies:"
+          explanation.fetch("dependencies").first(20).each do |dependency|
+            puts "  #{dependency}"
+          end
+        end
+
+        unless explanation.fetch("used_by").empty?
+          puts
+          puts "Used by:"
+          explanation.fetch("used_by").first(20).each do |constant|
+            puts "  #{constant}"
+          end
+        end
+
+        return if explanation.fetch("reachability_path").empty?
+
+        puts
+        puts "Reachability path:"
+        explanation.fetch("reachability_path").each do |entry|
+          via = entry["via"] ? " via #{entry["via"]}" : ""
+          puts "  #{entry.fetch("node")}#{via}"
         end
       end
   end

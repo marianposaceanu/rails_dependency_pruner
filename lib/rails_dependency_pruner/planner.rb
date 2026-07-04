@@ -3,6 +3,7 @@
 require "set"
 
 require_relative "constant_resolver"
+require_relative "graph/constant_graph_builder"
 require_relative "runtime_memory_summary"
 
 module RailsDependencyPruner
@@ -99,8 +100,42 @@ module RailsDependencyPruner
       payload[:unused_constants] = unused_constants.to_a.sort if include_unused
       payload[:unused_features] = unused_features if include_unused
       payload[:unused_require_paths] = unused_require_paths if include_unused
-      payload[:dependency_tree] = index.dependency_tree.sort.to_h if include_tree
+      if include_tree
+        payload[:dependency_tree] = index.dependency_tree.sort.to_h
+        payload[:dependency_graph] = dependency_graph.to_h
+      end
       payload
+    end
+
+    def dependency_graph
+      @dependency_graph ||= Graph::ConstantGraphBuilder.new(index).build
+    end
+
+    def graph_used_constants
+      dependency_graph.reachable_from(seed_constants).map { |id| id.delete_prefix("constant:") }.to_set
+    end
+
+    def explain_constant(name)
+      resolver = ConstantResolver.new(index.names)
+      resolved = resolver.resolve(name, nil) || name
+      id = dependency_graph.constant_id(resolved)
+      definition = index.definitions[resolved]
+      seed_kind = seed_kind_for(resolved)
+      used = used_constants.include?(resolved)
+
+      {
+        "query" => name,
+        "constant" => resolved,
+        "decision" => used ? "used" : "unused",
+        "seed" => seed_kind,
+        "defined" => !definition.nil?,
+        "path" => definition&.path,
+        "component" => definition&.component,
+        "dependencies" => definition ? definition.dependencies.to_a.sort : [],
+        "used_by" => used_by(resolved),
+        "reachability_path" => used ? dependency_graph.path_from(seed_constants, id) : [],
+        "graph" => dependency_graph.explain(id),
+      }
     end
 
     def runtime_memory
@@ -110,5 +145,20 @@ module RailsDependencyPruner
     def runtime_memory_summary
       @runtime_memory_summary ||= RuntimeMemorySummary.new(runtime_memory)
     end
+
+    private
+      def seed_kind_for(constant)
+        return "static" if usage.direct_rails_constants.include?(constant)
+        return "runtime" if runtime_constants.include?(constant)
+      end
+
+      def used_by(constant)
+        index.definitions.values.filter_map do |definition|
+          next unless used_constants.include?(definition.name)
+          next unless definition.dependencies.include?(constant)
+
+          definition.name
+        end.sort
+      end
   end
 end

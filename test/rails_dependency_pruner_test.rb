@@ -81,6 +81,56 @@ class RailsDependencyPrunerTest < Minitest::Test
     refute_includes planner.unused_constants, "ActionController::UnusedControllerFeature"
   end
 
+  def test_dependency_graph_matches_current_used_constant_closure
+    index = RailsDependencyPruner::ConstantIndex.build(
+      rails_root: FAKE_RAILS_ROOT,
+      frameworks: %w[actionpack activerecord],
+    )
+    usage = RailsDependencyPruner::AppUsage.scan(app_root: FAKE_APP_ROOT, index: index)
+    planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+
+    assert_equal planner.used_constants, planner.graph_used_constants
+
+    graph = planner.dependency_graph
+    assert graph.nodes.key?(graph.constant_id("ActiveRecord::Base"))
+    assert graph.edges.any? { |edge| edge.from == graph.constant_id("ActiveRecord::Base") && edge.to == graph.constant_id("ActiveRecord::Persistence") }
+
+    explanation = planner.explain_constant("ActiveRecord::Base")
+    assert_equal "used", explanation.fetch("decision")
+    assert_equal "static", explanation.fetch("seed")
+    assert_equal "activerecord", explanation.fetch("component")
+    assert_equal ["constant:ActiveRecord::Base"], explanation.fetch("reachability_path").map { |entry| entry.fetch("node") }
+
+    unused = planner.explain_constant("ActiveRecord::UnusedRecordFeature")
+    assert_equal "unused", unused.fetch("decision")
+    assert_empty unused.fetch("reachability_path")
+  end
+
+  def test_cli_explains_constant_usage_as_json
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "explain",
+      "--rails-root",
+      FAKE_RAILS_ROOT.to_s,
+      "--frameworks",
+      "actionpack,activerecord",
+      "--app",
+      FAKE_APP_ROOT.to_s,
+      "--json",
+      "ActiveRecord::UnusedRecordFeature",
+      chdir: ROOT.to_s,
+    )
+
+    assert status.success?, stderr
+
+    payload = JSON.parse(stdout)
+    assert_equal "ActiveRecord::UnusedRecordFeature", payload.fetch("constant")
+    assert_equal "unused", payload.fetch("decision")
+    assert_equal "activerecord", payload.fetch("component")
+    assert_equal "constant", payload.dig("graph", "node", "type")
+  end
+
   def test_cli_outputs_json_and_writes_shim
     Dir.mktmpdir("rails_dependency_pruner") do |dir|
       shim_path = File.join(dir, "shim.rb")
