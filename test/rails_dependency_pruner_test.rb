@@ -4823,6 +4823,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "boot:skipped:blocked_feature", event.fetch("event_id")
       assert_equal "skip_railtie:blocked_feature", event.fetch("transform_id")
       assert_operator event.fetch("pid"), :>, 0
+      assert_equal 1, events.dig("counters", "pruner.profile.valid")
+      assert_equal 1, events.dig("counters", "pruner.event.total")
+      assert_equal 1, events.dig("counters", "pruner.event.expected")
+      assert_equal 1, events.dig("counters", "pruner.event.skipped_require")
+      assert_nil events.dig("counters", "pruner.event.unexpected")
     end
   end
 
@@ -4935,6 +4940,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 0, events.fetch("expected_events_count")
       assert_equal 1, events.fetch("unexpected_events_count")
       assert_equal false, events.dig("events", 0, "expected")
+      assert_equal 1, events.dig("counters", "pruner.event.total")
+      assert_equal 1, events.dig("counters", "pruner.event.unexpected")
+      assert_equal 1, events.dig("counters", "pruner.event.skipped_require")
     end
   end
 

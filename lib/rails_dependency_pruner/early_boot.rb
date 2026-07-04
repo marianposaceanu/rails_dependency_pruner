@@ -252,6 +252,7 @@ module RailsDependencyPruner
           "events_count" => @events.length,
           "expected_events_count" => @events.count { |event| event["expected"] == true },
           "unexpected_events_count" => @events.count { |event| event["expected"] == false },
+          "counters" => telemetry_counters,
         ),
       )
     end
@@ -311,6 +312,28 @@ module RailsDependencyPruner
         "caller_line" => event["caller_line"],
         "pid" => event["pid"],
       }.compact
+    end
+
+    def telemetry_counters
+      counters = Hash.new(0)
+      counters["pruner.profile.valid"] = @profile_id ? 1 : 0
+
+      Array(@events).each do |event|
+        counters["pruner.event.total"] += 1
+        counters["pruner.event.expected"] += 1 if event["expected"] == true
+        counters["pruner.event.unexpected"] += 1 if event["expected"] == false
+
+        case event["action"].to_s
+        when "skipped", "would_skip"
+          counters["pruner.event.skipped_require"] += 1
+        when "deferred", "would_defer", "loaded_lazy", "loaded_lazy_gem"
+          counters["pruner.event.lazy_load"] += 1
+        when "stubbed_lazy_gem_require", "would_stub_lazy_gem_require"
+          counters["pruner.event.stub_used"] += 1
+        end
+      end
+
+      counters.sort.to_h
     end
 
     def caller_string(event)

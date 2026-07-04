@@ -205,6 +205,10 @@ Telemetry is opt-in:
 The telemetry payload includes `component`, `profile_id`, `mode`, `event`,
 `event_id`, `phase`, `path`, `matched_path`, `gem`, `constant`, `transform_id`,
 `expected`, `caller`, `caller_path`, `caller_line`, and `pid` when available.
+Early output JSON also includes `counters` with `pruner.profile.valid`,
+`pruner.event.total`, `pruner.event.expected`, `pruner.event.unexpected`,
+`pruner.event.skipped_require`, `pruner.event.lazy_load`, and
+`pruner.event.stub_used` when those events occur.
 
 ## migration
 
