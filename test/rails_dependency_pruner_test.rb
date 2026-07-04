@@ -4154,6 +4154,76 @@ class RailsDependencyPrunerTest < Minitest::Test
 
         require "rails/all"
       RUBY
+      File.write(File.join(app_root, "Gemfile"), <<~RUBY)
+        source "https://rubygems.org"
+        gem "bootsnap"
+        gem "puma"
+        gem "sentry-rails"
+        gem "sidekiq"
+      RUBY
+      File.write(File.join(app_root, "Gemfile.lock"), <<~LOCK)
+        GEM
+          specs:
+            rails (8.1.3)
+            bootsnap (1.18.6)
+            puma (7.0.4)
+            sentry-rails (6.0.0)
+            sidekiq (8.0.8)
+      LOCK
+      FileUtils.mkdir_p(File.join(app_root, "config/initializers"))
+      File.write(File.join(app_root, "config/initializers/dynamic_require.rb"), <<~RUBY)
+        feature = ENV.fetch("BOOT_FEATURE")
+        require feature
+      RUBY
+      File.write(File.join(app_root, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          mount AdminApp, at: "/admin"
+          resources :stories
+        end
+      RUBY
+      File.open(File.join(app_root, "config/application.rb"), "a") do |file|
+        file.write(<<~RUBY)
+          module DoctorApp
+            class Application < Rails::Application
+              config.middleware.use Rack::Attack
+            end
+          end
+        RUBY
+      end
+      FileUtils.mkdir_p(File.join(app_root, "app/jobs"))
+      File.write(File.join(app_root, "app/jobs/cleanup_job.rb"), <<~RUBY)
+        class CleanupJob < ActiveJob::Base
+          queue_as :default
+        end
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "app/mailers"))
+      File.write(File.join(app_root, "app/mailers/user_mailer.rb"), <<~RUBY)
+        class UserMailer < ActionMailer::Base
+          def welcome
+            mail(to: "test@example.org")
+          end
+        end
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "app/channels"))
+      File.write(File.join(app_root, "app/channels/notifications_channel.rb"), <<~RUBY)
+        class NotificationsChannel < ActionCable::Channel::Base
+          def subscribed
+            stream_from "notifications"
+          end
+        end
+      RUBY
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+          has_rich_text :bio
+
+          def analyze
+            Vips::Image.new_from_file("avatar.jpg")
+            Nokogiri::HTML("<p>x</p>")
+            name.constantize
+          end
+        end
+      RUBY
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -4173,6 +4243,25 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes ids, "replace_rails_all"
       assert_includes ids, "disable_autoload_paths_load_path"
       assert_includes ids, "use_autoload_lib_ignore"
+
+      assert_equal "8.1.3", payload.dig("runtime", "rails_version")
+      assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
+      assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
+      assert_equal ["sentry-rails"], payload.dig("capabilities", "integrations")
+      assert_equal %w[bootsnap puma sidekiq], payload.dig("capabilities", "adapters")
+      assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
+      assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")
+      assert_equal 1, payload.dig("capabilities", "action_text", "declarations_count")
+      assert_equal true, payload.dig("capabilities", "direct_gem_usage", "vips", "present")
+      assert_equal true, payload.dig("capabilities", "direct_gem_usage", "nokogiri", "present")
+      assert_equal ["CleanupJob"], payload.dig("capabilities", "jobs", "classes")
+      assert_equal ["UserMailer"], payload.dig("capabilities", "mailers", "classes")
+      assert_equal ["NotificationsChannel"], payload.dig("capabilities", "channels", "classes")
+      assert_equal "AdminApp", payload.dig("capabilities", "mounted_rack_apps", 0, "target")
+      assert_equal "use", payload.dig("capabilities", "middleware", 0, "operation")
+      assert_equal ["resources", "mount"], payload.dig("capabilities", "routes", "calls").map { |entry| entry.fetch("call") }.sort.reverse
+      assert_equal "config/initializers/dynamic_require.rb", payload.dig("risks", "initializers_dynamic_require_load", 0, "path")
+      assert_equal "constantize", payload.dig("risks", "dynamic_constantization", 0, "kind")
     end
   end
 

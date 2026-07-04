@@ -38,6 +38,9 @@ Measure the profile before treating it as a win. See
 [docs/measurement.md](docs/measurement.md) for ablation runs and Rails memory
 bucket notes.
 
+Run `doctor --app . --json` before planning a profile. See
+[docs/doctor.md](docs/doctor.md) for the static capability report.
+
 Add a coverage manifest and write a reviewed patch when you are ready to replace
 `rails/all` or comment unused railtie requires:
 

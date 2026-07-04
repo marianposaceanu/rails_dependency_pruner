@@ -64,6 +64,25 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-ablation-request.md`
 - `tmp/lobsters-ruby405-rails813-policy-profile.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
+- `tmp/lobsters-ruby405-rails813-doctor.json`
+
+Static capability scan:
+
+| capability | result |
+| --- | --- |
+| Rails version | `8.1.3` |
+| loaded railties | `action_controller`, `action_mailbox`, `action_mailer`, `action_view`, `active_job`, `active_model`, `active_record`, `active_storage`, `rails/test_unit` |
+| Active Storage attachment DSL | `0` declarations |
+| Action Text DSL | `0` declarations |
+| direct `Vips` use | yes, `app/models/story_image.rb` |
+| direct `Nokogiri` use | yes |
+| mounted Rack apps | `MissionControl::Jobs::Engine` |
+| jobs / mailers / channels | `10` / `8` / `0` |
+| integrations | `rack-mini-profiler`, `sentry-rails`, `sentry-ruby` |
+| adapters | `puma` |
+| dynamic initializer require/load risks | `0` |
+| dynamic constantization risks | `0` |
+| parse errors | `0` |
 
 Request ablation smoke, one run per variant:
 
