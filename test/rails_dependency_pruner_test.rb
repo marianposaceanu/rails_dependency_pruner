@@ -527,6 +527,106 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_profile_build_writes_deterministic_profile_with_coverage_manifest
+    Dir.mktmpdir("rails_dependency_pruner_profile_build") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        jobs:
+          - CleanupJob
+        mailers:
+          - UserMailer#welcome
+        rake_tasks:
+          - assets:precompile
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "build",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--write",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal 2, payload.fetch("schema_version")
+      assert_match(/\Asha256:/, payload.fetch("profile_id"))
+      assert_equal "production", payload.dig("app", "rails_env")
+      assert_equal true, payload.dig("app", "eager_load")
+      assert_match(/\Asha256:/, payload.dig("evidence", "coverage_manifest_digest"))
+      assert_equal %w[boot jobs mailers rake_tasks routes], payload.dig("evidence", "workloads")
+
+      file_payload = JSON.parse(File.read(profile_path))
+      assert_equal payload.fetch("profile_id"), file_payload.fetch("profile_id")
+
+      verify_stdout, verify_stderr, verify_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert verify_status.success?, verify_stderr
+      assert_equal true, JSON.parse(verify_stdout).fetch("verified")
+
+      File.write(coverage_path, File.read(coverage_path).sub("assets:precompile", "db:migrate"))
+      validate_stdout, _validate_stderr, validate_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute validate_status.success?
+      assert JSON.parse(validate_stdout).fetch("errors").any? { |error| error.include?("coverage_manifest_digest mismatch") }
+    end
+  end
+
   def test_cli_merges_runtime_evidence
     stdout, stderr, status = Open3.capture3(
       RUBY,

@@ -282,6 +282,8 @@ module RailsDependencyPruner
         subcommand = @argv.shift || "help"
 
         case subcommand
+        when "build"
+          run_profile_build
         when "diff"
           run_profile_diff
         when "validate"
@@ -294,6 +296,30 @@ module RailsDependencyPruner
           warn profile_help
           1
         end
+      end
+
+      def run_profile_build
+        options = options_parser.profile_build
+        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
+        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
+        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        profile = Profile.deterministic_from_planner(
+          planner,
+          runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
+          coverage_path: options[:coverage_path],
+          mode: options.fetch(:mode),
+        )
+        profile.write(options.fetch(:write_path))
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(profile.payload)
+        else
+          puts "Profile written to: #{options.fetch(:write_path)}"
+          puts "Profile id: #{profile.profile_id}"
+        end
+
+        0
       end
 
       def run_profile_diff
@@ -356,6 +382,7 @@ module RailsDependencyPruner
             doctor  Print production-readiness recommendations
             explain CONSTANT  Explain why a Rails constant is used or unused
             measure boot  Measure boot memory in fresh processes
+            profile build  Build a deterministic profile
             profile validate  Validate a deterministic profile against current inputs
             verify  Validate profile and app safety gates
 
@@ -379,8 +406,13 @@ module RailsDependencyPruner
       def profile_help
         <<~HELP
           Usage:
+            rails-dependency-pruner profile build --app . --write config/rails_dependency_pruner_profile.json
             rails-dependency-pruner profile validate [options]
             rails-dependency-pruner profile diff --old old.json --new new.json
+
+          Build required:
+            --app PATH
+            --write PATH
 
           Validate required:
             --profile PATH

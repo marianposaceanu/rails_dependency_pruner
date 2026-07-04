@@ -36,13 +36,14 @@ bundle exec rails-dependency-pruner audit \
   --write-profile config/rails_dependency_pruner_profile.json
 ```
 
-For a reproducible schema v2 profile with source and lockfile digests:
+For a reproducible schema v2 profile with source, lockfile, and optional
+coverage digests:
 
 ```bash
-bundle exec rails-dependency-pruner audit \
+bundle exec rails-dependency-pruner profile build \
   --app . \
-  --deterministic \
-  --write-profile config/rails_dependency_pruner_profile.json
+  --coverage config/pruner_coverage.yml \
+  --write config/rails_dependency_pruner_profile.json
 ```
 
 Validate it before using it:
@@ -118,6 +119,28 @@ Apps can add explicit markers during a workload:
 RailsDependencyPruner::RuntimeRecorder.snapshot!("after_routes_load")
 ```
 
+## coverage manifest
+
+Production profiles should declare the workload they cover:
+
+```yaml
+version: 1
+rails_env: production
+boot:
+  eager_load: true
+routes:
+  include: all
+jobs:
+  - CleanupJob
+mailers:
+  - UserMailer#welcome
+rake_tasks:
+  - assets:precompile
+```
+
+The profile stores this file's digest and inferred workload names. Validation
+fails if the manifest changes.
+
 Merge that evidence into the next profile:
 
 ```bash
@@ -183,6 +206,7 @@ Shadow mode records would-block require events and does not change boot behavior
 - `bundle exec rails-dependency-pruner audit --app . --json --no-tree`
 - `bundle exec rails-dependency-pruner audit --app . --write-profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner audit --app . --deterministic --write-profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner profile build --app . --coverage config/pruner_coverage.yml --write config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner profile validate --app . --profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner profile diff --old config/pruner.prev.json --new config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner verify --app . --profile config/rails_dependency_pruner_profile.json`

@@ -91,6 +91,44 @@ module RailsDependencyPruner
         options
       end
 
+      def profile_build
+        options = {
+          app_root: nil,
+          rails_root: nil,
+          scan_roots: AppUsage::DEFAULT_SCAN_ROOTS,
+          frameworks: ConstantIndex::DEFAULT_FRAMEWORKS,
+          runtime_evidence_paths: [],
+          coverage_path: nil,
+          mode: "guard",
+          write_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner profile build [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
+          parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
+          parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
+          parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
+          parser.on("--mode MODE", "Profile mode") { |mode| options[:mode] = mode }
+          parser.on("--write PATH", "Write deterministic profile") { |path| options[:write_path] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "--write is required" if blank?(options[:write_path])
+
+        options
+      end
+
       def profile_diff
         options = {
           old_profile_path: nil,

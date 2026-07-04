@@ -8,18 +8,20 @@ require "prism"
 require_relative "rails_source"
 require_relative "source_digest"
 require_relative "version"
+require_relative "coverage_manifest"
 
 module RailsDependencyPruner
   class ProfileContext
-    attr_reader :app_root, :rails_source, :scan_roots, :runtime_evidence_paths, :coverage_path, :rails_env
+    attr_reader :app_root, :rails_source, :scan_roots, :runtime_evidence_paths, :coverage_path, :coverage_manifest, :rails_env
 
     def initialize(app_root:, rails_source:, scan_roots:, runtime_evidence_paths: [], coverage_path: nil, rails_env: nil)
       @app_root = Pathname.new(app_root).expand_path
       @rails_source = rails_source
       @scan_roots = scan_roots.map(&:to_s).sort
       @runtime_evidence_paths = runtime_evidence_paths.map(&:to_s).sort
-      @coverage_path = coverage_path
-      @rails_env = rails_env || ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
+      @coverage_path = resolve_app_path(coverage_path)
+      @coverage_manifest = @coverage_path && CoverageManifest.load(@coverage_path)
+      @rails_env = rails_env || coverage_manifest&.rails_env || ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
     end
 
     def self.from_planner(planner, runtime_evidence_paths: [], coverage_path: nil)
@@ -100,8 +102,8 @@ module RailsDependencyPruner
     def evidence_context
       {
         "runtime_evidence_digests" => runtime_evidence_paths.filter_map { |path| SourceDigest.file(path) }.sort,
-        "coverage_manifest_digest" => coverage_path && SourceDigest.file(coverage_path),
-        "workloads" => [],
+        "coverage_manifest_digest" => coverage_manifest&.digest,
+        "workloads" => coverage_manifest&.workloads || [],
       }
     end
 
@@ -139,6 +141,9 @@ module RailsDependencyPruner
     end
 
     def eager_load?
+      manifest_value = coverage_manifest&.eager_load
+      return manifest_value unless manifest_value.nil?
+
       case ENV["RAILS_DEPENDENCY_PRUNER_EAGER_LOAD"]
       when "1", "true"
         true
@@ -146,5 +151,13 @@ module RailsDependencyPruner
         false
       end
     end
+
+    private
+      def resolve_app_path(path)
+        return if path.nil? || path.to_s.empty?
+
+        pathname = Pathname.new(path)
+        pathname.absolute? ? pathname.expand_path : app_root.join(pathname).expand_path
+      end
   end
 end

@@ -39,6 +39,9 @@ module RailsDependencyPruner
       compare(errors, "app.files_digest", profile.payload.dig("app", "files_digest"), context.app_context.fetch("files_digest"))
       compare(errors, "app.rails_env", profile.payload.dig("app", "rails_env"), context.app_context.fetch("rails_env"))
       compare(errors, "analysis.scan_roots", profile.payload.dig("analysis", "scan_roots"), context.analysis_context.fetch("scan_roots"))
+      compare(errors, "evidence.runtime_evidence_digests", profile.payload.dig("evidence", "runtime_evidence_digests"), context.evidence_context.fetch("runtime_evidence_digests"))
+      compare(errors, "evidence.coverage_manifest_digest", profile.payload.dig("evidence", "coverage_manifest_digest"), context.evidence_context.fetch("coverage_manifest_digest"))
+      compare(errors, "evidence.workloads", profile.payload.dig("evidence", "workloads"), context.evidence_context.fetch("workloads"))
 
       errors
     end
