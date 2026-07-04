@@ -138,6 +138,19 @@ config.rails_dependency_pruner.force = false
 `force = true` removes already-loaded constants before installing guards. Use it
 only in throwaway experiments.
 
+## early boot shadow
+
+For early require observation, load the shim from `config/boot.rb` after Bundler:
+
+```ruby
+require "bundler/setup"
+require "rails_dependency_pruner/early_boot" if ENV["RAILS_DEPENDENCY_PRUNER_EARLY"] == "1"
+```
+
+Only shadow mode is supported here for now. It records would-block require
+events and does not change boot behavior. Set `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
+to skip it.
+
 ## cli
 
 - `bundle exec rails-dependency-pruner index`

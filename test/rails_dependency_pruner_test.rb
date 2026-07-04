@@ -481,6 +481,83 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_shadow_records_would_block_require_without_blocking
+    Dir.mktmpdir("rails_dependency_pruner_early_boot") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      feature_path = File.join(dir, "blocked_feature.rb")
+      File.write(feature_path, "BLOCKED_FEATURE_LOADED = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "shadow",
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_feature"],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "shadow",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY,
+          $LOAD_PATH.unshift(#{dir.dump})
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+          puts BLOCKED_FEATURE_LOADED
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "true\n", stdout
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal "shadow", payload.fetch("mode")
+      assert_equal 1, payload.fetch("events_count")
+      assert_equal "blocked_feature", payload.dig("events", 0, "path")
+      assert_equal "would_block", payload.dig("events", 0, "action")
+    end
+  end
+
+  def test_early_boot_can_be_disabled_by_environment
+    Dir.mktmpdir("rails_dependency_pruner_early_disabled") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      feature_path = File.join(dir, "blocked_feature.rb")
+      File.write(feature_path, "BLOCKED_FEATURE_LOADED = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "shadow",
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_feature"],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_DISABLE" => "1",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY,
+          $LOAD_PATH.unshift(#{dir.dump})
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+          puts BLOCKED_FEATURE_LOADED
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "true\n", stdout
+      refute File.exist?(output_path)
+    end
+  end
+
   private
     def write_deterministic_profile(profile_path:, app_root:)
       _stdout, stderr, status = Open3.capture3(
