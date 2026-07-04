@@ -113,6 +113,21 @@ class RailsDependencyPrunerTest < Minitest::Test
     refute_includes planner.unused_require_paths, "action_mailer/base"
   end
 
+  def test_runtime_evidence_ignores_empty_rails_application_snapshot
+    Dir.mktmpdir("rails_dependency_pruner_runtime_evidence") do |dir|
+      evidence_path = File.join(dir, "runtime.json")
+      File.write(evidence_path, JSON.pretty_generate("rails_application" => {}))
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actionpack],
+      )
+      runtime_evidence = RailsDependencyPruner::RuntimeEvidence.new(paths: [evidence_path], index: index)
+
+      assert_empty runtime_evidence.rails_application
+    end
+  end
+
   def test_dependency_graph_matches_current_used_constant_closure
     index = RailsDependencyPruner::ConstantIndex.build(
       rails_root: FAKE_RAILS_ROOT,
@@ -1269,6 +1284,8 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal "ActionController::UnusedControllerFeature", payload.dig("runtime_memory_summary", "rails_class_instance_sizes", 0, "name")
     assert_equal false, payload.dig("runtime_evidence_truncation", "require_events")
     assert_equal 2, payload.dig("runtime_evidence_limits", 0, "require_events", "recorded")
+    assert_equal "ActionDispatch::Executor", payload.dig("runtime_rails_application", 0, "middleware", 0, "name")
+    assert_equal "/rails/info", payload.dig("runtime_rails_application", 0, "routes", 0, "path")
   end
 
   def test_runtime_recorder_writes_runtime_evidence
@@ -1420,6 +1437,75 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "require_events"))
       assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "load_events"))
       assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "snapshots"))
+    end
+  end
+
+  def test_runtime_recorder_reports_rails_middleware_and_routes
+    Dir.mktmpdir("rails_dependency_pruner_runtime_app") do |dir|
+      output = File.join(dir, "runtime.json")
+      script = File.join(dir, "runtime_app_script.rb")
+      File.write(script, <<~RUBY)
+        RuntimeMiddlewareOne = Class.new
+        RuntimeMiddlewareTwo = Class.new
+        FakeMiddleware = Struct.new(:klass)
+        FakePath = Struct.new(:spec)
+        FakeRoute = Struct.new(:name, :verb, :path, :defaults)
+        FakeRoutes = Struct.new(:routes)
+        FakeApp = Struct.new(:middleware, :routes)
+
+        module Rails
+          def self.application=(app)
+            @application = app
+          end
+
+          def self.application
+            @application
+          end
+        end
+
+        Rails.application = FakeApp.new(
+          [
+            FakeMiddleware.new(RuntimeMiddlewareOne),
+            FakeMiddleware.new(RuntimeMiddlewareTwo),
+          ],
+          FakeRoutes.new([
+            FakeRoute.new("runtime_one", "GET", FakePath.new("/runtime/one"), {"controller" => "runtime", "action" => "one"}),
+            FakeRoute.new("runtime_two", "POST", FakePath.new("/runtime/two"), {"controller" => "runtime", "action" => "two"}),
+          ])
+        )
+
+        RailsDependencyPruner::RuntimeRecorder.snapshot!("after_routes")
+      RUBY
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT" => output,
+          "RAILS_DEPENDENCY_PRUNER_SNAPSHOTS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_MAX_MIDDLEWARE" => "1",
+          "RAILS_DEPENDENCY_PRUNER_MAX_ROUTES" => "1",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-rrails_dependency_pruner/runtime_recorder",
+        script,
+      )
+
+      assert status.success?, stderr
+      assert_empty stdout
+
+      payload = JSON.parse(File.read(output))
+      assert_equal "RuntimeMiddlewareOne", payload.dig("rails_application", "middleware", 0, "name")
+      assert_equal "runtime_one", payload.dig("rails_application", "routes", 0, "name")
+      assert_equal "/runtime/one", payload.dig("rails_application", "routes", 0, "path")
+      assert_equal "runtime", payload.dig("rails_application", "routes", 0, "controller")
+      assert_equal true, payload.fetch("middleware_truncated")
+      assert_equal true, payload.fetch("routes_truncated")
+      assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "middleware"))
+      assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "routes"))
+
+      app_snapshot = payload.fetch("snapshots").find { |snapshot| snapshot.fetch("phase") == "after_routes" }
+      assert_equal "RuntimeMiddlewareOne", app_snapshot.dig("rails_application", "middleware", 0, "name")
+      assert_equal "/runtime/one", app_snapshot.dig("rails_application", "routes", 0, "path")
     end
   end
 

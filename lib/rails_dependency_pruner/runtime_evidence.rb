@@ -43,6 +43,7 @@ module RailsDependencyPruner
         memory: memory,
         process_memory: process_memory,
         snapshots: snapshots,
+        rails_application: rails_application,
         require_events: require_events,
         load_events: load_events,
         limits: limits,
@@ -60,6 +61,13 @@ module RailsDependencyPruner
 
     def snapshots
       payloads.flat_map { |payload| Array(payload["snapshots"]) }
+    end
+
+    def rails_application
+      payloads.filter_map do |payload|
+        application = payload["rails_application"]
+        application unless application.nil? || application.empty?
+      end
     end
 
     def require_events
@@ -82,6 +90,8 @@ module RailsDependencyPruner
         "require_events" => limits.any? { |limit| limit.dig("require_events", "truncated") },
         "load_events" => limits.any? { |limit| limit.dig("load_events", "truncated") },
         "snapshots" => limits.any? { |limit| limit.dig("snapshots", "truncated") },
+        "middleware" => limits.any? { |limit| limit.dig("middleware", "truncated") },
+        "routes" => limits.any? { |limit| limit.dig("routes", "truncated") },
       }
     end
 
@@ -113,6 +123,16 @@ module RailsDependencyPruner
             "recorded" => Array(payload["snapshots"]).length,
             "max" => nil,
             "truncated" => payload["snapshots_truncated"] == true,
+          },
+          "middleware" => {
+            "recorded" => Array(payload.dig("rails_application", "middleware")).length,
+            "max" => nil,
+            "truncated" => payload["middleware_truncated"] == true,
+          },
+          "routes" => {
+            "recorded" => Array(payload.dig("rails_application", "routes")).length,
+            "max" => nil,
+            "truncated" => payload["routes_truncated"] == true,
           },
         }
       end

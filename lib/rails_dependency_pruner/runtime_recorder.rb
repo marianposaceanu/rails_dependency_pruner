@@ -37,6 +37,8 @@ module RailsDependencyPruner
       max_require_events: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS", "20000")),
       max_load_events: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_LOAD_EVENTS", "20000")),
       max_snapshots: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS", "200")),
+      max_middleware: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_MIDDLEWARE", "200")),
+      max_routes: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_ROUTES", "1000")),
       record_snapshots: ENV["RAILS_DEPENDENCY_PRUNER_SNAPSHOTS"] == "1"
     )
       return false if output.nil? || output.empty?
@@ -56,10 +58,16 @@ module RailsDependencyPruner
       @max_require_events = max_require_events
       @max_load_events = max_load_events
       @max_snapshots = max_snapshots
+      @max_middleware = max_middleware
+      @max_routes = max_routes
+      @middleware_recorded = 0
+      @routes_recorded = 0
       @called_methods_truncated = false
       @require_events_truncated = false
       @load_events_truncated = false
       @snapshots_truncated = false
+      @middleware_truncated = false
+      @routes_truncated = false
       @record_objectspace = ENV["RAILS_DEPENDENCY_PRUNER_OBJECTSPACE"] == "1"
       @record_snapshots = record_snapshots
 
@@ -82,6 +90,7 @@ module RailsDependencyPruner
     def write!
       @trace&.disable
       memory = memory_snapshot if @record_objectspace
+      rails_application = rails_application_snapshot
 
       payload = {
         ruby_pid: Process.pid,
@@ -93,12 +102,15 @@ module RailsDependencyPruner
         require_events: @require_events,
         load_events: @load_events,
         snapshots: @snapshots,
+        rails_application: rails_application,
         process_memory: Measurement::MemoryProbe.snapshot,
         limits: limits_payload,
         called_methods_truncated: @called_methods_truncated,
         require_events_truncated: @require_events_truncated,
         load_events_truncated: @load_events_truncated,
         snapshots_truncated: @snapshots_truncated,
+        middleware_truncated: @middleware_truncated,
+        routes_truncated: @routes_truncated,
       }
       payload[:memory] = memory if @record_objectspace
 
@@ -119,6 +131,7 @@ module RailsDependencyPruner
         "time" => Process.clock_gettime(Process::CLOCK_MONOTONIC),
         "loaded_features" => loaded_features,
         "defined_constants" => defined_constants,
+        "rails_application" => rails_application_snapshot,
         "process_memory" => Measurement::MemoryProbe.snapshot,
       }
       snapshot["memory"] = memory_snapshot if @record_objectspace
@@ -187,6 +200,28 @@ module RailsDependencyPruner
       }
     end
 
+    def rails_application_snapshot
+      app = rails_application
+      return {} unless app
+
+      {
+        "middleware" => middleware_snapshot(app),
+        "routes" => routes_snapshot(app),
+      }.reject { |_key, value| value.empty? }
+    rescue StandardError => error
+      {
+        "error" => "#{error.class}: #{error.message}",
+      }
+    end
+
+    def rails_application
+      return unless defined?(::Rails) && ::Rails.respond_to?(:application)
+
+      ::Rails.application
+    rescue StandardError
+      nil
+    end
+
     def record_require(path, caller_location, operation: "require", resolved_path: nil)
       record_event(@require_events, :@require_events_truncated, @max_require_events, path, caller_location, operation: operation, resolved_path: resolved_path)
     end
@@ -213,6 +248,76 @@ module RailsDependencyPruner
 
     def stringify_keys(hash)
       hash.transform_keys(&:to_s)
+    end
+
+    def middleware_snapshot(app)
+      stack = app.middleware if app.respond_to?(:middleware)
+      return [] unless stack.respond_to?(:each)
+
+      entries = []
+      stack.each do |entry|
+        if entries.length >= @max_middleware
+          @middleware_truncated = true
+          break
+        end
+
+        entries << middleware_entry(entry)
+      end
+      @middleware_recorded = entries.length
+      entries
+    end
+
+    def middleware_entry(entry)
+      klass = entry.respond_to?(:klass) ? entry.klass : entry
+      {
+        "name" => constant_name(klass),
+      }
+    end
+
+    def routes_snapshot(app)
+      route_set = app.routes if app.respond_to?(:routes)
+      routes = route_set&.routes
+      return [] unless routes.respond_to?(:each)
+
+      entries = []
+      routes.each do |route|
+        if entries.length >= @max_routes
+          @routes_truncated = true
+          break
+        end
+
+        entries << route_entry(route)
+      end
+      @routes_recorded = entries.length
+      entries
+    end
+
+    def route_entry(route)
+      defaults = route_defaults(route)
+      {
+        "name" => route_value(route, :name),
+        "verb" => route_value(route, :verb),
+        "path" => route_path(route),
+        "controller" => defaults["controller"],
+        "action" => defaults["action"],
+      }.compact
+    end
+
+    def route_defaults(route)
+      raw = route_value(route, :defaults) || route_value(route, :requirements) || {}
+      Hash(raw).transform_keys(&:to_s).transform_values(&:to_s)
+    rescue TypeError
+      {}
+    end
+
+    def route_path(route)
+      path = route_value(route, :path)
+      path = path.spec if path.respond_to?(:spec)
+      path.to_s unless path.nil?
+    end
+
+    def route_value(route, name)
+      route.public_send(name) if route.respond_to?(name)
     end
 
     def install_require_trace!
@@ -291,6 +396,8 @@ module RailsDependencyPruner
         require_events: limit_payload(@require_events.length, @max_require_events, @require_events_truncated),
         load_events: limit_payload(@load_events.length, @max_load_events, @load_events_truncated),
         snapshots: limit_payload(@snapshots.length, @max_snapshots, @snapshots_truncated),
+        middleware: limit_payload(@middleware_recorded, @max_middleware, @middleware_truncated),
+        routes: limit_payload(@routes_recorded, @max_routes, @routes_truncated),
       }
     end
 

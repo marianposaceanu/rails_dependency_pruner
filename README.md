@@ -134,6 +134,9 @@ require events, load events, and snapshots. Use
 `RAILS_DEPENDENCY_PRUNER_MAX_CALLS`, `RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS`,
 `RAILS_DEPENDENCY_PRUNER_MAX_LOAD_EVENTS`, and
 `RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS` to cap large workloads.
+When `Rails.application` is available, runtime JSON also records capped
+middleware and route summaries. Use `RAILS_DEPENDENCY_PRUNER_MAX_MIDDLEWARE` and
+`RAILS_DEPENDENCY_PRUNER_MAX_ROUTES` to bound those sections.
 
 For Ruby object type and Rails class instance sizes:
 

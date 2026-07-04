@@ -127,6 +127,7 @@ module RailsDependencyPruner
         require_matches: usage.sorted_require_matches,
         runtime_memory: runtime_memory,
         runtime_memory_summary: runtime_memory_summary.to_h,
+        runtime_rails_application: runtime_rails_application,
         runtime_evidence_limits: runtime_evidence_limits,
         runtime_evidence_truncation: runtime_evidence_truncation,
         top_unused_namespaces: unused_by_namespace,
@@ -191,6 +192,10 @@ module RailsDependencyPruner
 
     def runtime_evidence_truncation
       runtime_evidence&.truncation || {}
+    end
+
+    def runtime_rails_application
+      runtime_evidence&.rails_application || []
     end
 
     private

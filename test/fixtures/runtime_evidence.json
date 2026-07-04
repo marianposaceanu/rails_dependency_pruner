@@ -26,6 +26,22 @@
       "caller_line": 1
     }
   ],
+  "rails_application": {
+    "middleware": [
+      {
+        "name": "ActionDispatch::Executor"
+      }
+    ],
+    "routes": [
+      {
+        "name": "rails_info",
+        "verb": "GET",
+        "path": "/rails/info",
+        "controller": "rails/info",
+        "action": "properties"
+      }
+    ]
+  },
   "memory": {
     "object_counts": {
       "TOTAL": 100,
