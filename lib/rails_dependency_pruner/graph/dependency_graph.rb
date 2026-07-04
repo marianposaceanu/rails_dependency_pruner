@@ -46,6 +46,14 @@ module RailsDependencyPruner
         node_id(:constant, name)
       end
 
+      def file_id(path)
+        node_id(:file, path)
+      end
+
+      def require_path_id(path)
+        node_id(:require_path, path)
+      end
+
       def reachable_from(seeds, edge_filter: nil)
         visited = Set.new
         queue = seeds.map { |seed| normalize_seed(seed) }.compact

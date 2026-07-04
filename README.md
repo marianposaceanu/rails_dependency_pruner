@@ -85,6 +85,15 @@ RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
 bin/rails test
 ```
 
+For require/load caller tracing:
+
+```bash
+RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES=1 \
+RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
+RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
+bin/rails test
+```
+
 For Ruby object type and Rails class instance sizes:
 
 ```bash
@@ -137,6 +146,7 @@ only in throwaway experiments.
 - `bundle exec rails-dependency-pruner audit --app . --write-profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner audit --app . --deterministic --write-profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner profile validate --app . --profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`
 
 Installed Rails `8.x` gems are used by default. `--rails-root PATH` exists only

@@ -37,11 +37,21 @@ module RailsDependencyPruner
         constants_count: constants.length,
         constants: constants.to_a.sort,
         memory: memory,
+        require_events: require_events,
+        load_events: load_events,
       }
     end
 
     def memory
       payloads.filter_map { |payload| payload["memory"] }
+    end
+
+    def require_events
+      payloads.flat_map { |payload| Array(payload["require_events"]) }
+    end
+
+    def load_events
+      payloads.flat_map { |payload| Array(payload["load_events"]) }
     end
 
     private

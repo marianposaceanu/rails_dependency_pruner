@@ -36,6 +36,7 @@ module RailsDependencyPruner
         "unused_constants" => planner.unused_constants.to_a.sort,
         "unused_features" => planner.unused_features,
         "unused_require_paths" => planner.unused_require_paths,
+        "unused_require_path_provenance" => planner.unused_require_path_provenance,
         "runtime_memory" => planner.runtime_memory,
         "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
       )
@@ -76,6 +77,7 @@ module RailsDependencyPruner
           "disabled_railties" => [],
           "disabled_initializers" => [],
           "disabled_require_paths" => planner.unused_require_paths,
+          "disabled_require_path_provenance" => planner.unused_require_path_provenance,
           "disabled_constants" => planner.unused_constants.to_a.sort,
           "autoload_ignores" => [],
           "eager_load_ignores" => [],

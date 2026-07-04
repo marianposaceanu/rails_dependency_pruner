@@ -29,6 +29,7 @@ module RailsDependencyPruner
       output: ENV["RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT"],
       rails_root: ENV["RAILS_DEPENDENCY_PRUNER_RAILS_ROOT"],
       trace_calls: ENV["RAILS_DEPENDENCY_PRUNER_TRACE_CALLS"] == "1",
+      trace_requires: ENV["RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES"] == "1",
       prefixes: DEFAULT_PREFIXES,
       max_called_methods: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_CALLS", "20000"))
     )
@@ -41,7 +42,12 @@ module RailsDependencyPruner
       @prefixes = prefixes
       @called_methods = []
       @called_constants = Set.new
+      @require_events = []
+      @load_events = []
       @max_called_methods = max_called_methods
+      @max_require_events = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS", "20000"))
+      @require_events_truncated = false
+      @load_events_truncated = false
       @record_objectspace = ENV["RAILS_DEPENDENCY_PRUNER_OBJECTSPACE"] == "1"
 
       if trace_calls
@@ -50,6 +56,7 @@ module RailsDependencyPruner
         end
         @trace.enable
       end
+      install_require_trace! if trace_requires
 
       at_exit { write! }
       true
@@ -65,6 +72,10 @@ module RailsDependencyPruner
         defined_constants: defined_constants,
         called_constants: @called_constants.to_a.sort,
         called_methods: @called_methods,
+        require_events: @require_events,
+        load_events: @load_events,
+        require_events_truncated: @require_events_truncated,
+        load_events_truncated: @load_events_truncated,
       }
       payload[:memory] = memory_snapshot if @record_objectspace
 
@@ -129,6 +140,14 @@ module RailsDependencyPruner
       }
     end
 
+    def record_require(path, caller_location)
+      record_event(@require_events, :@require_events_truncated, path, caller_location)
+    end
+
+    def record_load(path, caller_location)
+      record_event(@load_events, :@load_events_truncated, path, caller_location)
+    end
+
     def rails_class_instance_sizes
       ObjectSpace.each_object(Class).filter_map do |klass|
         name = constant_name(klass)
@@ -147,6 +166,39 @@ module RailsDependencyPruner
 
     def stringify_keys(hash)
       hash.transform_keys(&:to_s)
+    end
+
+    def install_require_trace!
+      return if @require_trace_installed
+
+      Kernel.prepend(RequireTrace)
+      @require_trace_installed = true
+    end
+
+    def record_event(events, truncated_flag, path, caller_location)
+      if events.length >= @max_require_events
+        instance_variable_set(truncated_flag, true)
+        return
+      end
+
+      events << {
+        path: path.to_s,
+        caller_path: caller_location&.path,
+        caller_line: caller_location&.lineno,
+        caller_label: caller_location&.label,
+      }.compact
+    end
+
+    module RequireTrace
+      def require(path)
+        RailsDependencyPruner::RuntimeRecorder.record_require(path, caller_locations(1, 1).first)
+        super
+      end
+
+      def load(path, wrap = false)
+        RailsDependencyPruner::RuntimeRecorder.record_load(path, caller_locations(1, 1).first)
+        super
+      end
     end
   end
 end

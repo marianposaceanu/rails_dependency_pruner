@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "active_record/orphan_feature"
+
 module ActiveRecord
   class Base
     include Persistence

@@ -63,6 +63,23 @@ module RailsDependencyPruner
       end.sort
     end
 
+    def unused_require_path_provenance
+      unused_features.filter_map do |path|
+        require_path = path.split("/lib/", 2).last&.delete_suffix(".rb")
+        next unless require_path
+
+        definitions = definitions_by_path.fetch(path)
+
+        {
+          "require_path" => require_path,
+          "file" => path,
+          "component" => definitions.first.component,
+          "constants" => definitions.map(&:name).sort,
+          "reason" => "all constants defined in this Rails file are outside the app dependency closure",
+        }
+      end.sort_by { |entry| entry.fetch("require_path") }
+    end
+
     def seed_constants
       usage.direct_rails_constants | runtime_constants
     end
@@ -100,6 +117,7 @@ module RailsDependencyPruner
       payload[:unused_constants] = unused_constants.to_a.sort if include_unused
       payload[:unused_features] = unused_features if include_unused
       payload[:unused_require_paths] = unused_require_paths if include_unused
+      payload[:unused_require_path_provenance] = unused_require_path_provenance if include_unused
       if include_tree
         payload[:dependency_tree] = index.dependency_tree.sort.to_h
         payload[:dependency_graph] = dependency_graph.to_h
@@ -159,6 +177,10 @@ module RailsDependencyPruner
 
           definition.name
         end.sort
+      end
+
+      def definitions_by_path
+        @definitions_by_path ||= index.definitions.values.group_by(&:path)
       end
   end
 end

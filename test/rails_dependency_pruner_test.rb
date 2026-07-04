@@ -92,7 +92,15 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal planner.used_constants, planner.graph_used_constants
 
     graph = planner.dependency_graph
+    base_file_id = graph.file_id("activerecord/lib/active_record/base.rb")
+    base_constant_id = graph.constant_id("ActiveRecord::Base")
+    orphan_require_id = graph.require_path_id("active_record/orphan_feature")
+
+    assert graph.nodes.key?(base_file_id)
     assert graph.nodes.key?(graph.constant_id("ActiveRecord::Base"))
+    assert graph.nodes.key?(orphan_require_id)
+    assert graph.edges.any? { |edge| edge.from == base_file_id && edge.to == base_constant_id && edge.type == :defines }
+    assert graph.edges.any? { |edge| edge.from == base_file_id && edge.to == orphan_require_id && edge.type == :requires }
     assert graph.edges.any? { |edge| edge.from == graph.constant_id("ActiveRecord::Base") && edge.to == graph.constant_id("ActiveRecord::Persistence") }
 
     explanation = planner.explain_constant("ActiveRecord::Base")
@@ -124,11 +132,11 @@ class RailsDependencyPrunerTest < Minitest::Test
 
     assert status.success?, stderr
 
-    payload = JSON.parse(stdout)
-    assert_equal "ActiveRecord::UnusedRecordFeature", payload.fetch("constant")
-    assert_equal "unused", payload.fetch("decision")
-    assert_equal "activerecord", payload.fetch("component")
-    assert_equal "constant", payload.dig("graph", "node", "type")
+      payload = JSON.parse(stdout)
+      assert_equal "ActiveRecord::UnusedRecordFeature", payload.fetch("constant")
+      assert_equal "unused", payload.fetch("decision")
+      assert_equal "activerecord", payload.fetch("component")
+      assert_equal "constant", payload.dig("graph", "node", "type")
   end
 
   def test_cli_outputs_json_and_writes_shim
@@ -311,6 +319,7 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal 2, payload.fetch("runtime_rails_constants_count")
     assert_includes payload.fetch("runtime_rails_constants"), "ActiveRecord::Relation"
     refute_includes payload.fetch("unused_constants"), "ActiveRecord::Relation"
+    assert_includes payload.fetch("unused_require_path_provenance").map { |entry| entry.fetch("require_path") }, "active_record/orphan_feature"
     assert_equal 1, payload.fetch("runtime_memory").length
     assert_equal 1048576, payload.dig("runtime_memory_summary", "object_sizes", "T_STRING")
     assert_equal "ActionController::UnusedControllerFeature", payload.dig("runtime_memory_summary", "rails_class_instance_sizes", 0, "name")
@@ -319,10 +328,13 @@ class RailsDependencyPrunerTest < Minitest::Test
   def test_runtime_recorder_writes_runtime_evidence
     Dir.mktmpdir("rails_dependency_pruner_runtime") do |dir|
       output = File.join(dir, "runtime.json")
+      runtime_feature = File.join(dir, "runtime_feature.rb")
+      File.write(runtime_feature, "module ActiveRecord; class RuntimeRequiredFeature; end; end\n")
       stdout, stderr, status = Open3.capture3(
         {
           "RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT" => output,
           "RAILS_DEPENDENCY_PRUNER_TRACE_CALLS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES" => "1",
           "RAILS_DEPENDENCY_PRUNER_OBJECTSPACE" => "1",
         },
         RUBY,
@@ -338,6 +350,9 @@ class RailsDependencyPrunerTest < Minitest::Test
             end
           end
 
+          $LOAD_PATH.unshift(#{dir.dump})
+          require "runtime_feature"
+          load #{runtime_feature.dump}
           ActiveRecord::Base.new.persisted?
         RUBY
       )
@@ -349,6 +364,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes payload.fetch("defined_constants"), "ActiveRecord::Base"
       assert_includes payload.fetch("called_constants"), "ActiveRecord::Base"
       assert payload.fetch("called_methods").any? { |entry| entry.fetch("method_id") == "persisted?" }
+      assert payload.fetch("require_events").any? { |entry| entry.fetch("path") == "runtime_feature" && entry["caller_line"] }
+      assert payload.fetch("load_events").any? { |entry| entry.fetch("path") == runtime_feature && entry["caller_line"] }
       assert payload.dig("memory", "object_sizes", "T_STRING")
       assert payload.dig("memory", "rails_class_instance_sizes").any? { |entry| entry.fetch("name") == "ActiveRecord::Base" }
     end
