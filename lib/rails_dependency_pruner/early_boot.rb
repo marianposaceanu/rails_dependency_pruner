@@ -2,6 +2,9 @@
 
 require "json"
 require "set"
+require "digest"
+
+require_relative "canonical_json"
 
 module RailsDependencyPruner
   module EarlyBoot
@@ -85,9 +88,19 @@ module RailsDependencyPruner
 
     def validate_profile_safety!(payload)
       return unless @mode == "production"
-      return if payload.dig("safety", "production_allowed") == true
+      unless payload.dig("safety", "production_allowed") == true
+        raise UnsafeProfileError, "rails_dependency_pruner production mode requires safety.production_allowed=true"
+      end
 
-      raise UnsafeProfileError, "rails_dependency_pruner production mode requires safety.production_allowed=true"
+      expected = profile_digest(payload)
+      return if payload["profile_id"] == expected
+
+      raise UnsafeProfileError, "rails_dependency_pruner production mode requires matching profile_id"
+    end
+
+    def profile_digest(payload)
+      digest_payload = payload.merge("profile_id" => nil)
+      "sha256:#{Digest::SHA256.hexdigest(CanonicalJson.digestible(digest_payload))}"
     end
 
     module RequireShadow

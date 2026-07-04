@@ -217,7 +217,7 @@ bundle exec rails-dependency-pruner shim \
 Shadow mode records would-block require events and does not change boot behavior.
 `RAILS_DEPENDENCY_PRUNER_MODE=boot_prune` blocks disabled require paths.
 `RAILS_DEPENDENCY_PRUNER_MODE=production` also requires
-`safety.production_allowed=true` in the profile. Set
+`safety.production_allowed=true` and a matching `profile_id` in the profile. Set
 `RAILS_DEPENDENCY_PRUNER_DISABLE=1` to skip it.
 
 ## cli

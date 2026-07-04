@@ -1329,6 +1329,39 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_production_mode_rejects_profile_id_mismatch
+    Dir.mktmpdir("rails_dependency_pruner_early_digest") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "schema_version" => 2,
+        "profile_id" => "sha256:stale",
+        "mode" => "production",
+        "safety" => {
+          "production_allowed" => true,
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "production mode requires matching profile_id"
+    end
+  end
+
   def test_apply_early_boot_shim_writes_review_patch
     Dir.mktmpdir("rails_dependency_pruner_early_boot_patch") do |dir|
       app_root = File.join(dir, "app")
