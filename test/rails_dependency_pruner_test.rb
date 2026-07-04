@@ -903,6 +903,82 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_disabled_framework_runtime_routes_and_middleware
+    Dir.mktmpdir("rails_dependency_pruner_runtime_framework_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      runtime_path = File.join(dir, "runtime.json")
+      File.write(runtime_path, JSON.pretty_generate(
+        "defined_constants" => [],
+        "rails_application" => {
+          "middleware" => [
+            { "name" => "ActiveStorage::Engine" },
+          ],
+          "routes" => [
+            {
+              "name" => "rails_service_blob",
+              "verb" => "GET",
+              "path" => "/rails/active_storage/blobs/:signed_id/*filename",
+              "controller" => "active_storage/blobs/redirect",
+              "action" => "show",
+            },
+          ],
+        },
+        "limits" => {
+          "called_methods" => { "recorded" => 0, "max" => 1, "truncated" => false },
+          "require_events" => { "recorded" => 0, "max" => 1, "truncated" => false },
+          "load_events" => { "recorded" => 0, "max" => 1, "truncated" => false },
+          "snapshots" => { "recorded" => 0, "max" => 1, "truncated" => false },
+          "middleware" => { "recorded" => 1, "max" => 200, "truncated" => false },
+          "routes" => { "recorded" => 1, "max" => 1000, "truncated" => false },
+        },
+      ))
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        frameworks: "actionpack,activerecord,activestorage",
+        runtime_evidence_path: runtime_path,
+      )
+
+      profile = JSON.parse(File.read(profile_path))
+      assert_includes profile.dig("pruning", "disabled_frameworks"), "activestorage"
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord,activestorage",
+        "--coverage",
+        coverage_path,
+        "--runtime-evidence",
+        runtime_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert_includes payload.fetch("errors"), "production verify found disabled framework runtime evidence: activestorage:middleware:ActiveStorage::Engine"
+      assert_includes payload.fetch("errors"), "production verify found disabled framework runtime evidence: activestorage:route:rails_service_blob"
+      matches = payload.dig("production_risks", "disabled_framework_runtime_matches")
+      assert_equal %w[middleware route], matches.map { |match| match.fetch("kind") }.sort
+    end
+  end
+
   def test_profile_build_writes_deterministic_profile_with_coverage_manifest
     Dir.mktmpdir("rails_dependency_pruner_profile_build") do |dir|
       app_root = File.join(dir, "app")

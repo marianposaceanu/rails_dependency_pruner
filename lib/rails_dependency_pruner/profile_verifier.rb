@@ -2,6 +2,8 @@
 
 require "set"
 
+require_relative "runtime_framework_matcher"
+
 module RailsDependencyPruner
   class ProfileVerifier
     UNIVERSAL_DYNAMIC_CONSTANT_RECEIVERS = %w[Kernel Object].freeze
@@ -36,6 +38,9 @@ module RailsDependencyPruner
         dynamic_constantization_risks.each do |risk|
           errors << "production verify found dynamic constantization risk for pruned constants: #{format_match(risk)}"
         end
+        disabled_framework_runtime_matches.each do |match|
+          errors << "production verify found disabled framework runtime evidence: #{format_runtime_framework_match(match)}"
+        end
       end
 
       {
@@ -47,6 +52,7 @@ module RailsDependencyPruner
           "truncated_runtime_evidence" => truncated_runtime_evidence,
           "dynamic_boot_require_matches" => dynamic_boot_require_risks,
           "dynamic_constantization_matches" => dynamic_constantization_risks,
+          "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
         },
         "profile" => {
           "schema_version" => profile.schema_version,
@@ -86,6 +92,23 @@ module RailsDependencyPruner
           {}
       end
 
+      def disabled_framework_runtime_matches
+        @disabled_framework_runtime_matches ||= RuntimeFrameworkMatcher.new(
+          applications: runtime_rails_applications,
+        ).matches(disabled_frameworks)
+      end
+
+      def runtime_rails_applications
+        Array(
+          profile.payload.dig("summary", "runtime_rails_application") ||
+            profile.payload["runtime_rails_application"],
+        )
+      end
+
+      def disabled_frameworks
+        Array(profile.payload.dig("pruning", "disabled_frameworks"))
+      end
+
       def dynamic_constantization_risks
         @dynamic_constantization_risks ||= begin
           namespaces = pruned_namespaces
@@ -123,6 +146,14 @@ module RailsDependencyPruner
           match.fetch("line"),
           match.fetch("kind"),
         ].join(":")
+      end
+
+      def format_runtime_framework_match(match)
+        [
+          match.fetch("framework"),
+          match.fetch("kind"),
+          match["name"] || match["path"] || match["controller"],
+        ].compact.join(":")
       end
   end
 end

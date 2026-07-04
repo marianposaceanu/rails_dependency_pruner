@@ -137,6 +137,8 @@ require events, load events, and snapshots. Use
 When `Rails.application` is available, runtime JSON also records capped
 middleware and route summaries. Use `RAILS_DEPENDENCY_PRUNER_MAX_MIDDLEWARE` and
 `RAILS_DEPENDENCY_PRUNER_MAX_ROUTES` to bound those sections.
+Production approval rejects a profile when a disabled framework still appears in
+recorded middleware or routes.
 
 For Ruby object type and Rails class instance sizes:
 
