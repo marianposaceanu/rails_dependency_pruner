@@ -397,13 +397,18 @@ to prove routes, attachments, inbound email, jobs, and request coverage before
 emitting a patch or boot shim for another app.
 
 The same extreme settings can be recorded in a profile and exercised through
-the early boot path:
+the early boot path. Use absolute paths for artifacts because `--coverage`
+is resolved from the app root:
 
 ```bash
+APP="$PWD/tmp/lobsters-ruby405-rails813"
+COVERAGE="$PWD/tmp/lobsters-ruby405-rails813-coverage.yml"
+PROFILE="$PWD/tmp/lobsters-ruby405-rails813-extreme-profile.json"
+
 bundle exec exe/rails-dependency-pruner plan \
-  --app tmp/lobsters-ruby405-rails813 \
-  --coverage tmp/lobsters-ruby405-rails813-coverage.yml \
-  --profile tmp/lobsters-ruby405-rails813-extreme-profile.json \
+  --app "$APP" \
+  --coverage "$COVERAGE" \
+  --profile "$PROFILE" \
   --disable-eager-load \
   --skip-railties action_mailbox/engine,active_storage/engine,rails/test_unit/railtie
 
@@ -411,8 +416,8 @@ RAILS_ENV=production \
 SECRET_KEY_BASE_DUMMY=1 \
 DATABASE_HOST=127.0.0.1 \
 bundle exec exe/rails-dependency-pruner measure \
-  --app tmp/lobsters-ruby405-rails813 \
-  --profile tmp/lobsters-ruby405-rails813-extreme-profile.json \
+  --app "$APP" \
+  --profile "$PROFILE" \
   --target environment \
   --variants baseline,boot_prune \
   --runs 3 \
@@ -426,14 +431,32 @@ bundle exec exe/rails-dependency-pruner measure \
 | profile boot prune | `134784 KB` (`131.6 MiB`) | `600` | `275082` |
 | profile delta | `-96304 KB` (`-94.0 MiB`, `-41.7%`) | `-473` | `-266145` |
 
-Production approval rejects that profile until the coverage manifest proves the
-affected surfaces:
+Keeping Action Mailbox but still disabling eager load and skipping Active
+Storage plus Rails test-unit stays below the 40% target:
+
+| variant | RSS | Rails loaded features | GC live slots |
+| --- | ---: | ---: | ---: |
+| baseline | `230352 KB` (`224.9 MiB`) | `1073` | `541217` |
+| profile boot prune | `148496 KB` (`145.0 MiB`) | `611` | `276894` |
+| profile delta | `-81856 KB` (`-79.9 MiB`, `-35.5%`) | `-462` | `-264323` |
+
+Production approval rejects the full 41.7% profile. The current Lobsters
+coverage manifest only proves boot, routes, and assets precompile. It does not
+prove requests, attachments, or inbound email. The verifier also finds real
+Action Mailbox source, so the win depends on skipping code that Lobsters uses:
 
 ```text
 production verify missing coverage workload for extreme boot: action_mailbox/engine requires inbound_email
 production verify missing coverage workload for extreme boot: active_storage/engine requires attachments
 production verify missing coverage workload for extreme boot: disable_eager_load requires requests
+production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/application_mailbox.rb
+production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/backstop_mailbox.rb
+production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/inbox_mailbox.rb
 ```
+
+The ActiveStorage-only subset has no static blockers after config namespace
+stubs, but it still needs request and attachment workload evidence before
+production approval.
 
 Local outputs are ignored under `tmp/`.
 

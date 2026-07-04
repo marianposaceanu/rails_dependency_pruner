@@ -909,6 +909,158 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_extreme_boot_static_mailbox_usage
+    Dir.mktmpdir("rails_dependency_pruner_extreme_static_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "app/mailboxes"))
+      File.write(File.join(app_root, "app/mailboxes/application_mailbox.rb"), <<~RUBY)
+        class ApplicationMailbox < ActionMailbox::Base
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        inbound_email:
+          - application_mailbox
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--skip-railties",
+        "action_mailbox/engine",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_empty payload.dig("production_risks", "extreme_boot_workload_gaps")
+      assert payload.fetch("errors").any? { |error| error.include?("production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/application_mailbox.rb") }
+      assert_equal "path", payload.dig("production_risks", "extreme_boot_static_matches", 0, "kind")
+    end
+  end
+
+  def test_verify_production_allows_config_namespace_stub_static_config
+    Dir.mktmpdir("rails_dependency_pruner_extreme_static_env_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(File.join(app_root, "config/environments/development.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.active_storage.service = :local
+        end
+      RUBY
+      File.write(File.join(app_root, "config/environments/test.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.active_storage.service = :test
+        end
+      RUBY
+      File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.active_storage.service = :local
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        attachments:
+          - story_image
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--skip-railties",
+        "active_storage/engine",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "extreme_boot_static_matches")
+    end
+  end
+
   def test_verify_production_rejects_dynamic_constantization_for_pruned_namespaces
     Dir.mktmpdir("rails_dependency_pruner_dynamic_constant_verify") do |dir|
       app_root = File.join(dir, "app")
