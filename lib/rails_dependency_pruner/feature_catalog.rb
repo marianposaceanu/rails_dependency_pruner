@@ -34,8 +34,32 @@ module RailsDependencyPruner
       end
     end
 
+    def matches_for_config_path(config_path)
+      entries.filter_map do |feature, config|
+        pattern = Array(config["config_patterns"]).map(&:to_s).find do |candidate|
+          pattern_matches?(candidate, config_path.to_s)
+        end
+        next unless pattern
+
+        {
+          "feature" => feature,
+          "framework" => config["framework"],
+          "pattern" => pattern,
+          "config_path" => config_path.to_s,
+          "constants" => Array(config["constants"]).map(&:to_s).sort,
+        }
+      end
+    end
+
     def to_h
       entries
     end
+
+    private
+      def pattern_matches?(pattern, value)
+        return value.start_with?(pattern.delete_suffix("*")) if pattern.end_with?("*")
+
+        pattern == value
+      end
   end
 end

@@ -232,6 +232,11 @@ Literal dynamic constant usage is also kept. Calls such as
 `Object.const_get("ActiveRecord::Base")` become static keep evidence. Variable
 constantization is reported in `dynamic_matches` as lower-confidence risk.
 
+Rails config usage is boot-critical evidence. Settings such as
+`config.active_storage.service`, `config.action_mailer.delivery_method`, and
+`Rails.application.config.active_record.query_log_tags` become keep evidence and
+are reported in `config_matches`.
+
 ## lobsters run
 
 Against the local Rails `8.1.3` gems and

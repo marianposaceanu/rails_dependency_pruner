@@ -9,6 +9,8 @@ active_record:
     - has_one
     - validates
     - transaction
+  config_patterns:
+    - active_record.*
 
 active_job:
   framework: activejob
@@ -18,6 +20,8 @@ active_job:
   app_patterns:
     - perform_later
     - queue_as
+  config_patterns:
+    - active_job.*
 
 action_mailer:
   framework: actionmailer
@@ -27,6 +31,32 @@ action_mailer:
   app_patterns:
     - mail
     - deliver_later
+  config_patterns:
+    - action_mailer.*
+
+action_controller:
+  framework: actionpack
+  constants:
+    - ActionController
+    - ActionController::Base
+  config_patterns:
+    - action_controller.*
+
+action_dispatch:
+  framework: actionpack
+  constants:
+    - ActionController::Base
+    - ActionDispatch
+  config_patterns:
+    - action_dispatch.*
+
+action_view:
+  framework: actionview
+  constants:
+    - ActionView
+    - ActionView::Base
+  config_patterns:
+    - action_view.*
 
 active_storage:
   framework: activestorage
@@ -38,7 +68,7 @@ active_storage:
     - has_many_attached
     - has_one_attached
   config_patterns:
-    - active_storage.service
+    - active_storage.*
 
 action_text:
   framework: actiontext
@@ -47,6 +77,8 @@ action_text:
     - ActionText::RichText
   app_patterns:
     - has_rich_text
+  config_patterns:
+    - action_text.*
 
 action_cable:
   framework: actioncable
@@ -58,3 +90,21 @@ action_cable:
     - stream_for
   route_patterns:
     - mount ActionCable.server
+  config_patterns:
+    - action_cable.*
+
+action_mailbox:
+  framework: actionmailbox
+  constants:
+    - ActionMailbox
+    - ActionMailbox::Base
+  config_patterns:
+    - action_mailbox.*
+
+active_support:
+  framework: activesupport
+  constants:
+    - ActiveSupport
+    - ActiveSupport::Dependencies
+  config_patterns:
+    - active_support.*

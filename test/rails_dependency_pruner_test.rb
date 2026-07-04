@@ -255,6 +255,58 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_config_patterns_keep_framework_constants
+    Dir.mktmpdir("rails_dependency_pruner_config_patterns") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(
+        File.join(app_root, "config/environments/production.rb"),
+        <<~RUBY,
+          Rails.application.configure do
+            config.active_storage.service = :local
+            config.action_mailer.delivery_method = :test
+            config.active_job.queue_adapter = :inline
+            config.active_support.deprecation = :stderr
+            config.action_controller.perform_caching = true
+            Rails.application.config.active_record.query_log_tags = [:controller, :job]
+          end
+        RUBY
+      )
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[
+          actionmailer
+          actionpack
+          activejob
+          activerecord
+          activestorage
+          activesupport
+        ],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+
+      assert_includes usage.direct_rails_constants, "ActiveStorage::Blob"
+      assert_includes usage.direct_rails_constants, "ActionMailer::Base"
+      assert_includes usage.direct_rails_constants, "ActiveJob::Base"
+      assert_includes usage.direct_rails_constants, "ActiveSupport::Dependencies"
+
+      refute_includes planner.unused_constants, "ActiveStorage::Blob"
+      refute_includes planner.unused_constants, "ActionMailer::Base"
+      refute_includes planner.unused_constants, "ActiveJob::Base"
+      refute_includes planner.unused_constants, "ActiveSupport::Dependencies"
+
+      config_paths = usage.sorted_config_matches.map { |match| match.fetch("config_path") }
+      assert_includes config_paths, "active_storage.service"
+      assert_includes config_paths, "action_mailer.delivery_method"
+      assert_includes config_paths, "active_job.queue_adapter"
+      assert_includes config_paths, "active_support.deprecation"
+      assert_includes config_paths, "active_record.query_log_tags"
+    end
+  end
+
   def test_cli_outputs_json_and_writes_shim
     Dir.mktmpdir("rails_dependency_pruner") do |dir|
       shim_path = File.join(dir, "shim.rb")
