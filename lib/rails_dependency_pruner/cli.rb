@@ -20,6 +20,7 @@ require_relative "profile_verifier"
 require_relative "profile_validator"
 require_relative "measurement/report"
 require_relative "measurement/runner"
+require_relative "runtime/collector"
 require_relative "runtime_evidence"
 require_relative "shim_writer"
 require_relative "cli/options"
@@ -59,6 +60,8 @@ module RailsDependencyPruner
         run_plan
       when "profile"
         run_profile
+      when "runtime"
+        run_runtime
       when "shim"
         run_apply_early_boot_shim(usage: "shim")
       when "verify"
@@ -298,6 +301,41 @@ module RailsDependencyPruner
         0
       end
 
+      def run_runtime
+        subcommand = @argv.shift || "help"
+
+        case subcommand
+        when "collect"
+          run_runtime_collect
+        when "help", "-h", "--help"
+          puts runtime_help
+          0
+        else
+          warn "Unknown runtime command: #{subcommand}"
+          warn runtime_help
+          1
+        end
+      end
+
+      def run_runtime_collect
+        options = options_parser.runtime_collect
+        report = Runtime::Collector.new(
+          app_root: options.fetch(:app_root),
+          output_path: options.fetch(:output_path),
+          coverage_path: options[:coverage_path],
+          command: options[:command],
+          rails_root: options[:rails_root],
+        ).run
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          printer.runtime_collect(report)
+        end
+
+        report.fetch("status") == "ok" ? 0 : 1
+      end
+
       def run_explain
         options = options_parser.explain
         target = @argv.shift
@@ -462,6 +500,7 @@ module RailsDependencyPruner
             patch    Write the reviewed boot-plan patch
             shim     Write the reviewed config/boot.rb shim patch
             measure  Measure boot memory in fresh processes
+            runtime  Collect runtime evidence from a workload
 
           Commands:
             plan            Build a deterministic profile and optional boot-plan patch
@@ -472,6 +511,7 @@ module RailsDependencyPruner
             diff            Compare two profiles
             explain TARGET  Explain a constant/framework/require decision
             measure         Measure boot memory in fresh processes
+            runtime         Collect runtime evidence
             doctor          Print production-readiness recommendations
             audit, index    Lower-level scan commands
 
@@ -483,6 +523,7 @@ module RailsDependencyPruner
             rails-dependency-pruner plan
             rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
             rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml
+            rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
             rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json
 
           Plan options:
@@ -569,6 +610,22 @@ module RailsDependencyPruner
             --runs N
             --output PATH
             --markdown PATH
+            --json
+        HELP
+      end
+
+      def runtime_help
+        <<~HELP
+          Usage: rails-dependency-pruner runtime collect [options]
+
+          Required:
+            --app PATH
+            --output PATH
+
+          Useful options:
+            --coverage PATH
+            --command COMMAND
+            --rails-root PATH
             --json
         HELP
       end

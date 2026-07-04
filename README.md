@@ -160,6 +160,19 @@ RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
 bin/rails test
 ```
 
+Or collect boot runtime evidence through the CLI:
+
+```bash
+bundle exec rails-dependency-pruner runtime collect \
+  --app . \
+  --coverage config/pruner_coverage.yml \
+  --output tmp/rails_dependency_pruner_runtime.json
+```
+
+When `--rails-root` is omitted, the collector asks the app bundle for the
+installed Rails framework gem paths and uses them to filter runtime features.
+For a Rails checkout, add `--rails-root /path/to/rails`.
+
 Apps can add explicit markers during a workload:
 
 ```ruby
@@ -260,6 +273,7 @@ events and does not change boot behavior.
 - `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch`
 - `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json --markdown tmp/pruner-memory-report.md`
+- `bundle exec rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json`
 

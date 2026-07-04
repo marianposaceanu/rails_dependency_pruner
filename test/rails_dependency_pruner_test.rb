@@ -1439,6 +1439,12 @@ class RailsDependencyPrunerTest < Minitest::Test
           end
         end
 
+        module RuntimeNameOverride
+          def self.name(required:)
+            required
+          end
+        end
+
         RailsDependencyPruner::RuntimeRecorder.snapshot!("before_runtime_feature")
         $LOAD_PATH.unshift(#{dir.dump})
         require "runtime_feature"
@@ -1640,6 +1646,64 @@ class RailsDependencyPrunerTest < Minitest::Test
       app_snapshot = payload.fetch("snapshots").find { |snapshot| snapshot.fetch("phase") == "after_routes" }
       assert_equal "RuntimeMiddlewareOne", app_snapshot.dig("rails_application", "middleware", 0, "name")
       assert_equal "/runtime/one", app_snapshot.dig("rails_application", "routes", 0, "path")
+    end
+  end
+
+  def test_runtime_collect_command_writes_runtime_evidence
+    Dir.mktmpdir("rails_dependency_pruner_runtime_collect") do |dir|
+      app_root = File.join(dir, "app")
+      rails_root = File.join(dir, "fake_rails")
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      FileUtils.mkdir_p(rails_root)
+      File.write(File.join(rails_root, "fake_runtime_rails_feature.rb"), "module ActiveRecord; class RuntimeCollectFeature; end; end\n")
+      File.write(File.join(app_root, "app_runtime_feature.rb"), "module RuntimeCollectApp; class LocalFeature; end; end\n")
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        $LOAD_PATH.unshift(#{rails_root.dump})
+        $LOAD_PATH.unshift(#{app_root.dump})
+        require "fake_runtime_rails_feature"
+        require "app_runtime_feature"
+
+        module RuntimeCollectApp
+        end
+
+        RailsDependencyPruner::RuntimeRecorder.snapshot!("inside_application")
+      RUBY
+      coverage_path = write_coverage_manifest(app_root)
+      output_path = File.join(dir, "runtime.json")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "runtime",
+        "collect",
+        "--app",
+        app_root,
+        "--coverage",
+        coverage_path,
+        "--output",
+        output_path,
+        "--rails-root",
+        rails_root,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      report = JSON.parse(stdout)
+      assert_equal "ok", report.fetch("status")
+      assert_equal output_path, report.fetch("output_path")
+      assert_match(/\Asha256:/, report.dig("coverage", "digest"))
+      assert_equal %w[boot routes], report.dig("coverage", "workloads")
+      assert File.exist?(output_path)
+
+      runtime = JSON.parse(File.read(output_path))
+      phases = runtime.fetch("snapshots").map { |snapshot| snapshot.fetch("phase") }
+      assert_includes phases, "inside_application"
+      assert_includes phases, "after_application_load"
+      assert runtime.fetch("loaded_features").any? { |feature| feature.end_with?("fake_runtime_rails_feature.rb") }
+      refute runtime.fetch("loaded_features").any? { |feature| feature.end_with?("app_runtime_feature.rb") }
+      assert_operator runtime.fetch("process_memory").fetch("rss_kb"), :>, 0
     end
   end
 

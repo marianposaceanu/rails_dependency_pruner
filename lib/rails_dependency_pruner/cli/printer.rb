@@ -236,6 +236,23 @@ module RailsDependencyPruner
         puts "App parse errors: #{app_errors}"
       end
 
+      def runtime_collect(report)
+        puts "Runtime collect: #{report.fetch("status")}"
+        puts "Output: #{report.fetch("output_path")}"
+        puts "Command: #{report.fetch("command")}"
+        if report["coverage"]
+          coverage = report.fetch("coverage")
+          puts "Coverage digest: #{coverage.fetch("digest")}"
+          puts "Workloads: #{coverage.fetch("workloads").join(", ")}"
+        end
+
+        return if report.fetch("status") == "ok"
+
+        puts
+        puts "Exit status: #{report.fetch("exitstatus")}"
+        puts report.fetch("stderr") unless report.fetch("stderr").empty?
+      end
+
       def doctor(report)
         recommendations = report.fetch("recommendations")
         if recommendations.empty?

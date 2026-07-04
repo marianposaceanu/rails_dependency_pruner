@@ -47,6 +47,7 @@ module RailsDependencyPruner
       @started = true
       @output = output
       @rails_root = rails_root
+      @rails_roots = nil
       @prefixes = prefixes
       @called_methods = []
       @called_constants = Set.new
@@ -172,6 +173,8 @@ module RailsDependencyPruner
     end
 
     def constant_name(object)
+      return Module.instance_method(:name).bind_call(object) if object.is_a?(Module)
+
       object.name
     rescue NoMethodError
       object.to_s.sub(/\A#<Class:/, "").delete_suffix(">")
@@ -185,9 +188,25 @@ module RailsDependencyPruner
 
     def rails_path?(path)
       return false if path.nil?
-      return true if @rails_root.nil? || @rails_root.empty?
 
-      File.expand_path(path).start_with?(File.expand_path(@rails_root))
+      roots = rails_roots
+      return true if roots.empty?
+
+      expanded = canonical_path(path)
+      roots.any? { |root| expanded == root || expanded.start_with?("#{root}/") }
+    end
+
+    def rails_roots
+      @rails_roots ||= @rails_root.to_s
+        .split(File::PATH_SEPARATOR)
+        .reject(&:empty?)
+        .map { |root| canonical_path(root) }
+    end
+
+    def canonical_path(path)
+      File.realpath(path)
+    rescue Errno::ENOENT, Errno::ENOTDIR
+      File.expand_path(path)
     end
 
     def memory_snapshot

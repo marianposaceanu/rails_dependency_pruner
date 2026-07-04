@@ -390,6 +390,39 @@ module RailsDependencyPruner
         options
       end
 
+      def runtime_collect(usage: "runtime collect")
+        options = {
+          app_root: nil,
+          coverage_path: nil,
+          output_path: nil,
+          command: nil,
+          rails_root: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--coverage PATH", "Coverage manifest for report metadata") { |path| options[:coverage_path] = path }
+          parser.on("--output PATH", "Write runtime evidence JSON") { |path| options[:output_path] = path }
+          parser.on("--command COMMAND", "Command to run with runtime recorder preloaded") { |command| options[:command] = command }
+          parser.on("--rails-root PATH", "Rails source root or path-list for runtime filtering") { |path| options[:rails_root] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "--output is required" if blank?(options[:output_path])
+        raise ArgumentError, "--coverage does not exist" if options[:coverage_path] && !File.exist?(app_relative_path(options.fetch(:app_root), options[:coverage_path]))
+        options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
+
+        options
+      end
+
       private
         def split_csv(value)
           value.split(",").map(&:strip).reject(&:empty?)
