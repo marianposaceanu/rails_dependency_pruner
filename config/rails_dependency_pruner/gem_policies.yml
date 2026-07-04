@@ -1,0 +1,115 @@
+bcrypt:
+  class: native_heavy_library
+  risk: medium
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for first use
+builder:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for first use
+commonmarker:
+  class: native_heavy_library
+  risk: medium
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for markdown rendering
+faker:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: production only when not used on boot path
+flamegraph:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: profiler disabled in production
+htmlentities:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for first use
+memory_profiler:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: profiler disabled in production
+nokogiri:
+  class: native_heavy_library
+  risk: medium
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for parsing features
+oauth:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for auth flows
+parslet:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for parser use
+pdf-reader:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for PDF flows
+rack-mini-profiler:
+  class: middleware_integration
+  risk: medium
+  strategies:
+    - noop_shim
+  production_rule: profiler disabled in production
+rotp:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for OTP flows
+rqrcode:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for QR generation
+ruby-vips:
+  class: native_heavy_library
+  risk: high
+  strategies:
+    - lazy_constant
+    - active_storage_analyzer_stub
+  production_rule: require no attachment declarations or attachment-analysis coverage
+sentry-rails:
+  class: railtie_integration
+  risk: high
+  strategies:
+    - disabled_in_profile
+  production_rule: require no production Sentry boot integration
+sitemap_generator:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require workload coverage for sitemap generation
+stackprof:
+  class: native_heavy_library
+  risk: medium
+  strategies:
+    - lazy_constant
+  production_rule: profiler disabled in production
+svg-graph:
+  class: pure_library
+  risk: low
+  strategies:
+    - lazy_constant
+  production_rule: require canary proof that constants are not used during boot

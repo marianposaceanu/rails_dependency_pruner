@@ -86,6 +86,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-latency-smoke.json`
 - `tmp/lobsters-ruby405-rails813-latency-smoke.md`
 - `tmp/lobsters-ruby405-rails813-latency-smoke.stdout.json`
+- `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
 - `tmp/lobsters-ruby405-rails813-coverage-template.yml`
@@ -119,6 +120,12 @@ Coverage template smoke:
 - Action Text declarations: `false`
 - integrations: `rack-mini-profiler`, `sentry-rails`, `sentry-ruby`
 - inferred workload sections are marked `review_required: true`
+
+Gem policy smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
+- lazy gems in the strict profile: `18`
+- unsupported lazy gems: `0`
 
 Request ablation smoke, one run per variant:
 

@@ -3,8 +3,9 @@
 Production profiles include a `transforms` list. It names every boot mutation
 the profile asks the runtime to apply.
 
-The existing schema remains v2 for now. The registry is a production-readiness
-layer on top of the current fields, not a new profile format yet.
+Generated deterministic profiles use schema v3. The registry is the
+production-readiness layer that names and classifies every boot mutation in the
+profile.
 
 ## current transform ids
 
@@ -31,8 +32,19 @@ matching transform id. It also fails when the transform list contains an
 unknown id.
 
 `lazy_gem:<name>` is registered only when the gem has a policy in
-`TransformRegistry::LAZY_GEM_POLICIES`. Unknown lazy gems stay out of
-production approval.
+`config/rails_dependency_pruner/gem_policies.yml`. Unknown lazy gems stay out of
+production approval. Lazy-gem transforms embed the policy used at profile
+generation time so review can see the class, risk, strategies, and production
+rule.
+
+Current policy classes:
+
+- `pure_library`
+- `native_heavy_library`
+- `railtie_integration`
+- `middleware_integration`
+- `monkey_patch`
+- `unsafe_unknown`
 
 `stub:active_storage_vips_analyzer` is high risk. It is allowed only when the
 app has no Active Storage attachment DSL usage or when the coverage manifest

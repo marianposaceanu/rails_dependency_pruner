@@ -31,27 +31,6 @@ module RailsDependencyPruner
     SUPPORTED_LAZY_REQUIRE_PATHS = %w[
       action_mailbox/mail_ext
     ].freeze
-    SUPPORTED_LAZY_GEMS = %w[
-      bcrypt
-      builder
-      commonmarker
-      faker
-      flamegraph
-      htmlentities
-      memory_profiler
-      nokogiri
-      oauth
-      parslet
-      pdf-reader
-      rack-mini-profiler
-      rotp
-      rqrcode
-      ruby-vips
-      sentry-rails
-      sitemap_generator
-      stackprof
-      svg-graph
-    ].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {
         "paths" => %w[app/mailboxes],
@@ -300,7 +279,7 @@ module RailsDependencyPruner
 
       def unsupported_lazy_gems
         @unsupported_lazy_gems ||= Array(extreme_boot["lazy_gems"]).map(&:to_s).reject do |name|
-          SUPPORTED_LAZY_GEMS.include?(name)
+          TransformRegistry.lazy_gem_supported?(name)
         end.sort
       end
 

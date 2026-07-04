@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "gem_policy_registry"
+
 module RailsDependencyPruner
   class TransformRegistry
     Transform = Struct.new(
@@ -11,10 +13,11 @@ module RailsDependencyPruner
       :required_coverage,
       :expected_events,
       :registered,
+      :gem_policy,
       keyword_init: true,
     ) do
       def to_h
-        {
+        payload = {
           "id" => id,
           "kind" => kind,
           "risk" => risk,
@@ -24,30 +27,13 @@ module RailsDependencyPruner
           "expected_events" => Array(expected_events),
           "registered" => registered != false,
         }
+        payload["gem_policy"] = gem_policy if gem_policy
+        payload
       end
     end
 
-    LAZY_GEM_POLICIES = {
-      "bcrypt" => ["native_heavy_library", "medium"],
-      "builder" => ["pure_library", "low"],
-      "commonmarker" => ["native_heavy_library", "medium"],
-      "faker" => ["pure_library", "low"],
-      "flamegraph" => ["pure_library", "low"],
-      "htmlentities" => ["pure_library", "low"],
-      "memory_profiler" => ["pure_library", "low"],
-      "nokogiri" => ["native_heavy_library", "medium"],
-      "oauth" => ["pure_library", "low"],
-      "parslet" => ["pure_library", "low"],
-      "pdf-reader" => ["pure_library", "low"],
-      "rack-mini-profiler" => ["middleware_integration", "medium"],
-      "rotp" => ["pure_library", "low"],
-      "rqrcode" => ["pure_library", "low"],
-      "ruby-vips" => ["native_heavy_library", "high"],
-      "sentry-rails" => ["railtie_integration", "high"],
-      "sitemap_generator" => ["pure_library", "low"],
-      "stackprof" => ["native_heavy_library", "medium"],
-      "svg-graph" => ["pure_library", "low"],
-    }.freeze
+    GEM_POLICIES = GemPolicyRegistry.default
+    LAZY_GEM_POLICIES = GEM_POLICIES.to_h.freeze
 
     STATIC_DEFINITIONS = {
       "disable_eager_load" => {
@@ -191,10 +177,14 @@ module RailsDependencyPruner
         return true if id.start_with?("lazy_require:")
 
         if id.start_with?("lazy_gem:")
-          return LAZY_GEM_POLICIES.key?(id.delete_prefix("lazy_gem:"))
+          return GEM_POLICIES.registered?(id.delete_prefix("lazy_gem:"))
         end
 
         false
+      end
+
+      def lazy_gem_supported?(name)
+        GEM_POLICIES.registered?(name)
       end
 
       private
@@ -212,7 +202,7 @@ module RailsDependencyPruner
           )
         end
 
-        def dynamic_transform(id, kind:, risk:, description:, source:, required_coverage: [], expected_events: [])
+        def dynamic_transform(id, kind:, risk:, description:, source:, required_coverage: [], expected_events: [], gem_policy: nil)
           Transform.new(
             id: id,
             kind: kind,
@@ -222,18 +212,19 @@ module RailsDependencyPruner
             required_coverage: required_coverage,
             expected_events: expected_events,
             registered: registered_id?(id),
+            gem_policy: gem_policy,
           )
         end
 
         def lazy_gem_transform(gem_name)
-          policy = LAZY_GEM_POLICIES[gem_name]
-          gem_class, risk = policy || ["unsafe_unknown", "unknown"]
+          policy = GEM_POLICIES.policy_for(gem_name)
           dynamic_transform(
             "lazy_gem:#{gem_name}",
-            kind: gem_class,
-            risk: risk,
+            kind: policy&.gem_class || "unsafe_unknown",
+            risk: policy&.risk || "unknown",
             description: "Defer #{gem_name} until first approved use",
             source: "extreme_boot.lazy_gems",
+            gem_policy: policy&.to_h,
           )
         end
     end

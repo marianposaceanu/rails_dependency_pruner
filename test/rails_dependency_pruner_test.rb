@@ -2468,6 +2468,12 @@ class RailsDependencyPrunerTest < Minitest::Test
       vips_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "stub:active_storage_vips_analyzer" }
       assert_equal "high", vips_transform.fetch("risk")
       assert_equal ["stubbed_lazy_gem_require"], vips_transform.fetch("expected_events").map { |event| event.fetch("action") }
+      vips_lazy_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "lazy_gem:ruby-vips" }
+      assert_equal "native_heavy_library", vips_lazy_transform.dig("gem_policy", "class")
+      assert_equal "high", vips_lazy_transform.dig("gem_policy", "risk")
+      assert_equal %w[active_storage_analyzer_stub lazy_constant], vips_lazy_transform.dig("gem_policy", "strategies")
+      assert_equal true, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("ruby-vips")
+      assert_equal false, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("unknown-gem")
     end
   end
 
