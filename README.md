@@ -67,7 +67,8 @@ bundle exec rails-dependency-pruner approve \
 
 Production approval rejects unclassified dynamic require/load edges in
 boot-critical `config/*.rb` files and dynamic constantization that could resolve
-to pruned Rails namespaces.
+to pruned Rails namespaces. It also rejects profiles built from truncated
+runtime evidence.
 
 Ask why a framework or require path was kept or pruned:
 

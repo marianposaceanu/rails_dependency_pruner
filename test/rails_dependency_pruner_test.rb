@@ -834,6 +834,60 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_truncated_runtime_evidence
+    Dir.mktmpdir("rails_dependency_pruner_truncated_runtime_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      runtime_path = File.join(dir, "runtime.json")
+      File.write(runtime_path, JSON.pretty_generate(
+        "defined_constants" => [],
+        "limits" => {
+          "called_methods" => { "recorded" => 1, "max" => 1, "truncated" => true },
+          "require_events" => { "recorded" => 0, "max" => 1, "truncated" => false },
+          "load_events" => { "recorded" => 0, "max" => 1, "truncated" => false },
+          "snapshots" => { "recorded" => 0, "max" => 1, "truncated" => false },
+        },
+      ))
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        runtime_evidence_path: runtime_path,
+      )
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--runtime-evidence",
+        runtime_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert_includes payload.fetch("errors"), "production verify found truncated runtime evidence: called_methods"
+      assert_equal ["called_methods"], payload.dig("production_risks", "truncated_runtime_evidence")
+    end
+  end
+
   def test_profile_build_writes_deterministic_profile_with_coverage_manifest
     Dir.mktmpdir("rails_dependency_pruner_profile_build") do |dir|
       app_root = File.join(dir, "app")
@@ -2070,8 +2124,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       coverage_path
     end
 
-    def build_profile(profile_path:, app_root:, coverage_path:, frameworks: "actionpack,activerecord")
-      _stdout, stderr, status = Open3.capture3(
+    def build_profile(profile_path:, app_root:, coverage_path:, frameworks: "actionpack,activerecord", runtime_evidence_path: nil)
+      command = [
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
         "plan",
@@ -2085,6 +2139,11 @@ class RailsDependencyPrunerTest < Minitest::Test
         coverage_path,
         "--profile",
         profile_path,
+      ]
+      command.concat(["--runtime-evidence", runtime_evidence_path]) if runtime_evidence_path
+
+      _stdout, stderr, status = Open3.capture3(
+        *command,
         chdir: ROOT.to_s,
       )
 

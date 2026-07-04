@@ -27,6 +27,9 @@ module RailsDependencyPruner
         errors << "production verify requires a coverage manifest digest"
       end
       if production
+        truncated_runtime_evidence.each do |name|
+          errors << "production verify found truncated runtime evidence: #{name}"
+        end
         dynamic_boot_require_risks.each do |risk|
           errors << "production verify found dynamic require/load risk: #{format_match(risk)}"
         end
@@ -41,6 +44,7 @@ module RailsDependencyPruner
         "errors" => errors,
         "warnings" => warnings,
         "production_risks" => {
+          "truncated_runtime_evidence" => truncated_runtime_evidence,
           "dynamic_boot_require_matches" => dynamic_boot_require_risks,
           "dynamic_constantization_matches" => dynamic_constantization_risks,
         },
@@ -68,6 +72,18 @@ module RailsDependencyPruner
         @dynamic_boot_require_risks ||= usage.sorted_require_matches.select do |match|
           match["dynamic"] && boot_critical_path?(match.fetch("path"))
         end
+      end
+
+      def truncated_runtime_evidence
+        @truncated_runtime_evidence ||= runtime_evidence_truncation.filter_map do |name, truncated|
+          name if truncated == true
+        end.sort
+      end
+
+      def runtime_evidence_truncation
+        profile.payload.dig("summary", "runtime_evidence_truncation") ||
+          profile.payload["runtime_evidence_truncation"] ||
+          {}
       end
 
       def dynamic_constantization_risks
