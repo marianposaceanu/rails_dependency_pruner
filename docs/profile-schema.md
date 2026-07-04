@@ -18,6 +18,20 @@ The profile id is stored in both `profile_id` and
 `fingerprints.profile_id` while v2 compatibility remains. The digest ignores
 both id fields.
 
+## transform contract
+
+Each transform entry must carry the production contract from the registry:
+
+- expected memory effect
+- required static, runtime, and coverage evidence
+- allowed phases
+- expected and disallowed events
+- rollback behavior
+- production eligibility rule
+
+Production verification rejects registered transform entries that are missing
+any contract field.
+
 ## fingerprints
 
 Production validation compares the current app against the profile. These

@@ -7,6 +7,17 @@ Generated deterministic profiles use schema v3. The registry is the
 production-readiness layer that names and classifies every boot mutation in the
 profile.
 
+Each transform entry includes:
+
+- stable `id`
+- `kind`, `risk`, `description`, and source profile path
+- expected memory effect
+- required static, runtime, and coverage evidence
+- allowed phases
+- expected and disallowed events
+- rollback behavior
+- production eligibility rule
+
 ## current transform ids
 
 Framework and boot-plan transforms:
@@ -29,7 +40,7 @@ Extreme boot transforms:
 
 Production verification fails when a profile has a boot mutation without a
 matching transform id. It also fails when the transform list contains an
-unknown id.
+unknown id or when a registered transform is missing contract fields.
 
 `lazy_gem:<name>` is registered only when the gem has a policy in
 `config/rails_dependency_pruner/gem_policies.yml`. Unknown lazy gems stay out of

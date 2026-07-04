@@ -88,6 +88,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-latency-smoke.stdout.json`
 - `tmp/lobsters-ruby405-rails813-latency-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-high-risk-policy-smoke.json`
+- `tmp/lobsters-ruby405-rails813-transform-contract-smoke.json`
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
@@ -146,6 +147,14 @@ High-risk verifier smoke:
   request, p95, and p99 latency gates in the copied `memory_policy`
 - Vips analyzer stub proof: accepted by static analysis because Lobsters has no
   `has_one_attached` or `has_many_attached` declarations
+
+Transform contract smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-transform-contract-smoke.json`
+- result: the older local profile fails production verification with `24`
+  transform contract gaps
+- next action before approval: regenerate the profile with the current registry
+  so every transform carries its proof, rollback, and production rule fields
 
 Request ablation smoke, one run per variant:
 

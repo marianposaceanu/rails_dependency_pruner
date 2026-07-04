@@ -87,6 +87,9 @@ module RailsDependencyPruner
         unknown_profile_transforms.each do |id|
           errors << "production verify found unknown transform: #{id}"
         end
+        transform_contract_gaps.each do |gap|
+          errors << "production verify found incomplete transform contract: #{format_transform_contract_gap(gap)}"
+        end
         truncated_runtime_evidence.each do |name|
           errors << "production verify found truncated runtime evidence: #{name}"
         end
@@ -135,6 +138,7 @@ module RailsDependencyPruner
           "extreme_boot_workload_gaps" => extreme_boot_workload_gaps,
           "missing_profile_transforms" => missing_profile_transforms,
           "unknown_profile_transforms" => unknown_profile_transforms,
+          "transform_contract_gaps" => transform_contract_gaps,
           "extreme_boot_static_matches" => extreme_boot_static_matches,
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
@@ -274,6 +278,10 @@ module RailsDependencyPruner
 
       def unknown_profile_transforms
         @unknown_profile_transforms ||= TransformRegistry.unknown_transform_ids(profile.payload)
+      end
+
+      def transform_contract_gaps
+        @transform_contract_gaps ||= TransformRegistry.transform_contract_gaps(profile.payload)
       end
 
       def unsupported_lazy_require_paths
@@ -584,6 +592,10 @@ module RailsDependencyPruner
         required = "#{required}, or #{gap.fetch("alternative")}" if gap["alternative"]
 
         "#{gap.fetch("transform_id")} requires #{required}"
+      end
+
+      def format_transform_contract_gap(gap)
+        "#{gap.fetch("transform_id")} missing #{gap.fetch("missing_fields").join(", ")}"
       end
   end
 end

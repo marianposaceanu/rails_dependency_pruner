@@ -1704,6 +1704,75 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_incomplete_transform_contract
+    Dir.mktmpdir("rails_dependency_pruner_transform_contract_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--skip-railties",
+        "rails/test_unit/railtie",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      profile_payload = JSON.parse(File.read(profile_path))
+      transform = profile_payload.fetch("transforms").find { |entry| entry.fetch("id") == "skip_railtie:rails/test_unit/railtie" }
+      transform.delete("rollback")
+      transform.delete("production_rule")
+      RailsDependencyPruner::ProfileSchema.set_profile_id(
+        profile_payload,
+        RailsDependencyPruner::Profile.new(profile_payload).digest,
+      )
+      File.write(profile_path, JSON.pretty_generate(profile_payload))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify found incomplete transform contract: skip_railtie:rails/test_unit/railtie missing rollback, production_rule"
+      assert_equal [
+        {
+          "transform_id" => "skip_railtie:rails/test_unit/railtie",
+          "missing_fields" => %w[rollback production_rule],
+        },
+      ], payload.dig("production_risks", "transform_contract_gaps")
+    end
+  end
+
   def test_verify_production_rejects_missing_lazy_require_coverage
     Dir.mktmpdir("rails_dependency_pruner_lazy_require_coverage_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -2726,13 +2795,24 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal payload.fetch("extreme_boot"), profile.fetch("extreme_boot")
       assert_equal "fail_boot", profile.fetch("unexpected_event_policy")
       assert_equal transform_ids.sort, profile.fetch("transforms").map { |transform| transform.fetch("id") }.sort
+      assert_empty RailsDependencyPruner::TransformRegistry.transform_contract_gaps(profile)
       vips_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "stub:active_storage_vips_analyzer" }
       assert_equal "high", vips_transform.fetch("risk")
+      assert_includes vips_transform.fetch("production_rule"), "no-attachment apps"
+      assert_includes vips_transform.fetch("required_static_evidence"), "no Active Storage attachment DSL usage"
+      assert_includes vips_transform.fetch("required_runtime_evidence"), "unexpected event count"
+      assert_equal %w[boot manual_app_use], vips_transform.fetch("allowed_phases")
+      assert_includes vips_transform.fetch("disallowed_events"), "Active Storage analyzer Vips use without proof"
+      assert_includes vips_transform.fetch("rollback"), "RAILS_DEPENDENCY_PRUNER_DISABLE=1"
       assert_equal ["stubbed_lazy_gem_require"], vips_transform.fetch("expected_events").map { |event| event.fetch("action") }
+      eager_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "disable_eager_load" }
+      assert_includes eager_transform.fetch("required_runtime_evidence"), "first request latency"
+      assert_includes eager_transform.fetch("production_rule"), "latency policy gates"
       vips_lazy_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "lazy_gem:ruby-vips" }
       assert_equal "native_heavy_library", vips_lazy_transform.dig("gem_policy", "class")
       assert_equal "high", vips_lazy_transform.dig("gem_policy", "risk")
       assert_equal %w[active_storage_analyzer_stub lazy_constant], vips_lazy_transform.dig("gem_policy", "strategies")
+      assert_equal vips_lazy_transform.dig("gem_policy", "production_rule"), vips_lazy_transform.fetch("production_rule")
       assert_equal true, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("ruby-vips")
       assert_equal false, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("unknown-gem")
     end
