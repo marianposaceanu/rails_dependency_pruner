@@ -9,6 +9,7 @@ require_relative "canonical_json"
 require_relative "profile_schema"
 require_relative "profile_context"
 require_relative "profile_validator"
+require_relative "gem_policy_registry"
 require_relative "transform_registry"
 
 module RailsDependencyPruner
@@ -68,6 +69,7 @@ module RailsDependencyPruner
       )
       boot_plan_payload = boot_plan&.to_h || {}
       extreme_boot_payload = normalize_extreme_boot(extreme_boot)
+      lazy_gem_policies = structured_lazy_gems(extreme_boot_payload.fetch("lazy_gems"))
       payload = {
         "schema_version" => DETERMINISTIC_SCHEMA_VERSION,
         "profile_id" => nil,
@@ -116,6 +118,8 @@ module RailsDependencyPruner
         },
         "boot_plan" => boot_plan_payload,
         "extreme_boot" => extreme_boot_payload,
+        "lazy_gems" => lazy_gem_policies,
+        "lazy_constants" => lazy_constants_for(lazy_gem_policies),
         "safety" => {
           "always_keep" => [],
           "manual_keep" => [],
@@ -158,6 +162,54 @@ module RailsDependencyPruner
     end
 
     private_class_method :normalize_extreme_boot
+
+    def self.structured_lazy_gems(names)
+      registry = GemPolicyRegistry.default
+      names.each_with_object({}) do |name, policies|
+        policy = registry.policy_for(name)
+        policy_payload = policy&.to_h || {
+          "name" => name,
+          "class" => "unsafe_unknown",
+          "risk" => "unknown",
+          "strategies" => [],
+          "production_rule" => "Unknown gems are not eligible for production",
+        }
+        strategies = Array(policy_payload["strategies"]).map(&:to_s).sort
+        policies[name] = policy_payload.merge(
+          "gem" => name,
+          "strategy" => primary_lazy_gem_strategy(strategies),
+          "strategies" => strategies,
+          "boot_require_blocked" => true,
+          "high_risk" => policy_payload["risk"] == "high",
+        )
+      end.sort.to_h
+    end
+
+    def self.primary_lazy_gem_strategy(strategies)
+      return "lazy_constant" if strategies.include?("lazy_constant")
+      return "noop_shim" if strategies.include?("noop_shim")
+      return "disabled_in_profile" if strategies.include?("disabled_in_profile")
+
+      strategies.first || "unsupported"
+    end
+
+    def self.lazy_constants_for(lazy_gem_policies)
+      lazy_gem_policies.each_with_object({}) do |(gem_name, policy), constants|
+        next unless Array(policy["strategies"]).include?("lazy_constant")
+        next if policy["require"].to_s.empty?
+
+        Array(policy["constants"]).each do |constant|
+          constants[constant.to_s] = {
+            "gem" => gem_name,
+            "require" => policy.fetch("require"),
+            "allowed_phases" => Array(policy["allowed_phases"]).map(&:to_s),
+            "disallowed_phases" => Array(policy["disallowed_phases"]).map(&:to_s),
+          }
+        end
+      end.sort.to_h
+    end
+
+    private_class_method :structured_lazy_gems, :primary_lazy_gem_strategy, :lazy_constants_for
 
     def self.load(path)
       new(JSON.parse(File.read(path)))

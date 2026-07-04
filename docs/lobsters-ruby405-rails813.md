@@ -262,6 +262,12 @@ not boot the app. The richer catalog metadata produced coverage requirements for
 
 Artifact: `tmp/lobsters-ruby405-rails805-feature-catalog-smoke.json`.
 
+Structured lazy-gem policy smoke, also static-only, generated review entries for
+`faker`, `pdf-reader`, and `ruby-vips`, plus lazy constants for `Faker`, `PDF`,
+and `Vips`. Max RSS for that smoke process was `131416064` bytes.
+
+Artifact: `tmp/lobsters-ruby405-rails805-lazy-gem-policy-smoke.json`.
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,

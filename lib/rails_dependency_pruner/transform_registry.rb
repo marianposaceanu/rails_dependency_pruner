@@ -279,6 +279,10 @@ module RailsDependencyPruner
         GEM_POLICIES.registered?(name)
       end
 
+      def lazy_gem_policy(name)
+        GEM_POLICIES.policy_for(name)&.to_h
+      end
+
       private
         def static_transform(id)
           config = STATIC_DEFINITIONS.fetch(id)

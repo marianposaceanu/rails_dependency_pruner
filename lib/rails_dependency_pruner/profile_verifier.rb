@@ -32,6 +32,15 @@ module RailsDependencyPruner
     SUPPORTED_LAZY_REQUIRE_PATHS = %w[
       action_mailbox/mail_ext
     ].freeze
+    STRUCTURED_LAZY_GEM_REQUIRED_FIELDS = %w[
+      boot_require_blocked
+      class
+      gem
+      production_rule
+      risk
+      strategy
+      strategies
+    ].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {
         "paths" => %w[app/mailboxes],
@@ -120,6 +129,9 @@ module RailsDependencyPruner
         unsupported_lazy_gems.each do |name|
           errors << "production verify found unsupported lazy gem: #{name}"
         end
+        structured_lazy_gem_policy_gaps.each do |gap|
+          errors << "production verify missing structured lazy gem policy: #{format_structured_lazy_gem_policy_gap(gap)}"
+        end
         high_risk_transform_gaps.each do |gap|
           errors << "production verify missing high-risk transform proof: #{format_high_risk_transform_gap(gap)}"
         end
@@ -150,6 +162,7 @@ module RailsDependencyPruner
           "extreme_boot_static_matches" => extreme_boot_static_matches,
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
+          "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
           "memory_policy" => memory_policy_result,
@@ -358,6 +371,32 @@ module RailsDependencyPruner
         end.sort
       end
 
+      def structured_lazy_gem_policy_gaps
+        @structured_lazy_gem_policy_gaps ||= Array(extreme_boot["lazy_gems"]).filter_map do |name|
+          next unless TransformRegistry.lazy_gem_supported?(name)
+
+          expected = TransformRegistry.lazy_gem_policy(name) || {}
+          actual = profile.payload.dig("lazy_gems", name)
+          unless actual.is_a?(Hash)
+            next({
+              "gem" => name,
+              "missing_fields" => ["lazy_gems.#{name}"],
+              "mismatched_fields" => [],
+            })
+          end
+
+          missing_fields = structured_lazy_gem_missing_fields(actual, expected)
+          mismatched_fields = structured_lazy_gem_mismatched_fields(name, actual, expected)
+          next if missing_fields.empty? && mismatched_fields.empty?
+
+          {
+            "gem" => name,
+            "missing_fields" => missing_fields,
+            "mismatched_fields" => mismatched_fields,
+          }
+        end.sort_by { |gap| gap.fetch("gem") }
+      end
+
       def high_risk_transform_gaps
         @high_risk_transform_gaps ||= begin
           gaps = []
@@ -381,6 +420,47 @@ module RailsDependencyPruner
 
           gaps.sort_by { |gap| gap.fetch("transform_id") }
         end
+      end
+
+      def structured_lazy_gem_missing_fields(actual, expected)
+        required_fields = STRUCTURED_LAZY_GEM_REQUIRED_FIELDS.dup
+        required_fields << "require" if expected.key?("require")
+        required_fields << "constants" if expected.key?("constants")
+        required_fields << "allowed_phases" if expected.key?("allowed_phases")
+        required_fields << "disallowed_phases" if expected.key?("disallowed_phases")
+
+        required_fields.select do |field|
+          value = actual[field]
+          value.nil? || (value.respond_to?(:empty?) && value.empty?)
+        end
+      end
+
+      def structured_lazy_gem_mismatched_fields(name, actual, expected)
+        expected_payload = expected.merge(
+          "gem" => name,
+          "strategy" => primary_lazy_gem_strategy(Array(expected["strategies"]).map(&:to_s)),
+          "strategies" => Array(expected["strategies"]).map(&:to_s).sort,
+          "boot_require_blocked" => true,
+          "high_risk" => expected["risk"] == "high",
+        )
+
+        expected_payload.keys.select do |field|
+          next false unless actual.key?(field)
+
+          normalized_lazy_gem_value(actual[field]) != normalized_lazy_gem_value(expected_payload[field])
+        end.sort
+      end
+
+      def primary_lazy_gem_strategy(strategies)
+        return "lazy_constant" if strategies.include?("lazy_constant")
+        return "noop_shim" if strategies.include?("noop_shim")
+        return "disabled_in_profile" if strategies.include?("disabled_in_profile")
+
+        strategies.first || "unsupported"
+      end
+
+      def normalized_lazy_gem_value(value)
+        value.is_a?(Array) ? value.map(&:to_s).sort : value
       end
 
       def extreme_boot_static_matches
@@ -686,6 +766,16 @@ module RailsDependencyPruner
 
       def format_coverage_workload_gap(gap)
         "#{gap.fetch("framework")} requires #{gap.fetch("missing_workloads").join(", ")}"
+      end
+
+      def format_structured_lazy_gem_policy_gap(gap)
+        parts = []
+        missing = Array(gap["missing_fields"])
+        mismatched = Array(gap["mismatched_fields"])
+        parts << "missing #{missing.join(", ")}" unless missing.empty?
+        parts << "mismatched #{mismatched.join(", ")}" unless mismatched.empty?
+
+        "#{gap.fetch("gem")} #{parts.join("; ")}"
       end
 
       def format_catalog_coverage_gap(gap)

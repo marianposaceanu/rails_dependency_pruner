@@ -3,12 +3,18 @@ bcrypt:
   risk: medium
   strategies:
     - lazy_constant
+  require: bcrypt
+  constants:
+    - BCrypt
   production_rule: require workload coverage for first use
 builder:
   class: pure_library
   risk: low
   strategies:
     - lazy_constant
+  require: builder
+  constants:
+    - Builder
   production_rule: require workload coverage for first use
 commonmarker:
   class: native_heavy_library
@@ -21,6 +27,9 @@ faker:
   risk: low
   strategies:
     - lazy_constant
+  require: faker
+  constants:
+    - Faker
   production_rule: production only when not used on boot path
 flamegraph:
   class: pure_library
@@ -33,6 +42,9 @@ htmlentities:
   risk: low
   strategies:
     - lazy_constant
+  require: htmlentities
+  constants:
+    - HTMLEntities
   production_rule: require workload coverage for first use
 memory_profiler:
   class: pure_library
@@ -45,12 +57,18 @@ nokogiri:
   risk: medium
   strategies:
     - lazy_constant
+  require: nokogiri
+  constants:
+    - Nokogiri
   production_rule: require workload coverage for parsing features
 oauth:
   class: pure_library
   risk: low
   strategies:
     - lazy_constant
+  require: oauth
+  constants:
+    - OAuth
   production_rule: require workload coverage for auth flows
 parslet:
   class: pure_library
@@ -63,6 +81,9 @@ pdf-reader:
   risk: low
   strategies:
     - lazy_constant
+  require: pdf-reader
+  constants:
+    - PDF
   production_rule: require workload coverage for PDF flows
 rack-mini-profiler:
   class: middleware_integration
@@ -75,12 +96,18 @@ rotp:
   risk: low
   strategies:
     - lazy_constant
+  require: rotp
+  constants:
+    - ROTP
   production_rule: require workload coverage for OTP flows
 rqrcode:
   class: pure_library
   risk: low
   strategies:
     - lazy_constant
+  require: rqrcode
+  constants:
+    - RQRCode
   production_rule: require workload coverage for QR generation
 ruby-vips:
   class: native_heavy_library
@@ -88,18 +115,32 @@ ruby-vips:
   strategies:
     - lazy_constant
     - active_storage_analyzer_stub
+  require: vips
+  constants:
+    - Vips
+  allowed_phases:
+    - manual_app_use
+  disallowed_phases:
+    - boot
+    - request
   production_rule: require no attachment declarations or attachment-analysis coverage
 sentry-rails:
   class: railtie_integration
   risk: high
   strategies:
     - disabled_in_profile
+  require: sentry-rails
+  constants:
+    - Sentry
   production_rule: require no production Sentry boot integration
 sitemap_generator:
   class: pure_library
   risk: low
   strategies:
     - lazy_constant
+  require: sitemap_generator
+  constants:
+    - SitemapGenerator
   production_rule: require workload coverage for sitemap generation
 stackprof:
   class: native_heavy_library
@@ -112,4 +153,11 @@ svg-graph:
   risk: low
   strategies:
     - lazy_constant
+  require: SVG/Graph/TimeSeries
+  constants:
+    - SVG
+  allowed_phases:
+    - manual_app_use
+  disallowed_phases:
+    - boot
   production_rule: require canary proof that constants are not used during boot

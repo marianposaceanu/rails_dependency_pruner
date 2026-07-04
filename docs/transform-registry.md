@@ -48,6 +48,11 @@ production approval. Lazy-gem transforms embed the policy used at profile
 generation time so review can see the class, risk, strategies, and production
 rule.
 
+Generated profiles also copy the registry policy into top-level `lazy_gems`.
+Production verification rejects a supported gem listed in
+`extreme_boot.lazy_gems` when the structured entry is missing or no longer
+matches the registry metadata.
+
 Current policy classes:
 
 - `pure_library`

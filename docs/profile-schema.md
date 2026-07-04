@@ -11,6 +11,7 @@ readiness fields:
 - `transforms`: registered boot mutations
 - `expected_events`: events expected from registered transforms
 - `unexpected_event_policy`: how safety modes handle new runtime events
+- `lazy_gems`: structured lazy-gem policies copied from the registry
 - `lazy_constants`: optional phase policy for lazy top-level constants
 - `memory_policy`: optional RSS savings gates copied from the coverage manifest
 
@@ -143,7 +144,33 @@ Supported `unexpected_event_policy` values:
 - `fail_in_canary_report_in_production`: fail canary, and still fail closed for
   production boot events
 
-Lazy constant policies are keyed by exact top-level constant name:
+Lazy gem policies are keyed by gem name and are required for production when
+`extreme_boot.lazy_gems` is not empty. The legacy array remains for runtime
+compatibility, but production review uses the structured entry:
+
+```json
+{
+  "lazy_gems": {
+    "ruby-vips": {
+      "gem": "ruby-vips",
+      "strategy": "lazy_constant",
+      "strategies": ["active_storage_analyzer_stub", "lazy_constant"],
+      "class": "native_heavy_library",
+      "risk": "high",
+      "require": "vips",
+      "constants": ["Vips"],
+      "allowed_phases": ["manual_app_use"],
+      "disallowed_phases": ["boot", "request"],
+      "boot_require_blocked": true,
+      "high_risk": true
+    }
+  }
+}
+```
+
+Lazy constant policies are keyed by exact top-level constant name and are
+generated from structured lazy-gem policies when the registry knows the
+constant:
 
 ```json
 {

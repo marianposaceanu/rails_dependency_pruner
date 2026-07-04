@@ -326,6 +326,8 @@ module RailsDependencyPruner
           "patch_path" => options[:patch_path],
           "boot_plan" => boot_plan.to_h,
           "extreme_boot" => profile.payload.fetch("extreme_boot"),
+          "lazy_gems" => profile.payload.fetch("lazy_gems"),
+          "lazy_constants" => profile.payload.fetch("lazy_constants"),
           "transforms" => profile.payload.fetch("transforms"),
         }.compact
 

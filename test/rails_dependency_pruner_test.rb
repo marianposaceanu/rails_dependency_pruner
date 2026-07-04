@@ -2049,6 +2049,76 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_structured_lazy_gem_policy
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_policy_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "faker",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      profile_payload = JSON.parse(File.read(profile_path))
+      assert_equal ["faker"], profile_payload.dig("extreme_boot", "lazy_gems")
+      assert_equal "Faker", profile_payload.dig("lazy_gems", "faker", "constants", 0)
+      profile_payload.delete("lazy_gems")
+      RailsDependencyPruner::ProfileSchema.set_profile_id(profile_payload, RailsDependencyPruner::Profile.new(profile_payload).digest)
+      File.write(profile_path, JSON.pretty_generate(profile_payload))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing structured lazy gem policy: faker missing lazy_gems.faker"
+      assert_equal(
+        [
+          {
+            "gem" => "faker",
+            "missing_fields" => ["lazy_gems.faker"],
+            "mismatched_fields" => [],
+          },
+        ],
+        payload.dig("production_risks", "structured_lazy_gem_policy_gaps"),
+      )
+    end
+  end
+
   def test_verify_production_rejects_extreme_boot_static_mailbox_usage
     Dir.mktmpdir("rails_dependency_pruner_extreme_static_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -2970,6 +3040,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal %w[action_mailbox/engine active_storage/engine], payload.dig("extreme_boot", "skip_railties")
       assert_equal ["action_mailbox/mail_ext"], payload.dig("extreme_boot", "lazy_require_paths")
       assert_equal %w[faker pdf-reader ruby-vips], payload.dig("extreme_boot", "lazy_gems")
+      assert_equal %w[faker pdf-reader ruby-vips], payload.fetch("lazy_gems").keys.sort
       assert_equal %w[action_mailbox active_storage], payload.dig("extreme_boot", "config_namespace_stubs")
       transform_ids = payload.fetch("transforms").map { |transform| transform.fetch("id") }
       assert_includes transform_ids, "disable_eager_load"
@@ -2998,12 +3069,25 @@ class RailsDependencyPrunerTest < Minitest::Test
       eager_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "disable_eager_load" }
       assert_includes eager_transform.fetch("required_runtime_evidence"), "first request latency"
       assert_includes eager_transform.fetch("production_rule"), "latency policy gates"
+      assert_equal "lazy_constant", profile.dig("lazy_gems", "faker", "strategy")
+      assert_equal ["Faker"], profile.dig("lazy_gems", "faker", "constants")
+      assert_equal "faker", profile.dig("lazy_gems", "faker", "require")
+      assert_equal true, profile.dig("lazy_gems", "faker", "boot_require_blocked")
+      assert_equal "lazy_constant", profile.dig("lazy_gems", "ruby-vips", "strategy")
+      assert_equal ["manual_app_use"], profile.dig("lazy_gems", "ruby-vips", "allowed_phases")
+      assert_equal %w[boot request], profile.dig("lazy_gems", "ruby-vips", "disallowed_phases")
+      assert_equal true, profile.dig("lazy_gems", "ruby-vips", "high_risk")
+      assert_equal "ruby-vips", profile.dig("lazy_constants", "Vips", "gem")
+      assert_equal "vips", profile.dig("lazy_constants", "Vips", "require")
+      assert_equal ["manual_app_use"], profile.dig("lazy_constants", "Vips", "allowed_phases")
       vips_lazy_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "lazy_gem:ruby-vips" }
       assert_equal "native_heavy_library", vips_lazy_transform.dig("gem_policy", "class")
       assert_equal "high", vips_lazy_transform.dig("gem_policy", "risk")
       assert_equal %w[active_storage_analyzer_stub lazy_constant], vips_lazy_transform.dig("gem_policy", "strategies")
+      assert_equal ["Vips"], vips_lazy_transform.dig("gem_policy", "constants")
       assert_equal vips_lazy_transform.dig("gem_policy", "production_rule"), vips_lazy_transform.fetch("production_rule")
       assert_equal true, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("ruby-vips")
+      assert_equal "vips", RailsDependencyPruner::TransformRegistry.lazy_gem_policy("ruby-vips").fetch("require")
       assert_equal false, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("unknown-gem")
     end
   end
