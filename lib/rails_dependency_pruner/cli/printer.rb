@@ -156,6 +156,13 @@ module RailsDependencyPruner
       end
 
       def measurement(report, output_path:)
+        if report["profile"]
+          profile = report.fetch("profile")
+          puts "Profile: #{profile.fetch("profile_id") || "(no id)"}"
+          puts "Profile path: #{profile.fetch("path")}"
+          puts
+        end
+
         report.fetch("variants").each do |variant, summary|
           puts "#{variant}: #{summary.fetch("status")}"
           next unless summary.fetch("status") == "ok"

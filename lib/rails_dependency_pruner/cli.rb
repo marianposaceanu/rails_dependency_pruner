@@ -147,6 +147,7 @@ module RailsDependencyPruner
           app_root: options.fetch(:app_root),
           variants: options.fetch(:variants),
           runs: options.fetch(:runs),
+          profile_path: options[:profile_path],
         ).run
 
         if options[:output_path]
@@ -502,6 +503,7 @@ module RailsDependencyPruner
             --app PATH
 
           Useful options:
+            --profile PATH
             --variants baseline,boot_prune
             --runs N
             --output PATH

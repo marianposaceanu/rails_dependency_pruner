@@ -72,6 +72,7 @@ module RailsDependencyPruner
 
     def disabled_require_paths(payload)
       paths = Array(payload.dig("pruning", "disabled_require_paths") || payload["unused_require_paths"])
+      paths += Array(payload.dig("pruning", "disabled_railties"))
       paths.flat_map do |path|
         normalized = normalize(path)
         [normalized, normalized.delete_suffix(".rb")]

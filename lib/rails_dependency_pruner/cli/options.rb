@@ -353,6 +353,7 @@ module RailsDependencyPruner
       def measure_boot
         options = {
           app_root: nil,
+          profile_path: nil,
           variants: %w[baseline],
           runs: 5,
           output_path: nil,
@@ -362,6 +363,7 @@ module RailsDependencyPruner
         parser = OptionParser.new do |parser|
           parser.banner = "Usage: rails-dependency-pruner measure boot [options]"
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--profile PATH", "Profile used by shadow/boot_prune/production variants") { |path| options[:profile_path] = path }
           parser.on("--variants NAMES", "Comma-separated variant names") { |names| options[:variants] = split_csv(names) }
           parser.on("--runs N", Integer, "Runs per variant") { |runs| options[:runs] = runs }
           parser.on("--output PATH", "Write measurement JSON") { |path| options[:output_path] = path }
@@ -374,6 +376,7 @@ module RailsDependencyPruner
 
         parser.parse!(argv)
         raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "--profile does not exist" if options[:profile_path] && !File.exist?(options[:profile_path])
         raise ArgumentError, "--runs must be positive" unless options.fetch(:runs).positive?
         raise ArgumentError, "--variants must not be empty" if options.fetch(:variants).empty?
 

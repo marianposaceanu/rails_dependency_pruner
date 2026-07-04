@@ -1156,6 +1156,44 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_prune_mode_blocks_disabled_railtie
+    Dir.mktmpdir("rails_dependency_pruner_early_railtie_blocking") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      FileUtils.mkdir_p(File.join(dir, "active_job"))
+      File.write(File.join(dir, "active_job/railtie.rb"), "ACTIVE_JOB_RAILTIE_LOADED = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_railties" => ["active_job/railtie"],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY,
+          $LOAD_PATH.unshift(#{dir.dump})
+          require "rails_dependency_pruner/early_boot"
+          require "active_job/railtie"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "active_job/railtie is disabled by rails_dependency_pruner early boot"
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal "active_job/railtie", payload.dig("events", 0, "path")
+      assert_equal "blocked", payload.dig("events", 0, "action")
+    end
+  end
+
   def test_early_boot_production_mode_requires_allowed_profile
     Dir.mktmpdir("rails_dependency_pruner_early_production") do |dir|
       profile_path = File.join(dir, "profile.json")
@@ -1353,6 +1391,18 @@ class RailsDependencyPrunerTest < Minitest::Test
   def test_measure_boot_reports_process_memory
     Dir.mktmpdir("rails_dependency_pruner_measure") do |dir|
       report_path = File.join(dir, "measurement.json")
+      profile_path = File.join(dir, "profile.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "schema_version" => 2,
+        "profile_id" => "sha256:test",
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_frameworks" => ["activejob"],
+          "disabled_railties" => ["active_job/railtie"],
+          "disabled_require_paths" => ["active_job/railtie"],
+          "disabled_constants" => ["ActiveJob::Base"],
+        },
+      ))
       stdout, stderr, status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
@@ -1360,8 +1410,10 @@ class RailsDependencyPrunerTest < Minitest::Test
         "boot",
         "--app",
         FAKE_APP_ROOT.to_s,
+        "--profile",
+        profile_path,
         "--variants",
-        "baseline,boot_prune",
+        "baseline,shadow",
         "--runs",
         "1",
         "--output",
@@ -1374,9 +1426,12 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       payload = JSON.parse(stdout)
       assert_equal "ok", payload.dig("variants", "baseline", "status")
-      assert_equal "ok", payload.dig("variants", "boot_prune", "status")
+      assert_equal "ok", payload.dig("variants", "shadow", "status")
       assert_operator payload.dig("variants", "baseline", "rss_kb_median"), :>, 0
-      assert payload.dig("deltas", "boot_prune").key?("rss_kb")
+      assert payload.dig("deltas", "shadow").key?("rss_kb")
+      assert_equal "sha256:test", payload.dig("profile", "profile_id")
+      assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
+      assert_equal 1, payload.dig("profile", "disabled_require_paths_count")
       assert File.exist?(report_path)
     end
   end

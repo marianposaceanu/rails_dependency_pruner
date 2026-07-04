@@ -3,11 +3,16 @@
 require "json"
 require "open3"
 
+require_relative "../profile"
+
 module RailsDependencyPruner
   module Measurement
     class Runner
       BOOT_SCRIPT = <<~'RUBY'
         require "json"
+        if %w[shadow boot_prune production].include?(ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT"])
+          require "rails_dependency_pruner/early_boot"
+        end
         require "rails_dependency_pruner/measurement/memory_probe"
 
         app_root = ARGV.fetch(0)
@@ -16,12 +21,13 @@ module RailsDependencyPruner
         puts JSON.generate(RailsDependencyPruner::Measurement::MemoryProbe.snapshot)
       RUBY
 
-      attr_reader :app_root, :variants, :runs
+      attr_reader :app_root, :variants, :runs, :profile_path
 
-      def initialize(app_root:, variants:, runs:)
+      def initialize(app_root:, variants:, runs:, profile_path: nil)
         @app_root = app_root
         @variants = variants
         @runs = runs
+        @profile_path = profile_path && File.expand_path(profile_path)
       end
 
       def run
@@ -29,11 +35,13 @@ module RailsDependencyPruner
           [variant, run_variant(variant)]
         end
 
-        {
+        report = {
           "variants" => summarize_variants(results),
           "runs" => results,
           "deltas" => deltas(results),
         }
+        report["profile"] = profile_metadata if profile_path
+        report
       end
 
       private
@@ -44,10 +52,7 @@ module RailsDependencyPruner
         end
 
         def run_once(variant)
-          env = {
-            "RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT" => variant,
-            "RUBYLIB" => ruby_lib,
-          }
+          env = env_for(variant)
           command = ruby_command + ["-e", BOOT_SCRIPT, app_root]
           stdout, stderr, status = Open3.capture3(env, *command, chdir: app_root)
 
@@ -93,6 +98,34 @@ module RailsDependencyPruner
 
         def ruby_lib
           File.expand_path("../..", __dir__)
+        end
+
+        def env_for(variant)
+          env = {
+            "RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT" => variant,
+            "RUBYLIB" => ruby_lib,
+          }
+          return env unless profile_path
+
+          env["RAILS_DEPENDENCY_PRUNER_PROFILE"] = profile_path
+          env["RAILS_DEPENDENCY_PRUNER_MODE"] = variant if %w[shadow boot_prune production].include?(variant)
+          env
+        end
+
+        def profile_metadata
+          profile = Profile.load(profile_path)
+          pruning = profile.payload.fetch("pruning", {})
+
+          {
+            "path" => profile_path,
+            "schema_version" => profile.schema_version,
+            "profile_id" => profile.profile_id,
+            "mode" => profile.payload["mode"],
+            "disabled_frameworks" => Array(pruning["disabled_frameworks"]),
+            "disabled_railties" => Array(pruning["disabled_railties"]),
+            "disabled_require_paths_count" => Array(pruning["disabled_require_paths"]).length,
+            "disabled_constants_count" => Array(pruning["disabled_constants"]).length,
+          }
         end
 
         def summarize_variants(results)
