@@ -82,6 +82,7 @@ module RailsDependencyPruner
           "events_count" => integer(payload["events_count"]) || events.length,
           "expected_events_count" => integer(payload["expected_events_count"]) || events.count { |event| event["expected"] == true },
           "unexpected_events_count" => integer(payload["unexpected_events_count"]) || unexpected_events.length,
+          "counters" => event_counters(payload),
           "unexpected_events" => unexpected_events.map { |event| compact_event(event) },
         }.compact
       end
@@ -91,6 +92,7 @@ module RailsDependencyPruner
         "events_count" => summaries.sum { |summary| summary.fetch("events_count", 0) },
         "expected_events_count" => summaries.sum { |summary| summary.fetch("expected_events_count", 0) },
         "unexpected_events_count" => summaries.sum { |summary| summary.fetch("unexpected_events_count", 0) },
+        "counters" => aggregate_event_counters(summaries),
         "files" => summaries,
       }
     end
@@ -150,6 +152,27 @@ module RailsDependencyPruner
           "caller_path",
           "caller_line",
         )
+      end
+
+      def event_counters(payload)
+        raw = payload["counters"]
+        return {} unless raw.respond_to?(:each)
+
+        raw.each_with_object({}) do |(key, value), counters|
+          count = integer(value)
+          counters[key.to_s] = count unless count.nil?
+        end.sort.to_h
+      end
+
+      def aggregate_event_counters(summaries)
+        counters = Hash.new(0)
+        summaries.each do |summary|
+          summary.fetch("counters", {}).each do |key, value|
+            count = integer(value)
+            counters[key.to_s] += count unless count.nil?
+          end
+        end
+        counters.sort.to_h
       end
 
       def legacy_limits(payload)

@@ -241,6 +241,8 @@ Runtime event manifest smoke:
 - telemetry counter follow-up canary on the corrected profile: `2` expected
   events, `0` unexpected events, `pruner.event.skipped_require=1`,
   `pruner.event.stub_used=1`; max RSS `169721856` bytes
+- runtime counter summary smoke preserved the same counters from the telemetry
+  artifact without booting Rails; max RSS `20398080` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
@@ -249,7 +251,8 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-rails813-telemetry-smoke.json`,
   `tmp/lobsters-ruby405-rails813-telemetry-smoke.ndjson`,
   `tmp/lobsters-ruby405-rails813-telemetry-counters-smoke.json`,
-  `tmp/lobsters-ruby405-rails813-telemetry-counters-smoke.ndjson`
+  `tmp/lobsters-ruby405-rails813-telemetry-counters-smoke.ndjson`,
+  `tmp/lobsters-ruby405-rails813-runtime-counter-summary-smoke.json`
 
 The current strict-profile smoke above uses the no-`svg-graph` profile. The
 older full-profile RSS rows are still useful as historical context, but do not

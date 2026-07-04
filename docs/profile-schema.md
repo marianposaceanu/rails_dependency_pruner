@@ -209,6 +209,8 @@ Early output JSON also includes `counters` with `pruner.profile.valid`,
 `pruner.event.total`, `pruner.event.expected`, `pruner.event.unexpected`,
 `pruner.event.skipped_require`, `pruner.event.lazy_load`, and
 `pruner.event.stub_used` when those events occur.
+Runtime evidence keeps those counters in `summary.runtime_event_summary` and
+sums them across evidence files.
 
 ## migration
 

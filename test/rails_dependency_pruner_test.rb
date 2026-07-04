@@ -193,6 +193,14 @@ class RailsDependencyPrunerTest < Minitest::Test
             "caller_line" => 12,
           },
         ],
+        "counters" => {
+          "pruner.profile.valid" => 1,
+          "pruner.event.total" => 2,
+          "pruner.event.expected" => 1,
+          "pruner.event.unexpected" => 1,
+          "pruner.event.skipped_require" => 1,
+          "pruner.event.lazy_load" => 1,
+        },
       ))
 
       index = RailsDependencyPruner::ConstantIndex.build(
@@ -206,6 +214,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 2, summary.fetch("events_count")
       assert_equal 1, summary.fetch("expected_events_count")
       assert_equal 1, summary.fetch("unexpected_events_count")
+      assert_equal 1, summary.dig("counters", "pruner.profile.valid")
+      assert_equal 2, summary.dig("counters", "pruner.event.total")
+      assert_equal 1, summary.dig("counters", "pruner.event.unexpected")
+      assert_equal 1, summary.dig("files", 0, "counters", "pruner.event.lazy_load")
       assert_equal "request:loaded_lazy_gem:ruby-vips", summary.dig("files", 0, "unexpected_events", 0, "event_id")
       assert_equal "app/models/story_image.rb", summary.dig("files", 0, "unexpected_events", 0, "caller_path")
     end
