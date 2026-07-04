@@ -128,6 +128,12 @@ as keep evidence. If a used Rails file requires another Rails file, the required
 file is kept too. Receiver calls such as `params.require(:id)` and
 `relation.load` are ignored because they are not Ruby load edges.
 
+Runtime JSON includes a `limits` section and truncation flags for called methods,
+require events, load events, and snapshots. Use
+`RAILS_DEPENDENCY_PRUNER_MAX_CALLS`, `RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS`,
+`RAILS_DEPENDENCY_PRUNER_MAX_LOAD_EVENTS`, and
+`RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS` to cap large workloads.
+
 For Ruby object type and Rails class instance sizes:
 
 ```bash
@@ -313,9 +319,9 @@ initialization. It is a smoke benchmark, not a production savings claim.
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |
-| baseline | `136080 KB` (`132.9 MiB`) | `415` | `234489` |
-| production early boot | `137744 KB` (`134.5 MiB`) | `415` | `234817` |
-| delta | `+1664 KB` (`+1.6 MiB`) | `0` | `+328` |
+| baseline | `137040 KB` (`133.8 MiB`) | `415` | `234487` |
+| production early boot | `139968 KB` (`136.7 MiB`) | `415` | `234814` |
+| delta | `+2928 KB` (`+2.9 MiB`) | `0` | `+327` |
 
 The pruned Lobsters railtie is already commented out in `config/application.rb`,
 so the loaded Rails feature count does not move in this benchmark. Static

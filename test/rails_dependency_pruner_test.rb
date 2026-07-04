@@ -1213,6 +1213,8 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal 1, payload.fetch("runtime_memory").length
     assert_equal 1048576, payload.dig("runtime_memory_summary", "object_sizes", "T_STRING")
     assert_equal "ActionController::UnusedControllerFeature", payload.dig("runtime_memory_summary", "rails_class_instance_sizes", 0, "name")
+    assert_equal false, payload.dig("runtime_evidence_truncation", "require_events")
+    assert_equal 2, payload.dig("runtime_evidence_limits", 0, "require_events", "recorded")
   end
 
   def test_runtime_recorder_writes_runtime_evidence
@@ -1288,6 +1290,82 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes phases, "after_runtime_feature"
       assert_includes phases, "recorder_exit"
       assert payload.fetch("snapshots").all? { |snapshot| snapshot.dig("process_memory", "rss_kb").positive? }
+      assert_equal false, payload.fetch("called_methods_truncated")
+      assert_equal false, payload.fetch("require_events_truncated")
+      assert_equal false, payload.fetch("load_events_truncated")
+      assert_equal false, payload.fetch("snapshots_truncated")
+      assert_equal 20_000, payload.dig("limits", "called_methods", "max")
+      assert_equal payload.fetch("called_methods").length, payload.dig("limits", "called_methods", "recorded")
+      assert_equal payload.fetch("require_events").length, payload.dig("limits", "require_events", "recorded")
+      assert_equal payload.fetch("load_events").length, payload.dig("limits", "load_events", "recorded")
+      assert_equal payload.fetch("snapshots").length, payload.dig("limits", "snapshots", "recorded")
+    end
+  end
+
+  def test_runtime_recorder_reports_truncated_evidence_limits
+    Dir.mktmpdir("rails_dependency_pruner_runtime_limits") do |dir|
+      output = File.join(dir, "runtime.json")
+      first_feature = File.join(dir, "limit_feature_one.rb")
+      second_feature = File.join(dir, "limit_feature_two.rb")
+      script = File.join(dir, "runtime_limit_script.rb")
+      File.write(first_feature, "module ActiveRecord; class LimitFeatureOne; end; end\n")
+      File.write(second_feature, "module ActiveRecord; class LimitFeatureTwo; end; end\n")
+      File.write(script, <<~RUBY)
+        module ActiveRecord
+          class Base
+            def one
+              true
+            end
+
+            def two
+              true
+            end
+          end
+        end
+
+        $LOAD_PATH.unshift(#{dir.dump})
+        require "limit_feature_one"
+        require "limit_feature_two"
+        load #{first_feature.dump}
+        load #{second_feature.dump}
+        ActiveRecord::Base.new.one
+        ActiveRecord::Base.new.two
+        RailsDependencyPruner::RuntimeRecorder.snapshot!("after_limits")
+      RUBY
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT" => output,
+          "RAILS_DEPENDENCY_PRUNER_TRACE_CALLS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES" => "1",
+          "RAILS_DEPENDENCY_PRUNER_SNAPSHOTS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_MAX_CALLS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_MAX_LOAD_EVENTS" => "1",
+          "RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS" => "1",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-rrails_dependency_pruner/runtime_recorder",
+        script,
+      )
+
+      assert status.success?, stderr
+      assert_empty stdout
+
+      payload = JSON.parse(File.read(output))
+      assert_equal 1, payload.fetch("called_methods").length
+      assert_equal 1, payload.fetch("require_events").length
+      assert_equal 1, payload.fetch("load_events").length
+      assert_equal 1, payload.fetch("snapshots").length
+      assert_equal true, payload.fetch("called_methods_truncated")
+      assert_equal true, payload.fetch("require_events_truncated")
+      assert_equal true, payload.fetch("load_events_truncated")
+      assert_equal true, payload.fetch("snapshots_truncated")
+      assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "called_methods"))
+      assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "require_events"))
+      assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "load_events"))
+      assert_equal({ "max" => 1, "recorded" => 1, "truncated" => true }, payload.dig("limits", "snapshots"))
     end
   end
 

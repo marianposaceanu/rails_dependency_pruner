@@ -34,6 +34,9 @@ module RailsDependencyPruner
       trace_requires: ENV["RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES"] == "1",
       prefixes: DEFAULT_PREFIXES,
       max_called_methods: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_CALLS", "20000")),
+      max_require_events: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS", "20000")),
+      max_load_events: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_LOAD_EVENTS", "20000")),
+      max_snapshots: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS", "200")),
       record_snapshots: ENV["RAILS_DEPENDENCY_PRUNER_SNAPSHOTS"] == "1"
     )
       return false if output.nil? || output.empty?
@@ -50,8 +53,10 @@ module RailsDependencyPruner
       @snapshots = []
       @current_phase = ENV.fetch("RAILS_DEPENDENCY_PRUNER_PHASE", "boot")
       @max_called_methods = max_called_methods
-      @max_require_events = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS", "20000"))
-      @max_snapshots = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS", "200"))
+      @max_require_events = max_require_events
+      @max_load_events = max_load_events
+      @max_snapshots = max_snapshots
+      @called_methods_truncated = false
       @require_events_truncated = false
       @load_events_truncated = false
       @snapshots_truncated = false
@@ -76,6 +81,7 @@ module RailsDependencyPruner
 
     def write!
       @trace&.disable
+      memory = memory_snapshot if @record_objectspace
 
       payload = {
         ruby_pid: Process.pid,
@@ -88,11 +94,13 @@ module RailsDependencyPruner
         load_events: @load_events,
         snapshots: @snapshots,
         process_memory: Measurement::MemoryProbe.snapshot,
+        limits: limits_payload,
+        called_methods_truncated: @called_methods_truncated,
         require_events_truncated: @require_events_truncated,
         load_events_truncated: @load_events_truncated,
         snapshots_truncated: @snapshots_truncated,
       }
-      payload[:memory] = memory_snapshot if @record_objectspace
+      payload[:memory] = memory if @record_objectspace
 
       File.write(@output, JSON.pretty_generate(payload))
     end
@@ -126,7 +134,10 @@ module RailsDependencyPruner
 
       @called_constants << defined_class
 
-      return if @called_methods.length >= @max_called_methods
+      if @called_methods.length >= @max_called_methods
+        @called_methods_truncated = true
+        return
+      end
 
       @called_methods << {
         "defined_class" => defined_class,
@@ -177,11 +188,11 @@ module RailsDependencyPruner
     end
 
     def record_require(path, caller_location, operation: "require", resolved_path: nil)
-      record_event(@require_events, :@require_events_truncated, path, caller_location, operation: operation, resolved_path: resolved_path)
+      record_event(@require_events, :@require_events_truncated, @max_require_events, path, caller_location, operation: operation, resolved_path: resolved_path)
     end
 
     def record_load(path, caller_location, operation: "load", resolved_path: nil)
-      record_event(@load_events, :@load_events_truncated, path, caller_location, operation: operation, resolved_path: resolved_path)
+      record_event(@load_events, :@load_events_truncated, @max_load_events, path, caller_location, operation: operation, resolved_path: resolved_path)
     end
 
     def rails_class_instance_sizes
@@ -257,8 +268,8 @@ module RailsDependencyPruner
       @require_trace_installed = true
     end
 
-    def record_event(events, truncated_flag, path, caller_location, operation:, resolved_path: nil)
-      if events.length >= @max_require_events
+    def record_event(events, truncated_flag, max_events, path, caller_location, operation:, resolved_path: nil)
+      if events.length >= max_events
         instance_variable_set(truncated_flag, true)
         return
       end
@@ -272,6 +283,23 @@ module RailsDependencyPruner
         caller_line: caller_location&.lineno,
         caller_label: caller_location&.label,
       }.compact
+    end
+
+    def limits_payload
+      {
+        called_methods: limit_payload(@called_methods.length, @max_called_methods, @called_methods_truncated),
+        require_events: limit_payload(@require_events.length, @max_require_events, @require_events_truncated),
+        load_events: limit_payload(@load_events.length, @max_load_events, @load_events_truncated),
+        snapshots: limit_payload(@snapshots.length, @max_snapshots, @snapshots_truncated),
+      }
+    end
+
+    def limit_payload(recorded, max, truncated)
+      {
+        recorded: recorded,
+        max: max,
+        truncated: truncated,
+      }
     end
   end
 end

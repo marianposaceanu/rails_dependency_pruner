@@ -44,6 +44,8 @@ module RailsDependencyPruner
         "require_matches" => planner.usage.sorted_require_matches,
         "runtime_memory" => planner.runtime_memory,
         "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
+        "runtime_evidence_limits" => planner.runtime_evidence_limits,
+        "runtime_evidence_truncation" => planner.runtime_evidence_truncation,
       )
     end
 
@@ -82,6 +84,8 @@ module RailsDependencyPruner
           "unused_constants_count" => planner.unused_constants.length,
           "unused_features_count" => planner.unused_features.length,
           "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
+          "runtime_evidence_limits" => planner.runtime_evidence_limits,
+          "runtime_evidence_truncation" => planner.runtime_evidence_truncation,
         },
         "pruning" => {
           "disabled_frameworks" => Array(boot_plan_payload["pruned_frameworks"]),

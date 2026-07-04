@@ -45,6 +45,8 @@ module RailsDependencyPruner
         snapshots: snapshots,
         require_events: require_events,
         load_events: load_events,
+        limits: limits,
+        truncation: truncation,
       }
     end
 
@@ -68,11 +70,51 @@ module RailsDependencyPruner
       payloads.flat_map { |payload| Array(payload["load_events"]) }
     end
 
+    def limits
+      payloads.map do |payload|
+        payload["limits"] || legacy_limits(payload)
+      end
+    end
+
+    def truncation
+      {
+        "called_methods" => limits.any? { |limit| limit.dig("called_methods", "truncated") },
+        "require_events" => limits.any? { |limit| limit.dig("require_events", "truncated") },
+        "load_events" => limits.any? { |limit| limit.dig("load_events", "truncated") },
+        "snapshots" => limits.any? { |limit| limit.dig("snapshots", "truncated") },
+      }
+    end
+
     private
       def payloads
         @payloads ||= paths.map do |path|
           JSON.parse(File.read(path))
         end
+      end
+
+      def legacy_limits(payload)
+        {
+          "called_methods" => {
+            "recorded" => Array(payload["called_methods"]).length,
+            "max" => nil,
+            "truncated" => payload["called_methods_truncated"] == true,
+          },
+          "require_events" => {
+            "recorded" => Array(payload["require_events"]).length,
+            "max" => nil,
+            "truncated" => payload["require_events_truncated"] == true,
+          },
+          "load_events" => {
+            "recorded" => Array(payload["load_events"]).length,
+            "max" => nil,
+            "truncated" => payload["load_events_truncated"] == true,
+          },
+          "snapshots" => {
+            "recorded" => Array(payload["snapshots"]).length,
+            "max" => nil,
+            "truncated" => payload["snapshots_truncated"] == true,
+          },
+        }
       end
 
       def explicit_constants(payload)
