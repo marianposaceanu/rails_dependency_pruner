@@ -7,6 +7,7 @@ require "pathname"
 
 require_relative "app_usage"
 require_relative "apply/boot_plan_patch"
+require_relative "apply/early_boot_patch"
 require_relative "boot_prune_planner"
 require_relative "constant_index"
 require_relative "doctor"
@@ -161,6 +162,8 @@ module RailsDependencyPruner
         case subcommand
         when "boot-plan"
           run_apply_boot_plan
+        when "early-boot-shim"
+          run_apply_early_boot_shim
         when "help", "-h", "--help"
           puts apply_help
           0
@@ -189,6 +192,26 @@ module RailsDependencyPruner
           puts JSON.pretty_generate(boot_plan.to_h)
         else
           print_boot_plan(boot_plan, patch_path: options[:write_patch])
+        end
+
+        0
+      end
+
+      def run_apply_early_boot_shim
+        options = parse_apply_early_boot_shim_options
+        patch = Apply::EarlyBootPatch.new(app_root: options.fetch(:app_root))
+
+        if options[:write_patch]
+          patch.write(options[:write_patch])
+        end
+
+        report = patch.to_h
+        report["patch_path"] = options[:write_patch] if options[:write_patch]
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          print_early_boot_patch(report)
         end
 
         0
@@ -514,6 +537,31 @@ module RailsDependencyPruner
         options
       end
 
+      def parse_apply_early_boot_shim_options
+        options = {
+          app_root: nil,
+          write_patch: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner apply early-boot-shim [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--write-patch PATH", "Write a reviewed config/boot.rb patch") { |path| options[:write_patch] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(@argv)
+
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+
+        options
+      end
+
       def parse_measure_boot_options
         options = {
           app_root: nil,
@@ -604,6 +652,7 @@ module RailsDependencyPruner
             index  Build a Rails constant dependency tree
             audit  Scan an app and find unused Rails constants
             apply boot-plan  Write a reviewed patch replacing rails/all
+            apply early-boot-shim  Write a reviewed config/boot.rb shim patch
             doctor  Print production-readiness recommendations
             explain CONSTANT  Explain why a Rails constant is used or unused
             measure boot  Measure boot memory in fresh processes
@@ -654,9 +703,13 @@ module RailsDependencyPruner
       def apply_help
         <<~HELP
           Usage: rails-dependency-pruner apply boot-plan [options]
+                 rails-dependency-pruner apply early-boot-shim [options]
 
-          Required:
+          Boot-plan required:
             --profile PATH
+            --app PATH
+
+          Early-boot-shim required:
             --app PATH
 
           Useful options:
@@ -749,6 +802,14 @@ module RailsDependencyPruner
         boot_plan.pruned_frameworks.each { |framework| puts "  #{framework}" }
         puts
         puts "Patch written to: #{patch_path}" if patch_path
+      end
+
+      def print_early_boot_patch(report)
+        puts "Early boot shim: #{report.fetch("status")}"
+        puts "Target: #{report.fetch("target")}"
+        puts "Env var: #{report.fetch("env_var")}"
+        puts "Reason: #{report.fetch("reason")}" if report["reason"]
+        puts "Patch written to: #{report.fetch("patch_path")}" if report["patch_path"]
       end
 
       def print_measurement(report, output_path:)

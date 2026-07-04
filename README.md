@@ -147,6 +147,14 @@ require "bundler/setup"
 require "rails_dependency_pruner/early_boot" if ENV["RAILS_DEPENDENCY_PRUNER_EARLY"] == "1"
 ```
 
+To generate that as a reviewed patch:
+
+```bash
+bundle exec rails-dependency-pruner apply early-boot-shim \
+  --app . \
+  --write-patch tmp/pruner-early-boot.patch
+```
+
 Shadow mode records would-block require events and does not change boot behavior.
 `RAILS_DEPENDENCY_PRUNER_MODE=boot_prune` blocks disabled require paths.
 `RAILS_DEPENDENCY_PRUNER_MODE=production` also requires
@@ -165,6 +173,7 @@ Shadow mode records would-block require events and does not change boot behavior
 - `bundle exec rails-dependency-pruner verify --app . --profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner doctor --app .`
 - `bundle exec rails-dependency-pruner apply boot-plan --app . --profile config/rails_dependency_pruner_profile.json --write-patch tmp/pruner-boot-plan.patch`
+- `bundle exec rails-dependency-pruner apply early-boot-shim --app . --write-patch tmp/pruner-early-boot.patch`
 - `bundle exec rails-dependency-pruner measure boot --app . --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`

@@ -793,6 +793,75 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_apply_early_boot_shim_writes_review_patch
+    Dir.mktmpdir("rails_dependency_pruner_early_boot_patch") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "config/boot.rb"), <<~RUBY)
+        ENV["BUNDLE_GEMFILE"] ||= File.expand_path("../Gemfile", __dir__)
+        require "bundler/setup"
+        require "bootsnap/setup"
+      RUBY
+      patch_path = File.join(dir, "early_boot.patch")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "apply",
+        "early-boot-shim",
+        "--app",
+        app_root,
+        "--write-patch",
+        patch_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "patch_available", payload.fetch("status")
+      assert_equal "config/boot.rb", payload.fetch("target")
+
+      patch = File.read(patch_path)
+      assert_includes patch, "+require \"rails_dependency_pruner/early_boot\" if ENV[\"RAILS_DEPENDENCY_PRUNER_EARLY\"] == \"1\""
+      assert_includes File.read(File.join(app_root, "config/boot.rb")), "require \"bootsnap/setup\""
+      refute_includes File.read(File.join(app_root, "config/boot.rb")), "rails_dependency_pruner/early_boot"
+    end
+  end
+
+  def test_apply_early_boot_shim_reports_existing_installation
+    Dir.mktmpdir("rails_dependency_pruner_early_boot_existing") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "config/boot.rb"), <<~RUBY)
+        require "bundler/setup"
+        require "rails_dependency_pruner/early_boot" if ENV["RAILS_DEPENDENCY_PRUNER_EARLY"] == "1"
+      RUBY
+      patch_path = File.join(dir, "early_boot.patch")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "apply",
+        "early-boot-shim",
+        "--app",
+        app_root,
+        "--write-patch",
+        patch_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "already_installed", payload.fetch("status")
+      assert_equal "early boot shim already installed", payload.fetch("reason")
+      assert_includes File.read(patch_path), "no early-boot shim patch generated"
+    end
+  end
+
   def test_apply_boot_plan_writes_review_patch_for_rails_all
     Dir.mktmpdir("rails_dependency_pruner_boot_plan") do |dir|
       app_root = File.join(dir, "app")
