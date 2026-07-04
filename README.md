@@ -95,8 +95,9 @@ bundle exec rails-dependency-pruner rollout \
   --patch tmp/pruner-rollout.patch
 ```
 
-The rollout patch includes the boot-plan change, early boot shim, production
-config, approved profile, and coverage manifest. It does not edit the app.
+The rollout patch includes the boot-plan change, early boot shim, env-gated
+production config, approved profile, and coverage manifest. It does not edit the
+app.
 
 Ask why a framework or require path was kept or pruned:
 

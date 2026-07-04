@@ -96,9 +96,10 @@ module RailsDependencyPruner
           [
             "--- a/#{PRODUCTION_ENV_TARGET}",
             "+++ b/#{PRODUCTION_ENV_TARGET}",
-            "@@ -#{line_number},0 +#{line_number},3 @@",
+            "@@ -#{line_number},0 +#{line_number},4 @@",
             "+  # rails_dependency_pruner: enable the reviewed production profile.",
-            "+  config.rails_dependency_pruner.enabled = true",
+            "+  # Roll back early boot with RAILS_DEPENDENCY_PRUNER_DISABLE=1.",
+            "+  config.rails_dependency_pruner.enabled = ENV[\"RAILS_DEPENDENCY_PRUNER_ENABLED\"] == \"1\"",
             "+  config.rails_dependency_pruner.profile_path = Rails.root.join(#{profile_target.dump})",
             "",
           ].join("\n")
@@ -110,7 +111,8 @@ module RailsDependencyPruner
 
             Rails.application.configure do
               # rails_dependency_pruner: enable the reviewed production profile.
-              config.rails_dependency_pruner.enabled = true
+              # Roll back early boot with RAILS_DEPENDENCY_PRUNER_DISABLE=1.
+              config.rails_dependency_pruner.enabled = ENV["RAILS_DEPENDENCY_PRUNER_ENABLED"] == "1"
               config.rails_dependency_pruner.profile_path = Rails.root.join(#{profile_target.dump})
             end
           RUBY

@@ -90,6 +90,8 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-high-risk-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-transform-contract-smoke.json`
 - `tmp/lobsters-ruby405-rails813-approval-metadata-smoke.json`
+- `tmp/lobsters-ruby405-rails813-rollout-env-gate-smoke.json`
+- `tmp/lobsters-ruby405-rails813-rollout-env-gate-smoke.patch`
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
@@ -163,6 +165,13 @@ Approval metadata smoke:
 - result: `profile_approved: false`
 - reason: the older local profile still fails contract and latency-policy gates
   before approval metadata can be written
+
+Rollout env-gate smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-rollout-env-gate-smoke.json`
+- result: generated production config is gated by
+  `RAILS_DEPENDENCY_PRUNER_ENABLED=1`
+- rollback note: generated patch mentions `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
 
 Request ablation smoke, one run per variant:
 

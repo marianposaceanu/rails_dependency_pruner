@@ -4274,6 +4274,39 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_disable_bypasses_production_safety
+    Dir.mktmpdir("rails_dependency_pruner_early_disable") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "production",
+        "safety" => {
+          "production_allowed" => false,
+        },
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_feature"],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+          "RAILS_DEPENDENCY_PRUNER_DISABLE" => "1",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          puts "disabled"
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "disabled\n", stdout
+    end
+  end
+
   def test_early_boot_production_mode_rejects_profile_id_mismatch
     Dir.mktmpdir("rails_dependency_pruner_early_digest") do |dir|
       profile_path = File.join(dir, "profile.json")
@@ -4849,7 +4882,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes patch, "+require \"active_record/railtie\""
       assert_includes patch, "+# require \"active_job/railtie\" # pruned by rails_dependency_pruner"
       assert_includes patch, "+require \"rails_dependency_pruner/early_boot\" if ENV[\"RAILS_DEPENDENCY_PRUNER_EARLY\"] == \"1\""
-      assert_includes patch, "+  config.rails_dependency_pruner.enabled = true"
+      assert_includes patch, "+  # Roll back early boot with RAILS_DEPENDENCY_PRUNER_DISABLE=1."
+      assert_includes patch, "+  config.rails_dependency_pruner.enabled = ENV[\"RAILS_DEPENDENCY_PRUNER_ENABLED\"] == \"1\""
       assert_includes patch, "+++ b/config/rails_dependency_pruner_profile.json"
       assert_includes patch, profile_payload.fetch("profile_id")
       assert_includes patch, "+++ b/config/pruner_coverage.yml"

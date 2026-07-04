@@ -31,6 +31,9 @@ The patch can include:
 
 If `--coverage` is omitted, the patch includes a generated coverage template.
 Generated workload sections still need review before production approval.
+The generated production config is gated by
+`RAILS_DEPENDENCY_PRUNER_ENABLED=1`; early boot can also be bypassed with
+`RAILS_DEPENDENCY_PRUNER_DISABLE=1`.
 
 ## production gates
 
