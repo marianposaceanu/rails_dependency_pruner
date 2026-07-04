@@ -1039,14 +1039,149 @@ class RailsDependencyPrunerTest < Minitest::Test
       refute status.success?
 
       payload = JSON.parse(stdout)
-      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: ruby-vips requires attachments"
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: stub:active_storage_vips_analyzer requires attachments"
       assert_equal [
         {
-          "framework" => "ruby-vips",
+          "framework" => "stub:active_storage_vips_analyzer",
           "required_workloads" => %w[attachments],
           "missing_workloads" => %w[attachments],
         },
       ], payload.dig("production_risks", "extreme_boot_workload_gaps")
+    end
+  end
+
+  def test_verify_production_rejects_missing_transform_declaration
+    Dir.mktmpdir("rails_dependency_pruner_transform_manifest_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      profile_payload = JSON.parse(File.read(profile_path))
+      profile_payload["transforms"].reject! { |transform| transform.fetch("id") == "disable_eager_load" }
+      profile_payload["profile_id"] = RailsDependencyPruner::Profile.new(profile_payload).digest
+      File.write(profile_path, JSON.pretty_generate(profile_payload))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing registered transform: disable_eager_load"
+      assert_equal ["disable_eager_load"], payload.dig("production_risks", "missing_profile_transforms")
+    end
+  end
+
+  def test_verify_production_rejects_unknown_transform_declaration
+    Dir.mktmpdir("rails_dependency_pruner_unknown_transform_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      profile_payload = JSON.parse(File.read(profile_path))
+      profile_payload["transforms"] << {
+        "id" => "lazy_gem:unknown",
+        "kind" => "unsafe_unknown",
+        "risk" => "unknown",
+        "description" => "Unknown lazy gem",
+        "source" => "test",
+        "required_coverage" => [],
+        "expected_events" => [],
+        "registered" => false,
+      }
+      profile_payload["profile_id"] = RailsDependencyPruner::Profile.new(profile_payload).digest
+      File.write(profile_path, JSON.pretty_generate(profile_payload))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify found unknown transform: lazy_gem:unknown"
+      assert_equal ["lazy_gem:unknown"], payload.dig("production_risks", "unknown_profile_transforms")
     end
   end
 
@@ -1853,9 +1988,22 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["action_mailbox/mail_ext"], payload.dig("extreme_boot", "lazy_require_paths")
       assert_equal %w[faker pdf-reader ruby-vips], payload.dig("extreme_boot", "lazy_gems")
       assert_equal %w[action_mailbox active_storage], payload.dig("extreme_boot", "config_namespace_stubs")
+      transform_ids = payload.fetch("transforms").map { |transform| transform.fetch("id") }
+      assert_includes transform_ids, "disable_eager_load"
+      assert_includes transform_ids, "skip_railtie:action_mailbox/engine"
+      assert_includes transform_ids, "skip_railtie:active_storage/engine"
+      assert_includes transform_ids, "lazy_require:action_mailbox/mail_ext"
+      assert_includes transform_ids, "lazy_gem:faker"
+      assert_includes transform_ids, "lazy_gem:pdf-reader"
+      assert_includes transform_ids, "lazy_gem:ruby-vips"
+      assert_includes transform_ids, "stub:active_storage_vips_analyzer"
 
       profile = JSON.parse(File.read(profile_path))
       assert_equal payload.fetch("extreme_boot"), profile.fetch("extreme_boot")
+      assert_equal transform_ids.sort, profile.fetch("transforms").map { |transform| transform.fetch("id") }.sort
+      vips_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "stub:active_storage_vips_analyzer" }
+      assert_equal "high", vips_transform.fetch("risk")
+      assert_equal ["stubbed_lazy_gem_require"], vips_transform.fetch("expected_events").map { |event| event.fetch("action") }
     end
   end
 

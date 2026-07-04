@@ -5,6 +5,7 @@ require "pathname"
 
 require_relative "boot_plan"
 require_relative "runtime_framework_matcher"
+require_relative "transform_registry"
 
 module RailsDependencyPruner
   class ProfileVerifier
@@ -98,6 +99,12 @@ module RailsDependencyPruner
         errors << "production verify requires a coverage manifest digest"
       end
       if production
+        missing_profile_transforms.each do |id|
+          errors << "production verify missing registered transform: #{id}"
+        end
+        unknown_profile_transforms.each do |id|
+          errors << "production verify found unknown transform: #{id}"
+        end
         truncated_runtime_evidence.each do |name|
           errors << "production verify found truncated runtime evidence: #{name}"
         end
@@ -138,6 +145,8 @@ module RailsDependencyPruner
           "dynamic_constantization_matches" => dynamic_constantization_risks,
           "coverage_workload_gaps" => coverage_workload_gaps,
           "extreme_boot_workload_gaps" => extreme_boot_workload_gaps,
+          "missing_profile_transforms" => missing_profile_transforms,
+          "unknown_profile_transforms" => unknown_profile_transforms,
           "extreme_boot_static_matches" => extreme_boot_static_matches,
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
@@ -239,7 +248,7 @@ module RailsDependencyPruner
           end
           Array(extreme_boot["lazy_gems"]).each do |gem_name|
             required_workloads = extreme_boot_required_workloads(gem_name)
-            gaps << workload_gap(gem_name, required_workloads)
+            gaps << workload_gap(extreme_boot_workload_name(gem_name), required_workloads)
           end
 
           gaps.compact.sort_by { |gap| gap.fetch("framework") }
@@ -256,6 +265,25 @@ module RailsDependencyPruner
         end
 
         required_workloads.uniq
+      end
+
+      def extreme_boot_workload_name(name)
+        case name
+        when "rack-mini-profiler"
+          "stub:rack_mini_profiler"
+        when "ruby-vips"
+          "stub:active_storage_vips_analyzer"
+        else
+          name
+        end
+      end
+
+      def missing_profile_transforms
+        @missing_profile_transforms ||= TransformRegistry.missing_transform_ids(profile.payload)
+      end
+
+      def unknown_profile_transforms
+        @unknown_profile_transforms ||= TransformRegistry.unknown_transform_ids(profile.payload)
       end
 
       def unsupported_lazy_require_paths

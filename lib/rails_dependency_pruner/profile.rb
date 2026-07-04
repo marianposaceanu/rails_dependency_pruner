@@ -8,6 +8,7 @@ require "time"
 require_relative "canonical_json"
 require_relative "profile_context"
 require_relative "profile_validator"
+require_relative "transform_registry"
 
 module RailsDependencyPruner
   class Profile
@@ -117,6 +118,7 @@ module RailsDependencyPruner
         },
         "explanations" => explanations || {},
       }
+      payload["transforms"] = TransformRegistry.transforms_for_payload(payload)
 
       new(payload).tap do |profile|
         profile.payload["profile_id"] = profile.digest

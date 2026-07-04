@@ -319,8 +319,8 @@ stubs Active Storage's Vips analyzer for this no-attachment workload.
 
 | target | baseline RSS | pruned RSS | saved |
 | --- | ---: | ---: | ---: |
-| requests `/privacy,/login,/404` | `228576 KB` | `127904 KB` | `100672 KB` (`98.3 MiB`, `44.0%`) |
-| environment boot | `218592 KB` | `111312 KB` | `107280 KB` (`104.8 MiB`, `49.1%`) |
+| requests `/privacy,/login,/404` | `208432 KB` | `125952 KB` | `82480 KB` (`80.5 MiB`, `39.6%`) |
+| environment boot | `231632 KB` | `110912 KB` | `120720 KB` (`117.9 MiB`, `52.1%`) |
 
 Production approval passed with no verifier errors for this profile. Lobsters
 uses `Vips` directly in `StoryImage`, but does not declare `has_one_attached` or
@@ -328,10 +328,14 @@ uses `Vips` directly in `StoryImage`, but does not declare `has_one_attached` or
 attachment workload coverage before approving the `ruby-vips` analyzer stub.
 The biggest Rails-side reductions are ActiveRecord, Action View, Active Model,
 and Active Storage. The Vips analyzer stub accounts for about `23 MiB` of the
-request-warmed RSS win.
+request-warmed RSS win in the reference run. The latest request run kept the
+same loaded-feature delta but saw a lower baseline RSS, which is why the next
+production-readiness step is per-transform ablation rather than a single RSS
+percentage.
 
 Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.
+Production profile transform ids are described in `docs/transform-registry.md`.
 
 ## limits
 

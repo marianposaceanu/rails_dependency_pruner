@@ -29,16 +29,29 @@ Production approval:
 - `verified`: `true`
 - `production_allowed`: `true`
 - verifier errors: `0`
-- profile id: `sha256:46be13455983b2e1f38e1509036fbe0decc498d966dea01f517f25d6870db1dc`
+- profile id: `sha256:38b32261d9e4f00de55ac39d0f67b94b7e70827c4001732cd8537ab30c61e404`
+
+Registered transforms:
+
+- `disable_eager_load`
+- `disable_framework:actiontext`
+- `prune_railtie:action_text/engine`
+- `skip_railtie:rails/test_unit/railtie`
+- `stub:rack_mini_profiler`
+- `stub:active_storage_vips_analyzer`
+- `lazy_gem:*` for the approved boot-deferred gems
 
 ## results
 
 | target | baseline RSS | pruned RSS | saved RSS | Rails features | GC live slots |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| requests | `228576 KB` | `127904 KB` | `100672 KB` (`98.3 MiB`, `44.0%`) | `-201` | `-273764` |
-| environment | `218592 KB` | `111312 KB` | `107280 KB` (`104.8 MiB`, `49.1%`) | `-434` | `-303816` |
+| requests | `208432 KB` | `125952 KB` | `82480 KB` (`80.5 MiB`, `39.6%`) | `-201` | `-273750` |
+| environment | `231632 KB` | `110912 KB` | `120720 KB` (`117.9 MiB`, `52.1%`) | `-434` | `-303782` |
 
 The request run hit `/privacy` and `/login` with `200`, and `/404` with `404`.
+The earlier reference run for the same runtime behavior measured
+`228576 KB -> 127904 KB`, saving `100672 KB` (`98.3 MiB`, `44.0%`). The
+loaded-feature deltas are unchanged in the current run, but macOS RSS moved.
 
 Artifacts:
 
@@ -90,11 +103,11 @@ some of that back, but ActiveRecord and Action View remain the biggest Rails
 feature reductions.
 
 The Vips analyzer is separate from normal Rails feature counts. Before the Vips
-analyzer stub, the same request-warmed profile saved `77488 KB` RSS. With the
-stub it saves `100672 KB`, an extra `23776 KB` (`23.2 MiB`). Environment boot
-improved by `23408 KB` (`22.9 MiB`). That gain comes from avoiding the
-ActiveStorage analyzer's boot-time `ruby-vips` load; it does not remove direct
-app `Vips` use.
+analyzer stub, the reference request-warmed profile saved `77488 KB` RSS. With
+the stub it saved `100672 KB`, an extra `23776 KB` (`23.2 MiB`). That paired
+reference is the better Vips-specific estimate than comparing unrelated RSS
+runs. The gain comes from avoiding the ActiveStorage analyzer's boot-time
+`ruby-vips` load; it does not remove direct app `Vips` use.
 
 ## commands
 

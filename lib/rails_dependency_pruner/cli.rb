@@ -18,6 +18,7 @@ require_relative "profile_diff"
 require_relative "profile_explainer"
 require_relative "profile_verifier"
 require_relative "profile_validator"
+require_relative "transform_registry"
 require_relative "measurement/report"
 require_relative "measurement/runner"
 require_relative "runtime/collector"
@@ -237,6 +238,7 @@ module RailsDependencyPruner
           "patch_path" => options[:patch_path],
           "boot_plan" => boot_plan.to_h,
           "extreme_boot" => profile.payload.fetch("extreme_boot"),
+          "transforms" => profile.payload.fetch("transforms"),
         }.compact
 
         if options.fetch(:json)
