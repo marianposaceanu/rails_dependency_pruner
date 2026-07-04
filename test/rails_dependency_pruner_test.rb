@@ -2119,6 +2119,108 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_lazy_constant_policy_for_lazy_gems
+    Dir.mktmpdir("rails_dependency_pruner_lazy_constant_policy_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "faker",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      original_profile = JSON.parse(File.read(profile_path))
+      assert_equal "faker", original_profile.dig("lazy_constants", "Faker", "require")
+
+      missing_profile = Marshal.load(Marshal.dump(original_profile))
+      missing_profile.delete("lazy_constants")
+      RailsDependencyPruner::ProfileSchema.set_profile_id(missing_profile, RailsDependencyPruner::Profile.new(missing_profile).digest)
+      File.write(profile_path, JSON.pretty_generate(missing_profile))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing lazy constant policy: Faker for faker missing lazy_constants.Faker"
+      assert_equal(
+        [
+          {
+            "constant" => "Faker",
+            "gem" => "faker",
+            "missing_fields" => ["lazy_constants.Faker"],
+            "mismatched_fields" => [],
+          },
+        ],
+        payload.dig("production_risks", "lazy_constant_policy_gaps"),
+      )
+
+      stale_profile = Marshal.load(Marshal.dump(original_profile))
+      stale_profile["lazy_constants"]["Faker"]["require"] = "faker/old"
+      RailsDependencyPruner::ProfileSchema.set_profile_id(stale_profile, RailsDependencyPruner::Profile.new(stale_profile).digest)
+      File.write(profile_path, JSON.pretty_generate(stale_profile))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing lazy constant policy: Faker for faker mismatched require"
+      assert_equal ["require"], payload.dig("production_risks", "lazy_constant_policy_gaps", 0, "mismatched_fields")
+    end
+  end
+
   def test_verify_production_rejects_extreme_boot_static_mailbox_usage
     Dir.mktmpdir("rails_dependency_pruner_extreme_static_verify") do |dir|
       app_root = File.join(dir, "app")

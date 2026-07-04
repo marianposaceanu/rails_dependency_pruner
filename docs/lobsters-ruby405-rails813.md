@@ -264,7 +264,7 @@ Artifact: `tmp/lobsters-ruby405-rails805-feature-catalog-smoke.json`.
 
 Structured lazy-gem policy smoke, also static-only, generated review entries for
 `faker`, `pdf-reader`, and `ruby-vips`, plus lazy constants for `Faker`, `PDF`,
-and `Vips`. Max RSS for that smoke process was `131416064` bytes.
+and `Vips`. Max RSS for that smoke process was `126369792` bytes.
 
 Artifact: `tmp/lobsters-ruby405-rails805-lazy-gem-policy-smoke.json`.
 

@@ -132,6 +132,9 @@ module RailsDependencyPruner
         structured_lazy_gem_policy_gaps.each do |gap|
           errors << "production verify missing structured lazy gem policy: #{format_structured_lazy_gem_policy_gap(gap)}"
         end
+        lazy_constant_policy_gaps.each do |gap|
+          errors << "production verify missing lazy constant policy: #{format_lazy_constant_policy_gap(gap)}"
+        end
         high_risk_transform_gaps.each do |gap|
           errors << "production verify missing high-risk transform proof: #{format_high_risk_transform_gap(gap)}"
         end
@@ -163,6 +166,7 @@ module RailsDependencyPruner
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
           "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
+          "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
           "memory_policy" => memory_policy_result,
@@ -397,6 +401,32 @@ module RailsDependencyPruner
         end.sort_by { |gap| gap.fetch("gem") }
       end
 
+      def lazy_constant_policy_gaps
+        @lazy_constant_policy_gaps ||= lazy_constant_policy_requirements.filter_map do |requirement|
+          constant = requirement.fetch("constant")
+          actual = profile.payload.dig("lazy_constants", constant)
+          unless actual.is_a?(Hash)
+            next({
+              "constant" => constant,
+              "gem" => requirement.fetch("gem"),
+              "missing_fields" => ["lazy_constants.#{constant}"],
+              "mismatched_fields" => [],
+            })
+          end
+
+          missing_fields = lazy_constant_missing_fields(actual)
+          mismatched_fields = lazy_constant_mismatched_fields(actual, requirement.fetch("policy"))
+          next if missing_fields.empty? && mismatched_fields.empty?
+
+          {
+            "constant" => constant,
+            "gem" => requirement.fetch("gem"),
+            "missing_fields" => missing_fields,
+            "mismatched_fields" => mismatched_fields,
+          }
+        end.sort_by { |gap| [gap.fetch("gem"), gap.fetch("constant")] }
+      end
+
       def high_risk_transform_gaps
         @high_risk_transform_gaps ||= begin
           gaps = []
@@ -461,6 +491,42 @@ module RailsDependencyPruner
 
       def normalized_lazy_gem_value(value)
         value.is_a?(Array) ? value.map(&:to_s).sort : value
+      end
+
+      def lazy_constant_policy_requirements
+        Array(extreme_boot["lazy_gems"]).flat_map do |name|
+          policy = profile.payload.dig("lazy_gems", name)
+          next [] unless policy.is_a?(Hash)
+          next [] unless Array(policy["strategies"]).map(&:to_s).include?("lazy_constant")
+          next [] if policy["require"].to_s.empty?
+
+          Array(policy["constants"]).map do |constant|
+            {
+              "constant" => constant.to_s,
+              "gem" => name,
+              "policy" => {
+                "gem" => name,
+                "require" => policy.fetch("require"),
+                "allowed_phases" => Array(policy["allowed_phases"]).map(&:to_s),
+                "disallowed_phases" => Array(policy["disallowed_phases"]).map(&:to_s),
+              },
+            }
+          end
+        end
+      end
+
+      def lazy_constant_missing_fields(actual)
+        %w[gem require allowed_phases disallowed_phases].select do |field|
+          !actual.key?(field) || actual[field].nil?
+        end
+      end
+
+      def lazy_constant_mismatched_fields(actual, expected)
+        expected.keys.select do |field|
+          next false unless actual.key?(field)
+
+          normalized_lazy_gem_value(actual[field]) != normalized_lazy_gem_value(expected[field])
+        end.sort
       end
 
       def extreme_boot_static_matches
@@ -776,6 +842,16 @@ module RailsDependencyPruner
         parts << "mismatched #{mismatched.join(", ")}" unless mismatched.empty?
 
         "#{gap.fetch("gem")} #{parts.join("; ")}"
+      end
+
+      def format_lazy_constant_policy_gap(gap)
+        parts = []
+        missing = Array(gap["missing_fields"])
+        mismatched = Array(gap["mismatched_fields"])
+        parts << "missing #{missing.join(", ")}" unless missing.empty?
+        parts << "mismatched #{mismatched.join(", ")}" unless mismatched.empty?
+
+        "#{gap.fetch("constant")} for #{gap.fetch("gem")} #{parts.join("; ")}"
       end
 
       def format_catalog_coverage_gap(gap)

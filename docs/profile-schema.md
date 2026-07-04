@@ -185,6 +185,9 @@ constant:
 }
 ```
 
+Production verification rejects a lazy gem when the expected lazy-constant
+entry is missing or no longer matches the structured gem policy.
+
 When the global `const_missing` hook sees a configured constant, it records the
 owner, caller path, caller line, phase, gem, and require path. A strict canary or
 production boot fails if the constant is reached outside the declared phase or
