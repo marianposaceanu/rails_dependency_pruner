@@ -362,6 +362,7 @@ module RailsDependencyPruner
           variants: %w[baseline],
           runs: 5,
           output_path: nil,
+          markdown_path: nil,
           json: false,
         }
 
@@ -372,6 +373,7 @@ module RailsDependencyPruner
           parser.on("--variants NAMES", "Comma-separated variant names") { |names| options[:variants] = split_csv(names) }
           parser.on("--runs N", Integer, "Runs per variant") { |runs| options[:runs] = runs }
           parser.on("--output PATH", "Write measurement JSON") { |path| options[:output_path] = path }
+          parser.on("--markdown PATH", "Write measurement Markdown") { |path| options[:markdown_path] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
             puts parser

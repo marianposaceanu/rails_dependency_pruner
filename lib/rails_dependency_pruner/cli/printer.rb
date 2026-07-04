@@ -155,7 +155,7 @@ module RailsDependencyPruner
         puts "Patch written to: #{report.fetch("patch_path")}" if report["patch_path"]
       end
 
-      def measurement(report, output_path:)
+      def measurement(report, output_path:, markdown_path: nil)
         if report["profile"]
           profile = report.fetch("profile")
           puts "Profile: #{profile.fetch("profile_id") || "(no id)"}"
@@ -182,6 +182,7 @@ module RailsDependencyPruner
 
         puts
         puts "Report written to: #{output_path}" if output_path
+        puts "Markdown written to: #{markdown_path}" if markdown_path
       end
 
       def profile_diff(diff)

@@ -18,6 +18,7 @@ require_relative "profile_diff"
 require_relative "profile_explainer"
 require_relative "profile_verifier"
 require_relative "profile_validator"
+require_relative "measurement/report"
 require_relative "measurement/runner"
 require_relative "runtime_evidence"
 require_relative "shim_writer"
@@ -185,11 +186,19 @@ module RailsDependencyPruner
           FileUtils.mkdir_p(File.dirname(options[:output_path]))
           File.write(options[:output_path], JSON.pretty_generate(report))
         end
+        if options[:markdown_path]
+          FileUtils.mkdir_p(File.dirname(options[:markdown_path]))
+          File.write(options[:markdown_path], Measurement::Report.new(report).to_markdown)
+        end
 
         if options.fetch(:json)
           puts JSON.pretty_generate(report)
         else
-          printer.measurement(report, output_path: options[:output_path])
+          printer.measurement(
+            report,
+            output_path: options[:output_path],
+            markdown_path: options[:markdown_path],
+          )
         end
 
         0
@@ -559,6 +568,7 @@ module RailsDependencyPruner
             --variants baseline,boot_prune
             --runs N
             --output PATH
+            --markdown PATH
             --json
         HELP
       end

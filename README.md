@@ -255,7 +255,7 @@ events and does not change boot behavior.
 - `bundle exec rails-dependency-pruner doctor --app .`
 - `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch`
-- `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json`
+- `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json --markdown tmp/pruner-memory-report.md`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json`
 
@@ -317,7 +317,8 @@ RAILS_ENV=production rails-dependency-pruner measure \
   --profile tmp/lobsters-ruby405-rails813-profile.json \
   --variants baseline,production \
   --runs 3 \
-  --output tmp/lobsters-ruby405-rails813-measurement.json
+  --output tmp/lobsters-ruby405-rails813-measurement.json \
+  --markdown tmp/lobsters-ruby405-rails813-measurement.md
 ```
 
 This loads `config/application`, not a server and not a full Rails

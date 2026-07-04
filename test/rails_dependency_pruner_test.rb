@@ -2178,6 +2178,7 @@ class RailsDependencyPrunerTest < Minitest::Test
   def test_measure_boot_reports_process_memory
     Dir.mktmpdir("rails_dependency_pruner_measure") do |dir|
       report_path = File.join(dir, "measurement.json")
+      markdown_path = File.join(dir, "measurement.md")
       profile_path = File.join(dir, "profile.json")
       File.write(profile_path, JSON.pretty_generate(
         "schema_version" => 2,
@@ -2204,6 +2205,8 @@ class RailsDependencyPrunerTest < Minitest::Test
         "1",
         "--output",
         report_path,
+        "--markdown",
+        markdown_path,
         "--json",
         chdir: ROOT.to_s,
       )
@@ -2219,6 +2222,13 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
       assert_equal 1, payload.dig("profile", "disabled_require_paths_count")
       assert File.exist?(report_path)
+      assert File.exist?(markdown_path)
+
+      markdown = File.read(markdown_path)
+      assert_includes markdown, "# Rails Dependency Pruner Measurement"
+      assert_includes markdown, "| baseline | ok |"
+      assert_includes markdown, "| shadow | ok |"
+      assert_includes markdown, "## Deltas Vs Baseline"
     end
   end
 
