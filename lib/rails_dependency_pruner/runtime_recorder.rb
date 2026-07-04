@@ -48,6 +48,7 @@ module RailsDependencyPruner
       @require_events = []
       @load_events = []
       @snapshots = []
+      @current_phase = ENV.fetch("RAILS_DEPENDENCY_PRUNER_PHASE", "boot")
       @max_called_methods = max_called_methods
       @max_require_events = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS", "20000"))
       @max_snapshots = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS", "200"))
@@ -99,6 +100,7 @@ module RailsDependencyPruner
     def snapshot!(phase)
       return false unless @started
 
+      @current_phase = phase.to_s
       if @snapshots.length >= @max_snapshots
         @snapshots_truncated = true
         return false
@@ -174,12 +176,12 @@ module RailsDependencyPruner
       }
     end
 
-    def record_require(path, caller_location)
-      record_event(@require_events, :@require_events_truncated, path, caller_location)
+    def record_require(path, caller_location, operation: "require", resolved_path: nil)
+      record_event(@require_events, :@require_events_truncated, path, caller_location, operation: operation, resolved_path: resolved_path)
     end
 
-    def record_load(path, caller_location)
-      record_event(@load_events, :@load_events_truncated, path, caller_location)
+    def record_load(path, caller_location, operation: "load", resolved_path: nil)
+      record_event(@load_events, :@load_events_truncated, path, caller_location, operation: operation, resolved_path: resolved_path)
     end
 
     def rails_class_instance_sizes
@@ -205,34 +207,71 @@ module RailsDependencyPruner
     def install_require_trace!
       return if @require_trace_installed
 
-      Kernel.prepend(RequireTrace)
+      Kernel.module_eval do
+        unless private_method_defined?(:rails_dependency_pruner_runtime_original_require)
+          alias_method :rails_dependency_pruner_runtime_original_require, :require
+
+          def require(path)
+            RailsDependencyPruner::RuntimeRecorder.record_require(path, caller_locations(1, 1).first)
+            rails_dependency_pruner_runtime_original_require(path)
+          end
+
+          private :require
+        end
+
+        unless private_method_defined?(:rails_dependency_pruner_runtime_original_require_relative)
+          alias_method :rails_dependency_pruner_runtime_original_require_relative, :require_relative
+
+          def require_relative(path)
+            caller_location = caller_locations(1, 1).first
+            resolved_path = if caller_location&.path
+              File.expand_path(path.to_s, File.dirname(caller_location.path))
+            end
+            RailsDependencyPruner::RuntimeRecorder.record_require(
+              path,
+              caller_location,
+              operation: "require_relative",
+              resolved_path: resolved_path,
+            )
+            if resolved_path
+              rails_dependency_pruner_runtime_original_require(resolved_path)
+            else
+              rails_dependency_pruner_runtime_original_require_relative(path)
+            end
+          end
+
+          private :require_relative
+        end
+
+        unless private_method_defined?(:rails_dependency_pruner_runtime_original_load)
+          alias_method :rails_dependency_pruner_runtime_original_load, :load
+
+          def load(path, wrap = false)
+            RailsDependencyPruner::RuntimeRecorder.record_load(path, caller_locations(1, 1).first)
+            rails_dependency_pruner_runtime_original_load(path, wrap)
+          end
+
+          private :load
+        end
+      end
       @require_trace_installed = true
     end
 
-    def record_event(events, truncated_flag, path, caller_location)
+    def record_event(events, truncated_flag, path, caller_location, operation:, resolved_path: nil)
       if events.length >= @max_require_events
         instance_variable_set(truncated_flag, true)
         return
       end
 
       events << {
+        operation: operation,
         path: path.to_s,
+        resolved_path: resolved_path,
+        phase: @current_phase,
         caller_path: caller_location&.path,
         caller_line: caller_location&.lineno,
         caller_label: caller_location&.label,
       }.compact
-    end
-
-    module RequireTrace
-      def require(path)
-        RailsDependencyPruner::RuntimeRecorder.record_require(path, caller_locations(1, 1).first)
-        super
-      end
-
-      def load(path, wrap = false)
-        RailsDependencyPruner::RuntimeRecorder.record_load(path, caller_locations(1, 1).first)
-        super
-      end
     end
   end
 end

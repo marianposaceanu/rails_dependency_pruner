@@ -1050,7 +1050,28 @@ class RailsDependencyPrunerTest < Minitest::Test
     Dir.mktmpdir("rails_dependency_pruner_runtime") do |dir|
       output = File.join(dir, "runtime.json")
       runtime_feature = File.join(dir, "runtime_feature.rb")
+      relative_feature = File.join(dir, "relative_runtime_feature.rb")
+      script = File.join(dir, "runtime_script.rb")
       File.write(runtime_feature, "module ActiveRecord; class RuntimeRequiredFeature; end; end\n")
+      File.write(relative_feature, "module ActionCable; class RelativeRuntimeFeature; end; end\n")
+      File.write(script, <<~RUBY)
+        module ActiveRecord
+          class Base
+            def persisted?
+              true
+            end
+          end
+        end
+
+        RailsDependencyPruner::RuntimeRecorder.snapshot!("before_runtime_feature")
+        $LOAD_PATH.unshift(#{dir.dump})
+        require "runtime_feature"
+        require_relative "relative_runtime_feature"
+        load #{runtime_feature.dump}
+        $runtime_base = ActiveRecord::Base.new
+        $runtime_base.persisted?
+        RailsDependencyPruner::RuntimeRecorder.snapshot!("after_runtime_feature")
+      RUBY
       stdout, stderr, status = Open3.capture3(
         {
           "RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT" => output,
@@ -1062,23 +1083,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         RUBY,
         "-I#{ROOT.join("lib")}",
         "-rrails_dependency_pruner/runtime_recorder",
-        "-e",
-        <<~RUBY,
-          module ActiveRecord
-            class Base
-              def persisted?
-                true
-              end
-            end
-          end
-
-          $LOAD_PATH.unshift(#{dir.dump})
-          require "runtime_feature"
-          load #{runtime_feature.dump}
-          $runtime_base = ActiveRecord::Base.new
-          $runtime_base.persisted?
-          RailsDependencyPruner::RuntimeRecorder.snapshot!("after_runtime_feature")
-        RUBY
+        script,
       )
 
       assert status.success?, stderr
@@ -1088,13 +1093,29 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes payload.fetch("defined_constants"), "ActiveRecord::Base"
       assert_includes payload.fetch("called_constants"), "ActiveRecord::Base"
       assert payload.fetch("called_methods").any? { |entry| entry.fetch("method_id") == "persisted?" }
-      assert payload.fetch("require_events").any? { |entry| entry.fetch("path") == "runtime_feature" && entry["caller_line"] }
-      assert payload.fetch("load_events").any? { |entry| entry.fetch("path") == runtime_feature && entry["caller_line"] }
+      require_event = payload.fetch("require_events").find { |entry| entry.fetch("path") == "runtime_feature" }
+      refute_nil require_event
+      assert_equal "require", require_event.fetch("operation")
+      assert_equal "before_runtime_feature", require_event.fetch("phase")
+      assert require_event["caller_line"]
+
+      relative_event = payload.fetch("require_events").find { |entry| entry.fetch("path") == "relative_runtime_feature" }
+      refute_nil relative_event
+      assert_equal "require_relative", relative_event.fetch("operation")
+      assert_equal relative_feature.delete_suffix(".rb"), relative_event.fetch("resolved_path")
+      assert_equal "before_runtime_feature", relative_event.fetch("phase")
+
+      load_event = payload.fetch("load_events").find { |entry| entry.fetch("path") == runtime_feature }
+      refute_nil load_event
+      assert_equal "load", load_event.fetch("operation")
+      assert_equal "before_runtime_feature", load_event.fetch("phase")
+      assert load_event["caller_line"]
       assert payload.dig("memory", "object_sizes", "T_STRING")
       assert payload.dig("memory", "rails_class_instance_sizes").any? { |entry| entry.fetch("name") == "ActiveRecord::Base" }
       assert_operator payload.dig("process_memory", "rss_kb"), :>, 0
       phases = payload.fetch("snapshots").map { |snapshot| snapshot.fetch("phase") }
       assert_includes phases, "recorder_start"
+      assert_includes phases, "before_runtime_feature"
       assert_includes phases, "after_runtime_feature"
       assert_includes phases, "recorder_exit"
       assert payload.fetch("snapshots").all? { |snapshot| snapshot.dig("process_memory", "rss_kb").positive? }

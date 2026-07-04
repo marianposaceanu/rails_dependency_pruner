@@ -116,6 +116,9 @@ RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
 bin/rails test
 ```
 
+This records `require`, `require_relative`, and `load` events with caller and
+phase fields.
+
 For Ruby object type and Rails class instance sizes:
 
 ```bash
