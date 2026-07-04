@@ -21,6 +21,7 @@ module RailsDependencyPruner
         append_framework_features(lines)
         append_deltas(lines)
         append_framework_deltas(lines)
+        append_object_deltas(lines)
         lines << "RSS is reported from the measured process. Compare it with loaded-feature and GC-slot deltas before claiming a memory win."
         lines << ""
         lines.join("\n")
@@ -139,6 +140,28 @@ module RailsDependencyPruner
           deltas.each do |variant, delta|
             counts = delta.fetch("rails_loaded_features_by_framework", {})
             row = [table_cell(variant)] + frameworks.map { |framework| signed(counts[framework]) }
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
+        def append_object_deltas(lines)
+          deltas = payload.fetch("deltas", {})
+          object_types = deltas.values.flat_map do |delta|
+            delta.fetch("object_counts", {}).keys
+          end.uniq.sort
+          return if object_types.empty?
+
+          selected = %w[T_STRING T_ARRAY T_HASH T_OBJECT T_DATA].select { |type| object_types.include?(type) }
+          selected = object_types.first(8) if selected.empty?
+
+          lines << "## Ruby Object Deltas"
+          lines << ""
+          lines << "| variant | #{selected.join(" | ")} |"
+          lines << "| --- | #{selected.map { "---:" }.join(" | ")} |"
+          deltas.each do |variant, delta|
+            counts = delta.fetch("object_counts", {})
+            row = [table_cell(variant)] + selected.map { |type| signed(counts[type]) }
             lines << "| #{row.join(" | ")} |"
           end
           lines << ""

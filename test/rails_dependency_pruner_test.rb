@@ -12,6 +12,45 @@ class RailsDependencyPrunerTest < Minitest::Test
   FAKE_APP_ROOT = ROOT.join("test/fixtures/fake_app")
   RUBY = RbConfig.ruby
 
+  def write_measurement_profile(path)
+    payload = {
+      "schema_version" => 3,
+      "profile_id" => nil,
+      "fingerprints" => { "profile_id" => nil },
+      "mode" => "boot_prune",
+      "pruning" => {
+        "disabled_frameworks" => ["actiontext"],
+        "disabled_railties" => ["action_text/engine"],
+        "disabled_initializers" => [],
+        "disabled_require_paths" => [],
+        "disabled_require_path_provenance" => [],
+        "disabled_constants" => [],
+        "autoload_ignores" => [],
+        "eager_load_ignores" => [],
+      },
+      "boot_plan" => {
+        "pruned_frameworks" => ["actiontext"],
+        "pruned_railties" => ["action_text/engine"],
+        "autoload_ignores" => [],
+        "eager_load_ignores" => [],
+      },
+      "extreme_boot" => {
+        "disable_eager_load" => true,
+        "skip_railties" => ["rails/test_unit/railtie"],
+        "lazy_require_paths" => [],
+        "lazy_gems" => ["builder", "rack-mini-profiler", "ruby-vips"],
+        "config_namespace_stubs" => [],
+      },
+      "safety" => {
+        "production_allowed" => false,
+      },
+    }
+    payload["transforms"] = RailsDependencyPruner::TransformRegistry.transforms_for_payload(payload)
+    payload["expected_events"] = payload.fetch("transforms").flat_map { |transform| Array(transform["expected_events"]) }
+    RailsDependencyPruner::ProfileSchema.set_profile_id(payload, RailsDependencyPruner::Profile.new(payload).digest)
+    RailsDependencyPruner::Profile.new(payload).write(path)
+  end
+
   def test_builds_dependency_tree_and_finds_unused_rails_constants
     index = RailsDependencyPruner::ConstantIndex.build(
       rails_root: FAKE_RAILS_ROOT,
@@ -3624,6 +3663,59 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "## Deltas Vs Baseline"
       assert_includes markdown, "## Rails Features By Framework"
       assert_includes markdown, "## Rails Feature Deltas By Framework"
+    end
+  end
+
+  def test_measure_ablation_reports_transform_buckets
+    Dir.mktmpdir("rails_dependency_pruner_measure_ablation") do |dir|
+      report_path = File.join(dir, "ablation.json")
+      markdown_path = File.join(dir, "ablation.md")
+      profile_path = File.join(dir, "profile.json")
+      write_measurement_profile(profile_path)
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "measure",
+        "ablation",
+        "--app",
+        FAKE_APP_ROOT.to_s,
+        "--profile",
+        profile_path,
+        "--runs",
+        "1",
+        "--output",
+        report_path,
+        "--markdown",
+        markdown_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("ablation")
+      assert_equal "application", payload.fetch("target")
+      assert_equal "ok", payload.dig("variants", "baseline", "status")
+      assert_equal "ok", payload.dig("variants", "all_approved_transforms", "status")
+      assert_kind_of Hash, payload.dig("variants", "baseline", "object_counts_median")
+      assert_kind_of Hash, payload.dig("deltas", "all_approved_transforms", "object_counts")
+      variant_names = payload.fetch("ablation_variants").map { |variant| variant.fetch("name") }
+      assert_includes variant_names, "disable_eager_load_only"
+      assert_includes variant_names, "lazy_gems_only"
+      assert_includes variant_names, "rails_prune_plan_only"
+      assert_includes variant_names, "all_low_risk_transforms"
+      assert_equal profile_path, payload.dig("source_profile", "path")
+      assert File.exist?(report_path)
+      assert File.exist?(markdown_path)
+
+      markdown = File.read(markdown_path)
+      assert_includes markdown, "# Rails Dependency Pruner Ablation"
+      assert_includes markdown, "## Rails Memory Buckets"
+      assert_includes markdown, "## Ruby Object Buckets"
+      assert_includes markdown, "## Transform Sets"
+      assert_includes markdown, "RSS is process memory"
     end
   end
 

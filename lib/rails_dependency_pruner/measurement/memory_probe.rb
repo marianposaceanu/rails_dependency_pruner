@@ -26,6 +26,7 @@ module RailsDependencyPruner
           "loaded_features" => $LOADED_FEATURES.length,
           "rails_loaded_features" => rails_loaded_features,
           "rails_loaded_features_by_framework" => rails_loaded_features_by_framework,
+          "object_counts" => object_counts,
           "gc_heap_live_slots" => GC.stat[:heap_live_slots],
         }
       end
@@ -47,6 +48,10 @@ module RailsDependencyPruner
           count = $LOADED_FEATURES.count { |feature| feature.include?(marker) }
           counts[framework] = count if count.positive?
         end.sort.to_h
+      end
+
+      def object_counts
+        ObjectSpace.count_objects.transform_keys(&:to_s)
       end
     end
   end

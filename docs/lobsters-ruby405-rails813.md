@@ -60,6 +60,28 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-lazy-more-profiler-vips-request-measurement.md`
 - `tmp/lobsters-ruby405-rails813-lazy-more-profiler-vips-environment-measurement.json`
 - `tmp/lobsters-ruby405-rails813-lazy-more-profiler-vips-environment-measurement.md`
+- `tmp/lobsters-ruby405-rails813-ablation-request.json`
+- `tmp/lobsters-ruby405-rails813-ablation-request.md`
+
+Request ablation smoke, one run per variant:
+
+| variant | RSS | saved RSS | Rails features | GC live slots | T_STRING |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | `204528 KB` | `0 KB` | `1074` | `545213` | `250649` |
+| process_warmup | `184912 KB` | `19616 KB` (`19.2 MiB`, `9.6%`) | `0` | `+11` | `0` |
+| skip_test_railtie_only | `213408 KB` | `-8880 KB` (`-8.7 MiB`, `-4.3%`) | `-4` | `+247` | `+79` |
+| disable_eager_load_only | `190192 KB` | `14336 KB` (`14.0 MiB`, `7.0%`) | `-196` | `-71296` | `-10446` |
+| lazy_gems_only | `160416 KB` | `44112 KB` (`43.1 MiB`, `21.6%`) | `0` | `-189677` | `-160144` |
+| rack_mini_profiler_stub_only | `208576 KB` | `-4048 KB` (`-4.0 MiB`, `-2.0%`) | `0` | `-1835` | `-732` |
+| active_storage_vips_analyzer_stub_only | `176752 KB` | `27776 KB` (`27.1 MiB`, `13.6%`) | `-1` | `-5058` | `-1492` |
+| rails_prune_plan_only | `208064 KB` | `-3536 KB` (`-3.5 MiB`, `-1.7%`) | `0` | `+624` | `+218` |
+| all_low_risk_transforms | `182048 KB` | `22480 KB` (`22.0 MiB`, `11.0%`) | `-4` | `-176664` | `-155916` |
+| all_approved_transforms | `126192 KB` | `78336 KB` (`76.5 MiB`, `38.3%`) | `-201` | `-273736` | `-174427` |
+
+All ablation variants returned `/privacy:200`, `/login:200`, and `/404:404`.
+The single-run ablation baseline is lower than the three-run measurement above,
+so use the ablation table for transform attribution and the three-run table for
+the more stable headline RSS number.
 
 ## what eats memory
 
@@ -101,6 +123,23 @@ The largest Rails-side pressure in this Lobsters boot is eager-loaded
 ActiveRecord, followed by Action View and Active Model. Request warming brings
 some of that back, but ActiveRecord and Action View remain the biggest Rails
 feature reductions.
+
+The request ablation narrows this further:
+
+- `disable_eager_load_only` removes `196` Rails loaded features, mostly
+  `activerecord -66`, `actionview -45`, `activestorage -37`,
+  `actionmailbox -24`, and `activesupport -14`.
+- `all_approved_transforms` removes `201` Rails loaded features, with the same
+  Rails framework shape plus the Vips analyzer stub.
+- `lazy_gems_only` saves `44112 KB` RSS without reducing Rails feature counts,
+  so that win is mostly app/gem boot surface, not Rails framework files.
+- `rails_prune_plan_only` does not save RSS in this workload because the pruned
+  Action Text railtie is already absent from the loaded request path.
+
+Ruby heap object movement in the full approved ablation is dominated by
+`T_STRING -174427`, then `T_IMEMO -61177`, `T_ARRAY -11628`,
+`T_DATA -7778`, and `T_CLASS -4869`. That explains why the win is visible in
+heap shape as well as RSS, but it still does not account for every native byte.
 
 The Vips analyzer is separate from normal Rails feature counts. Before the Vips
 analyzer stub, the reference request-warmed profile saved `77488 KB` RSS. With

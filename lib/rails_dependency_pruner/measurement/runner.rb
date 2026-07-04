@@ -10,7 +10,9 @@ module RailsDependencyPruner
     class Runner
       BOOT_SCRIPT = <<~'RUBY'
         require "json"
-        if %w[shadow boot_prune production].include?(ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT"])
+        boot_modes = %w[shadow boot_prune production]
+        if boot_modes.include?(ENV["RAILS_DEPENDENCY_PRUNER_MODE"]) ||
+            boot_modes.include?(ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT"])
           require "rails_dependency_pruner/early_boot"
         end
         require "rails_dependency_pruner/measurement/memory_probe"
@@ -134,6 +136,8 @@ module RailsDependencyPruner
           end
         end
 
+        Process.warmup if measure_variant == "process_warmup" && Process.respond_to?(:warmup)
+
         GC.start
         snapshot = RailsDependencyPruner::Measurement::MemoryProbe.snapshot
         snapshot["requests"] = requests if measure_target == "requests"
@@ -142,9 +146,10 @@ module RailsDependencyPruner
 
       TARGETS = %w[application environment requests].freeze
 
-      attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties, :request_paths
+      attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties, :request_paths,
+        :variant_profile_paths
 
-      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [])
+      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {})
         @app_root = File.expand_path(app_root)
         @variants = variants
         @runs = runs
@@ -152,6 +157,9 @@ module RailsDependencyPruner
         @target = target
         @skip_railties = Array(skip_railties)
         @request_paths = Array(request_paths)
+        @variant_profile_paths = variant_profile_paths.to_h.transform_keys(&:to_s).transform_values do |path|
+          File.expand_path(path)
+        end
       end
 
       def run
@@ -240,6 +248,8 @@ module RailsDependencyPruner
         end
 
         def env_for(variant)
+          variant_profile_path = variant_profile_paths[variant.to_s]
+          selected_profile_path = variant_profile_path || profile_path
           env = {
             "RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT" => variant,
             "RAILS_DEPENDENCY_PRUNER_MEASURE_TARGET" => target,
@@ -248,10 +258,14 @@ module RailsDependencyPruner
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES"] = skip_railties.join(",") if skip_railties_variant?(variant)
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS"] = JSON.generate(request_paths) if target == "requests"
           env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))
-          return env unless profile_path
+          return env unless selected_profile_path
 
-          env["RAILS_DEPENDENCY_PRUNER_PROFILE"] = profile_path
-          env["RAILS_DEPENDENCY_PRUNER_MODE"] = variant if %w[shadow boot_prune production].include?(variant)
+          env["RAILS_DEPENDENCY_PRUNER_PROFILE"] = selected_profile_path
+          if %w[shadow boot_prune production].include?(variant)
+            env["RAILS_DEPENDENCY_PRUNER_MODE"] = variant
+          elsif variant_profile_path
+            env["RAILS_DEPENDENCY_PRUNER_MODE"] = "boot_prune"
+          end
           env
         end
 
@@ -296,6 +310,7 @@ module RailsDependencyPruner
             "loaded_features_median" => median(runs.map { |run| run.fetch("loaded_features") }),
             "rails_loaded_features_median" => median(runs.map { |run| run.fetch("rails_loaded_features") }),
             "rails_loaded_features_by_framework_median" => summarize_framework_features(runs),
+            "object_counts_median" => summarize_numeric_hash(runs, "object_counts"),
             "gc_heap_live_slots_median" => median(runs.map { |run| run.fetch("gc_heap_live_slots") }),
           }
         end
@@ -316,6 +331,10 @@ module RailsDependencyPruner
                 baseline.fetch("rails_loaded_features_by_framework_median", {}),
                 summary.fetch("rails_loaded_features_by_framework_median", {}),
               ),
+              "object_counts" => numeric_hash_delta(
+                baseline.fetch("object_counts_median", {}),
+                summary.fetch("object_counts_median", {}),
+              ),
               "gc_heap_live_slots" => summary.fetch("gc_heap_live_slots_median") - baseline.fetch("gc_heap_live_slots_median"),
             }]
           end.compact.to_h
@@ -329,10 +348,25 @@ module RailsDependencyPruner
           end
         end
 
+        def summarize_numeric_hash(runs, key)
+          keys = runs.flat_map { |run| run.fetch(key, {}).keys }.uniq.sort
+          keys.to_h do |name|
+            values = runs.map { |run| run.fetch(key, {}).fetch(name, 0) }
+            [name, median(values)]
+          end
+        end
+
         def framework_feature_delta(baseline, summary)
           frameworks = (baseline.keys + summary.keys).uniq.sort
           frameworks.to_h do |framework|
             [framework, summary.fetch(framework, 0) - baseline.fetch(framework, 0)]
+          end
+        end
+
+        def numeric_hash_delta(baseline, summary)
+          keys = (baseline.keys + summary.keys).uniq.sort
+          keys.to_h do |key|
+            [key, summary.fetch(key, 0) - baseline.fetch(key, 0)]
           end
         end
 

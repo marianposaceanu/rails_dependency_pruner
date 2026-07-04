@@ -421,6 +421,50 @@ module RailsDependencyPruner
         options
       end
 
+      def measure_ablation(usage: "measure ablation")
+        options = {
+          app_root: nil,
+          profile_path: nil,
+          coverage_path: nil,
+          runs: 5,
+          target: "application",
+          request_paths: [],
+          output_path: nil,
+          markdown_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--profile PATH", "Approved/source profile to ablate") { |path| options[:profile_path] = path }
+          parser.on("--coverage PATH", "Coverage manifest used to approve the profile") { |path| options[:coverage_path] = path }
+          parser.on("--runs N", Integer, "Runs per variant") { |runs| options[:runs] = runs }
+          parser.on("--target NAME", "Measure target: application, environment, or requests") { |target| options[:target] = target }
+          parser.on("--request-paths PATHS", "Comma-separated paths for --target requests") { |paths| options[:request_paths] = split_csv(paths) }
+          parser.on("--output PATH", "Write ablation JSON") { |path| options[:output_path] = path }
+          parser.on("--markdown PATH", "Write ablation Markdown") { |path| options[:markdown_path] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
+        raise ArgumentError, "--profile does not exist" unless File.exist?(options[:profile_path])
+        raise ArgumentError, "--coverage does not exist" if options[:coverage_path] && !File.exist?(options[:coverage_path])
+        raise ArgumentError, "--runs must be positive" unless options.fetch(:runs).positive?
+        raise ArgumentError, "--target must be application, environment, or requests" unless Measurement::Runner::TARGETS.include?(options.fetch(:target))
+        if options.fetch(:target) == "requests" && options.fetch(:request_paths).empty?
+          raise ArgumentError, "--request-paths is required for --target requests"
+        end
+
+        options
+      end
+
       def runtime_collect(usage: "runtime collect")
         options = {
           app_root: nil,

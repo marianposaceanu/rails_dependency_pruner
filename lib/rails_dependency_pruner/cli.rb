@@ -19,6 +19,8 @@ require_relative "profile_explainer"
 require_relative "profile_verifier"
 require_relative "profile_validator"
 require_relative "transform_registry"
+require_relative "measurement/ablation_report"
+require_relative "measurement/ablation_runner"
 require_relative "measurement/report"
 require_relative "measurement/runner"
 require_relative "runtime/collector"
@@ -158,6 +160,9 @@ module RailsDependencyPruner
         subcommand = @argv.first
 
         case subcommand
+        when "ablation"
+          @argv.shift
+          run_measure_ablation
         when "boot"
           @argv.shift
           run_measure_boot
@@ -175,6 +180,38 @@ module RailsDependencyPruner
           warn measure_help
           1
         end
+      end
+
+      def run_measure_ablation
+        options = options_parser.measure_ablation
+        report = Measurement::AblationRunner.new(
+          app_root: options.fetch(:app_root),
+          profile_path: options.fetch(:profile_path),
+          coverage_path: options[:coverage_path],
+          runs: options.fetch(:runs),
+          target: options.fetch(:target),
+          request_paths: options.fetch(:request_paths),
+        ).run
+
+        if options[:output_path]
+          FileUtils.mkdir_p(File.dirname(options[:output_path]))
+          File.write(options[:output_path], JSON.pretty_generate(report))
+        end
+        if options[:markdown_path]
+          FileUtils.mkdir_p(File.dirname(options[:markdown_path]))
+          File.write(options[:markdown_path], Measurement::AblationReport.new(report).to_markdown)
+        end
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          puts "Ablation variants: #{report.fetch("variants").length}"
+          puts "Source profile: #{report.dig("source_profile", "profile_id") || "(no id)"}"
+          puts "Report written to: #{options[:output_path]}" if options[:output_path]
+          puts "Markdown written to: #{options[:markdown_path]}" if options[:markdown_path]
+        end
+
+        0
       end
 
       def run_measure_boot
@@ -612,6 +649,7 @@ module RailsDependencyPruner
       def measure_help
         <<~HELP
           Usage: rails-dependency-pruner measure [options]
+                 rails-dependency-pruner measure ablation [options]
                  rails-dependency-pruner measure boot [options]
 
           Required:
@@ -619,6 +657,7 @@ module RailsDependencyPruner
 
           Useful options:
             --profile PATH
+            --coverage PATH
             --variants baseline,boot_prune,no_eager_load,no_eager_load_skip_railties
             --runs N
             --target application|environment|requests
