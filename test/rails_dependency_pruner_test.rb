@@ -136,7 +136,72 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "ActiveRecord::UnusedRecordFeature", payload.fetch("constant")
       assert_equal "unused", payload.fetch("decision")
       assert_equal "activerecord", payload.fetch("component")
-      assert_equal "constant", payload.dig("graph", "node", "type")
+    assert_equal "constant", payload.dig("graph", "node", "type")
+  end
+
+  def test_feature_catalog_dsl_rules_keep_framework_constants
+    Dir.mktmpdir("rails_dependency_pruner_features") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(
+        File.join(app_root, "app/models/catalog_post.rb"),
+        <<~RUBY,
+          class CatalogPost < ApplicationRecord
+            belongs_to :user
+            has_one_attached :cover
+            has_rich_text :body
+          end
+
+          class CatalogMailer < ActionMailer::Base
+            def welcome
+              mail(to: "user@example.test")
+            end
+          end
+
+          class CatalogJob < ActiveJob::Base
+            queue_as :default
+          end
+
+          class CatalogChannel < ActionCable::Channel::Base
+            def subscribed
+              stream_from "catalog"
+            end
+          end
+        RUBY
+      )
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[
+          actioncable
+          actionmailer
+          activejob
+          activerecord
+          activestorage
+          actiontext
+        ],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+
+      assert_includes usage.direct_rails_constants, "ActiveRecord::Base"
+      assert_includes usage.direct_rails_constants, "ActiveStorage::Blob"
+      assert_includes usage.direct_rails_constants, "ActionText::RichText"
+      assert_includes usage.direct_rails_constants, "ActionMailer::Base"
+      assert_includes usage.direct_rails_constants, "ActiveJob::Base"
+      assert_includes usage.direct_rails_constants, "ActionCable::Channel::Base"
+
+      features = usage.feature_matches.map { |match| match.fetch("feature") }
+      assert_includes features, "active_record"
+      assert_includes features, "active_storage"
+      assert_includes features, "action_text"
+      assert_includes features, "action_mailer"
+      assert_includes features, "active_job"
+      assert_includes features, "action_cable"
+
+      refute_includes planner.unused_constants, "ActiveStorage::Blob"
+      refute_includes planner.unused_constants, "ActionText::RichText"
+    end
   end
 
   def test_cli_outputs_json_and_writes_shim

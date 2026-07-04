@@ -152,6 +152,13 @@ only in throwaway experiments.
 Installed Rails `8.x` gems are used by default. `--rails-root PATH` exists only
 for fixture and development checks against a Rails checkout.
 
+## feature catalog
+
+Rails DSL usage is treated as framework evidence. The catalog in
+`config/rails_dependency_pruner/features.yml` maps calls such as
+`has_one_attached`, `has_rich_text`, `queue_as`, `mail`, and `stream_from` to
+framework constants that should stay reachable.
+
 ## lobsters run
 
 Against the local Rails `8.1.3` gems and

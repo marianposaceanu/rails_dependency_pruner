@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   spec.metadata["source_code_uri"] = spec.homepage
 
   spec.files = Dir.chdir(__dir__) do
-    Dir["README.md", "LICENSE.txt", "Rakefile", "Gemfile", "lib/**/*.rb", "exe/*", "test/**/*.rb"]
+    Dir["README.md", "LICENSE.txt", "Rakefile", "Gemfile", "config/**/*.yml", "lib/**/*.rb", "exe/*", "test/**/*.rb"]
   end
   spec.bindir = "exe"
   spec.executables = ["rails-dependency-pruner"]

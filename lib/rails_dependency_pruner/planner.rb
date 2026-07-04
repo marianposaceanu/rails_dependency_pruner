@@ -108,6 +108,7 @@ module RailsDependencyPruner
         unused_features_count: unused_features.length,
         direct_rails_constants: usage.direct_rails_constants.to_a.sort,
         runtime_rails_constants: runtime_constants.to_a.sort,
+        feature_matches: usage.feature_matches,
         runtime_memory: runtime_memory,
         runtime_memory_summary: runtime_memory_summary.to_h,
         top_unused_namespaces: unused_by_namespace,

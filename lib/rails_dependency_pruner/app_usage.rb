@@ -6,19 +6,23 @@ require "set"
 require "prism"
 
 require_relative "constant_resolver"
+require_relative "feature_catalog"
+require_relative "static/rails_dsl_visitor"
 require_relative "source_visitor"
 
 module RailsDependencyPruner
   class AppUsage
     DEFAULT_SCAN_ROOTS = %w[app config lib].freeze
 
-    attr_reader :app_root, :index, :scan_roots, :references, :parse_errors
+    attr_reader :app_root, :index, :scan_roots, :references, :feature_matches, :parse_errors
 
-    def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS)
+    def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default)
       @app_root = Pathname.new(app_root).expand_path
       @index = index
       @scan_roots = scan_roots
+      @feature_catalog = feature_catalog
       @references = []
+      @feature_matches = []
       @parse_errors = []
     end
 
@@ -38,6 +42,11 @@ module RailsDependencyPruner
         visitor = SourceVisitor.new(path: path, relative_path: relative(path))
         result.value.accept(visitor)
         references.concat(visitor.references)
+
+        dsl_visitor = Static::RailsDslVisitor.new(relative_path: relative(path), catalog: @feature_catalog)
+        result.value.accept(dsl_visitor)
+        references.concat(dsl_visitor.references)
+        feature_matches.concat(dsl_visitor.matches)
       end
 
       self
@@ -72,6 +81,7 @@ module RailsDependencyPruner
         direct_rails_constants_count: direct_rails_constants.length,
         direct_rails_constants: direct_rails_constants.to_a.sort,
         references: rails_references,
+        feature_matches: feature_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("feature")] },
       }
     end
 
@@ -95,4 +105,3 @@ module RailsDependencyPruner
       end
   end
 end
-

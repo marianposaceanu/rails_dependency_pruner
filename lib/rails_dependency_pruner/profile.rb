@@ -37,6 +37,7 @@ module RailsDependencyPruner
         "unused_features" => planner.unused_features,
         "unused_require_paths" => planner.unused_require_paths,
         "unused_require_path_provenance" => planner.unused_require_path_provenance,
+        "feature_matches" => planner.usage.feature_matches,
         "runtime_memory" => planner.runtime_memory,
         "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
       )
@@ -63,6 +64,7 @@ module RailsDependencyPruner
           },
         ),
         "evidence" => context.evidence_context,
+        "feature_matches" => planner.usage.feature_matches,
         "summary" => {
           "rails_constants_count" => planner.index.definitions.length,
           "direct_rails_constants_count" => planner.usage.direct_rails_constants.length,

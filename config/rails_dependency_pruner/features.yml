@@ -1,0 +1,60 @@
+active_record:
+  framework: activerecord
+  constants:
+    - ActiveRecord
+    - ActiveRecord::Base
+  app_patterns:
+    - belongs_to
+    - has_many
+    - has_one
+    - validates
+    - transaction
+
+active_job:
+  framework: activejob
+  constants:
+    - ActiveJob
+    - ActiveJob::Base
+  app_patterns:
+    - perform_later
+    - queue_as
+
+action_mailer:
+  framework: actionmailer
+  constants:
+    - ActionMailer
+    - ActionMailer::Base
+  app_patterns:
+    - mail
+    - deliver_later
+
+active_storage:
+  framework: activestorage
+  constants:
+    - ActiveStorage
+    - ActiveStorage::Attachment
+    - ActiveStorage::Blob
+  app_patterns:
+    - has_many_attached
+    - has_one_attached
+  config_patterns:
+    - active_storage.service
+
+action_text:
+  framework: actiontext
+  constants:
+    - ActionText
+    - ActionText::RichText
+  app_patterns:
+    - has_rich_text
+
+action_cable:
+  framework: actioncable
+  constants:
+    - ActionCable
+    - ActionCable::Channel::Base
+  app_patterns:
+    - stream_from
+    - stream_for
+  route_patterns:
+    - mount ActionCable.server
