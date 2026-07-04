@@ -6,6 +6,7 @@ require "set"
 require "prism"
 
 require_relative "constant_resolver"
+require_relative "rails_source"
 require_relative "source_visitor"
 
 module RailsDependencyPruner
@@ -25,11 +26,12 @@ module RailsDependencyPruner
       railties
     ].freeze
 
-    attr_reader :rails_root, :frameworks, :definitions, :parse_errors
+    attr_reader :rails_root, :frameworks, :definitions, :parse_errors, :source
 
-    def initialize(rails_root:, frameworks: DEFAULT_FRAMEWORKS)
-      @rails_root = Pathname.new(rails_root).expand_path
+    def initialize(rails_root: nil, frameworks: DEFAULT_FRAMEWORKS)
       @frameworks = frameworks
+      @source = rails_root ? RailsSource.checkout(rails_root: rails_root, frameworks: frameworks) : RailsSource.installed_rails_8(frameworks: frameworks)
+      @rails_root = rails_root && Pathname.new(rails_root).expand_path
       @definitions = {}
       @parse_errors = []
     end
@@ -71,6 +73,8 @@ module RailsDependencyPruner
     def to_h(include_tree: true)
       payload = {
         rails_root: rails_root.to_s,
+        rails_version: source.version,
+        source: source.to_h,
         frameworks: frameworks,
         files_scanned: ruby_files.length,
         parse_errors: parse_errors,
@@ -88,17 +92,7 @@ module RailsDependencyPruner
 
     private
       def ruby_files
-        @ruby_files ||= frameworks.flat_map do |framework|
-          lib_root = rails_root.join(framework, "lib")
-          next [] unless lib_root.exist?
-
-          Pathname.glob(lib_root.join("**/*.rb").to_s).sort.reject do |path|
-            relative_path = relative(path)
-            relative_path.include?("/test/") ||
-              relative_path.include?("/dummy/") ||
-              relative_path.include?("/templates/")
-          end
-        end
+        @ruby_files ||= source.ruby_files
       end
 
       def merge_definitions(new_definitions)
@@ -128,12 +122,16 @@ module RailsDependencyPruner
       end
 
       def component_for(path)
-        path.relative_path_from(rails_root).each_filename.first
+        source.component_for(path)
       end
 
       def relative(path)
-        path.relative_path_from(rails_root).to_s
+        source.relative_path(path)
+      end
+
+    public
+      def relative_path_for(path)
+        source.relative_path_for(path)
       end
   end
 end
-

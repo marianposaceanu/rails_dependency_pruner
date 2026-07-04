@@ -42,6 +42,7 @@ module RailsDependencyPruner
       @called_methods = []
       @called_constants = Set.new
       @max_called_methods = max_called_methods
+      @record_objectspace = ENV["RAILS_DEPENDENCY_PRUNER_OBJECTSPACE"] == "1"
 
       if trace_calls
         @trace = TracePoint.new(:call) do |event|
@@ -65,6 +66,7 @@ module RailsDependencyPruner
         called_constants: @called_constants.to_a.sort,
         called_methods: @called_methods,
       }
+      payload[:memory] = memory_snapshot if @record_objectspace
 
       File.write(@output, JSON.pretty_generate(payload))
     end
@@ -116,8 +118,37 @@ module RailsDependencyPruner
 
       File.expand_path(path).start_with?(File.expand_path(@rails_root))
     end
+
+    def memory_snapshot
+      require "objspace"
+
+      {
+        object_counts: stringify_keys(ObjectSpace.count_objects),
+        object_sizes: stringify_keys(ObjectSpace.count_objects_size),
+        rails_class_instance_sizes: rails_class_instance_sizes,
+      }
+    end
+
+    def rails_class_instance_sizes
+      ObjectSpace.each_object(Class).filter_map do |klass|
+        name = constant_name(klass)
+        next unless rails_constant?(name)
+
+        bytes = ObjectSpace.memsize_of_all(klass)
+        next if bytes.zero?
+
+        {
+          name: name,
+          bytes: bytes,
+          count: ObjectSpace.each_object(klass).count,
+        }
+      end.sort_by { |entry| -entry.fetch(:bytes) }.first(200)
+    end
+
+    def stringify_keys(hash)
+      hash.transform_keys(&:to_s)
+    end
   end
 end
 
 RailsDependencyPruner::RuntimeRecorder.start!
-

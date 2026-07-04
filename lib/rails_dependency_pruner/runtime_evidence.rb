@@ -36,7 +36,12 @@ module RailsDependencyPruner
         paths: paths,
         constants_count: constants.length,
         constants: constants.to_a.sort,
+        memory: memory,
       }
+    end
+
+    def memory
+      payloads.filter_map { |payload| payload["memory"] }
     end
 
     private
@@ -77,13 +82,10 @@ module RailsDependencyPruner
 
       def relative_rails_path(feature)
         path = Pathname.new(feature)
+        return feature unless path.absolute?
 
-        if path.absolute?
-          path.realpath.relative_path_from(index.rails_root.realpath).to_s
-        else
-          feature
-        end
-      rescue ArgumentError, Errno::ENOENT
+        index.relative_path_for(path)
+      rescue Errno::ENOENT
         nil
       end
 
@@ -92,4 +94,3 @@ module RailsDependencyPruner
       end
   end
 end
-

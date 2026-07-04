@@ -9,5 +9,27 @@
       "path": "actionpack/lib/action_controller/base.rb",
       "line": 1
     }
-  ]
+  ],
+  "memory": {
+    "object_counts": {
+      "TOTAL": 100,
+      "T_STRING": 30
+    },
+    "object_sizes": {
+      "T_STRING": 1048576,
+      "T_ARRAY": 524288
+    },
+    "rails_class_instance_sizes": [
+      {
+        "name": "ActionController::UnusedControllerFeature",
+        "bytes": 4096,
+        "count": 1
+      },
+      {
+        "name": "ActiveRecord::Relation",
+        "bytes": 2048,
+        "count": 2
+      }
+    ]
+  }
 }

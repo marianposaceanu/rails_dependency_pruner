@@ -1,103 +1,148 @@
-# Rails Dependency Pruner
+# rails_dependency_pruner
 
-`rails_dependency_pruner` is an experimental static analysis tool for Rails
-memory work. It builds a constant dependency tree from Rails source, scans a
-Rails app for Rails constants it actually references, computes the dependency
-closure, and can write guard shims for Rails constants outside that closure.
+Find Rails constants your app does not appear to use, then block them with
+guards during boot.
 
-The tool does not boot Rails or the target app.
+This is experimental memory work for Rails `8.x`. It parses Rails and app source
+with Prism, optionally merges runtime evidence from a test run, then writes a
+profile that the gem's Rails engine can apply.
 
-## Usage
+## requirements
 
-```bash
-exe/rails-dependency-pruner audit \
-  --rails-root RAILS_ROOT \
-  --app LOBSTERS_APP \
-  --json
+- Ruby `3.2+`
+- Rails `8.x`
+
+## install
+
+Add to the app `Gemfile`:
+
+```ruby
+gem "rails_dependency_pruner"
 ```
 
-Generate a shim:
+Then install:
 
 ```bash
-exe/rails-dependency-pruner audit \
-  --rails-root RAILS_ROOT \
-  --app LOBSTERS_APP \
-  --write-shim tmp/rails_dependency_pruner_shim.rb
+bundle install
 ```
 
-The generated shim installs fail-fast constants for unused Rails constants only
-when their parent namespace is already loaded. It does not remove loaded Rails
-classes unless you edit the shim to pass `force: true`.
+## quick start
 
-## Deterministic Runtime Workflow
+Generate a profile from the installed Rails `8.x` gems and the app source:
 
-Prism is deterministic because it parses source, not process state. Runtime
-usage should therefore be treated as evidence captured by a controlled workload,
-then merged back into the Prism-derived dependency graph offline.
+```bash
+bundle exec rails-dependency-pruner audit \
+  --app . \
+  --write-profile config/rails_dependency_pruner_profile.json
+```
 
-The workflow is:
+Enable the engine in `config/environments/development.rb` or another controlled
+environment:
 
-1. Build the Rails constant index from source with Prism.
-2. Scan the app source with Prism for direct Rails constant references.
-3. Run the app test suite or a representative request workload with the runtime
-   recorder enabled.
-4. Merge the runtime evidence JSON into the Prism plan.
-5. Generate a shim for constants outside the merged dependency closure.
-6. Re-run the same workload with the shim loaded.
+```ruby
+config.rails_dependency_pruner.enabled = true
+```
 
-Record runtime evidence:
+Boot or test the app. If code touches a disabled Rails constant, the guard raises
+`RailsDependencyPruner::DisabledConstantError`.
+
+## runtime evidence
+
+Prism gives repeatable source facts. Runtime data is separate evidence from a
+specific workload.
+
+Record runtime evidence during a test run:
 
 ```bash
 RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
-RAILS_DEPENDENCY_PRUNER_RAILS_ROOT=RAILS_ROOT \
 RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
 bin/rails test
 ```
 
-For deeper but slower evidence, enable method-call tracing:
+For slower method-owner tracing:
 
 ```bash
 RAILS_DEPENDENCY_PRUNER_TRACE_CALLS=1 \
 RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
-RAILS_DEPENDENCY_PRUNER_RAILS_ROOT=RAILS_ROOT \
 RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
 bin/rails test
 ```
 
-Merge runtime evidence into the audit:
+For Ruby object type and Rails class instance sizes:
 
 ```bash
-exe/rails-dependency-pruner audit \
-  --rails-root RAILS_ROOT \
-  --app LOBSTERS_APP \
-  --runtime-evidence tmp/rails_dependency_pruner_runtime.json \
-  --write-shim tmp/rails_dependency_pruner_shim.rb
+RAILS_DEPENDENCY_PRUNER_OBJECTSPACE=1 \
+RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
+RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
+bin/rails test
 ```
 
-The runtime JSON can include `defined_constants`, `called_constants`,
-`called_methods`, and `loaded_features`. The offline audit maps those facts back
-to Rails constants from the Prism index and keeps their dependency closure.
+Merge that evidence into the next profile:
 
-## Current Lobsters Smoke Result
+```bash
+bundle exec rails-dependency-pruner audit \
+  --app . \
+  --runtime-evidence tmp/rails_dependency_pruner_runtime.json \
+  --write-profile config/rails_dependency_pruner_profile.json
+```
 
-Against `RAILS_ROOT` and
-`LOBSTERS_APP`, the static audit currently reports:
+The generated profile keeps the raw ObjectSpace snapshot and a short
+`runtime_memory_summary` ranking. Use that ranking to decide which unused Rails
+features are worth disabling first. The object type rows show broad Ruby heap
+pressure such as `T_STRING`, `T_ARRAY`, and `T_HASH`; the Rails class rows point
+to concrete framework constants when ObjectSpace can attribute the bytes.
 
-- Rails Ruby files scanned: `1444`
-- Rails constants indexed: `2386`
+## engine config
+
+Defaults:
+
+- disabled unless `config.rails_dependency_pruner.enabled = true` or
+  `RAILS_DEPENDENCY_PRUNER_ENABLED=1`
+- reads `config/rails_dependency_pruner_profile.json`
+- does not remove constants that are already loaded
+
+Optional config:
+
+```ruby
+config.rails_dependency_pruner.enabled = true
+config.rails_dependency_pruner.profile_path = Rails.root.join("config/pruner.json")
+config.rails_dependency_pruner.force = false
+```
+
+`force = true` removes already-loaded constants before installing guards. Use it
+only in throwaway experiments.
+
+## cli
+
+- `bundle exec rails-dependency-pruner index`
+- `bundle exec rails-dependency-pruner audit --app .`
+- `bundle exec rails-dependency-pruner audit --app . --json --no-tree`
+- `bundle exec rails-dependency-pruner audit --app . --write-profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`
+
+Installed Rails `8.x` gems are used by default. `--rails-root PATH` exists only
+for fixture and development checks against a Rails checkout.
+
+## lobsters run
+
+Against the local Rails `8.1.3` gems and
+`LOBSTERS_APP`:
+
+- Rails Ruby files scanned: `1409`
+- Rails constants indexed: `2331`
 - Lobsters Ruby files scanned: `157`
 - Lobsters direct Rails constants: `48`
-- Reachable Rails constants after dependency closure: `776`
-- Unused Rails constant candidates: `1610`
+- Reachable Rails constants after closure: `757`
+- Unused Rails constant candidates: `1574`
+- Unused Rails feature files: `785`
 - Rails parse errors: `0`
-- App parse errors: `0`
+- app parse errors: `0`
 
-The latest local outputs are ignored under `tmp/`.
+Local outputs are ignored under `tmp/`.
 
-## Caveats
+## limits
 
-This is intentionally conservative and static. Ruby metaprogramming, string
-constantization, Zeitwerk autoloads, reflection, and framework callbacks can all
-make a constant reachable even when it does not appear in source. Treat generated
-shims as an experiment and run the app test suite before using the results as a
-memory-saving strategy.
+- static analysis misses string constantization and some metaprogramming
+- runtime evidence only covers the workload you ran
+- guards prove missing coverage by failing loudly, not by saving memory alone
+- use this in development or benchmark experiments before considering production

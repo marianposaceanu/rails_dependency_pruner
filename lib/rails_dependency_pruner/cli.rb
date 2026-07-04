@@ -7,6 +7,7 @@ require "pathname"
 require_relative "app_usage"
 require_relative "constant_index"
 require_relative "planner"
+require_relative "profile"
 require_relative "runtime_evidence"
 require_relative "shim_writer"
 
@@ -59,8 +60,12 @@ module RailsDependencyPruner
         runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
         planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
 
+        if options[:write_profile]
+          Profile.from_planner(planner).write(options[:write_profile])
+        end
+
         if options[:write_shim]
-          ShimWriter.new(planner.unused_constants).write(options[:write_shim])
+          ShimWriter.new(planner.unused_constants, require_paths: planner.unused_require_paths).write(options[:write_shim])
         end
 
         payload = planner.to_h(
@@ -71,7 +76,7 @@ module RailsDependencyPruner
         if options.fetch(:json)
           puts JSON.pretty_generate(payload)
         else
-          print_audit(planner, shim_path: options[:write_shim])
+          print_audit(planner, profile_path: options[:write_profile], shim_path: options[:write_shim])
         end
 
         0
@@ -87,12 +92,13 @@ module RailsDependencyPruner
           include_unused: true,
           json: false,
           write_shim: nil,
+          write_profile: nil,
           runtime_evidence_paths: [],
         }
 
         parser = OptionParser.new do |parser|
           parser.banner = "Usage: rails-dependency-pruner [index|audit] [options]"
-          parser.on("--rails-root PATH", "Rails source checkout root") { |path| options[:rails_root] = path }
+          parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
           parser.on("--app PATH", "Rails app root to scan") { |path| options[:app_root] = path }
           parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
           parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
@@ -100,6 +106,7 @@ module RailsDependencyPruner
           parser.on("--[no-]unused", "Include full unused constants list in JSON output") { |value| options[:include_unused] = value }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--write-profile PATH", "Write a Rails engine profile for unused constants") { |path| options[:write_profile] = path }
           parser.on("--write-shim PATH", "Write a fail-fast shim for unused constants") { |path| options[:write_shim] = path }
           parser.on("-h", "--help", "Print help") do
             puts parser
@@ -110,7 +117,6 @@ module RailsDependencyPruner
         parser.parse!(@argv)
 
         options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
-        raise ArgumentError, "--rails-root is required" if blank?(options[:rails_root])
         raise ArgumentError, "--app is required for audit" if require_app && blank?(options[:app_root])
 
         options
@@ -119,7 +125,8 @@ module RailsDependencyPruner
       def print_index(index)
         payload = index.to_h(include_tree: false)
 
-        puts "Rails dependency index for #{payload.fetch(:rails_root)}"
+        puts "Rails dependency index for #{payload.dig(:source, :label)}"
+        puts "Rails version: #{payload.fetch(:rails_version) || "(checkout override)"}"
         puts "Scanned Ruby files: #{payload.fetch(:files_scanned)}"
         puts "Rails constants indexed: #{payload.fetch(:constants_count)}"
         puts "Parse errors: #{payload.fetch(:parse_errors).length}"
@@ -130,11 +137,12 @@ module RailsDependencyPruner
         end
       end
 
-      def print_audit(planner, shim_path:)
+      def print_audit(planner, profile_path:, shim_path:)
         payload = planner.to_h(include_tree: false, include_unused: false)
 
         puts "Rails dependency audit for #{payload.fetch(:app_root)}"
-        puts "Rails source: #{payload.fetch(:rails_root)}"
+        puts "Rails source: #{payload.dig(:source, :label)}"
+        puts "Rails root: #{payload.fetch(:rails_root)}" unless blank?(payload.fetch(:rails_root))
         puts "Rails files scanned: #{payload.fetch(:rails_files_scanned)}"
         puts "App files scanned: #{payload.fetch(:app_files_scanned)}"
         puts "Rails constants indexed: #{payload.fetch(:rails_constants_count)}"
@@ -142,6 +150,7 @@ module RailsDependencyPruner
         puts "Runtime Rails constants: #{payload.fetch(:runtime_rails_constants_count)}"
         puts "Reachable Rails constants: #{payload.fetch(:used_constants_count)}"
         puts "Unused Rails constants: #{payload.fetch(:unused_constants_count)}"
+        puts "Unused Rails feature files: #{payload.fetch(:unused_features_count)}"
         puts "Rails parse errors: #{payload.dig(:parse_errors, :rails).length}"
         puts "App parse errors: #{payload.dig(:parse_errors, :app).length}"
         puts
@@ -149,7 +158,9 @@ module RailsDependencyPruner
         payload.fetch(:top_unused_namespaces).first(20).each do |namespace, count|
           puts "  #{namespace}: #{count}"
         end
+        print_runtime_memory(planner.runtime_memory_summary)
         puts
+        puts "Profile written to: #{profile_path}" if profile_path
         puts "Shim written to: #{shim_path}" if shim_path
         puts "Use --json for the full dependency tree and constant lists."
       end
@@ -171,14 +182,15 @@ module RailsDependencyPruner
             audit  Scan an app and find unused Rails constants
 
           Required:
-            --rails-root PATH
             --app PATH                 Required for audit
 
           Useful options:
             --json
             --no-tree
             --no-unused
+            --rails-root PATH          Optional checkout override; installed Rails 8.x gems are used by default
             --runtime-evidence PATHS
+            --write-profile PATH
             --write-shim PATH
         HELP
       end
@@ -187,6 +199,24 @@ module RailsDependencyPruner
         return if paths.empty?
 
         RuntimeEvidence.new(paths: paths, index: index)
+      end
+
+      def print_runtime_memory(summary)
+        return if summary.empty?
+
+        puts
+        puts "Top runtime object memory:"
+        summary.object_sizes.first(10).each do |type, bytes|
+          puts "  #{type}: #{bytes} bytes"
+        end
+
+        return if summary.rails_class_instance_sizes.empty?
+
+        puts
+        puts "Top Rails class instance memory:"
+        summary.rails_class_instance_sizes.first(10).each do |entry|
+          puts "  #{entry.fetch("name")}: #{entry.fetch("bytes")} bytes / #{entry.fetch("count")} objects"
+        end
       end
   end
 end
