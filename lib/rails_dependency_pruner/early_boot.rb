@@ -106,6 +106,7 @@ module RailsDependencyPruner
       return false unless MODES.include?(@mode)
       validate_profile_safety!(payload, expected_profile_id: expected_profile_id)
 
+      @profile_id = profile_id(payload)
       @disabled_require_paths = disabled_require_paths(payload)
       @skipped_require_paths = skipped_require_paths(payload)
       @lazy_require_paths = lazy_require_paths(payload)
@@ -121,6 +122,8 @@ module RailsDependencyPruner
       @unexpected_event_policy = unexpected_event_policy(payload)
       @events = []
       @output_path = output_path
+      @event_log_path = ENV["RAILS_DEPENDENCY_PRUNER_EVENT_LOG"]
+      @event_log_stderr = ENV["RAILS_DEPENDENCY_PRUNER_EVENT_STDERR"] == "1"
       install_shadow_hooks!
       install_bundler_require_filter!
       install_lazy_gem_stubs!
@@ -262,8 +265,58 @@ module RailsDependencyPruner
       event["event_id"] ||= event_id_for_event(event)
       event["expected"] = expected_event?(event)
       @events << event
+      emit_event(event)
       enforce_event!(event) if enforce
       event
+    end
+
+    def emit_event(event)
+      payload = telemetry_payload(event)
+      emit_active_support_event(payload)
+      emit_event_log(payload)
+      warn(JSON.generate(payload)) if @event_log_stderr
+    end
+
+    def emit_active_support_event(payload)
+      return unless defined?(::ActiveSupport::Notifications)
+
+      ::ActiveSupport::Notifications.instrument("event.rails_dependency_pruner", payload)
+    end
+
+    def emit_event_log(payload)
+      return if @event_log_path.to_s.empty?
+
+      File.open(@event_log_path, "a") do |file|
+        file.write(JSON.generate(payload))
+        file.write("\n")
+      end
+    end
+
+    def telemetry_payload(event)
+      {
+        "component" => "rails_dependency_pruner",
+        "profile_id" => @profile_id,
+        "mode" => @mode,
+        "event" => event["action"],
+        "event_id" => event["event_id"],
+        "phase" => event["phase"],
+        "path" => event["path"],
+        "matched_path" => event["matched_path"],
+        "gem" => event["gem"],
+        "constant" => event["constant"],
+        "transform_id" => event["transform_id"],
+        "expected" => event["expected"],
+        "caller" => caller_string(event),
+        "caller_path" => event["caller_path"],
+        "caller_line" => event["caller_line"],
+        "pid" => event["pid"],
+      }.compact
+    end
+
+    def caller_string(event)
+      return unless event["caller_path"]
+
+      [event["caller_path"], event["caller_line"]].compact.join(":")
     end
 
     def expected_event?(event)

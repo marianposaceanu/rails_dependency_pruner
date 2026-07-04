@@ -4069,6 +4069,69 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_writes_structured_event_log
+    Dir.mktmpdir("rails_dependency_pruner_early_event_log") do |dir|
+      File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")
+      event_log_path = File.join(dir, "events.ndjson")
+      profile_path = File.join(dir, "profile.json")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => ["blocked_feature"],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+        "expected_events" => [
+          {
+            "phase" => "boot",
+            "action" => "skipped",
+            "path" => "blocked_feature",
+          },
+        ],
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RAILS_DEPENDENCY_PRUNER_EVENT_LOG" => event_log_path,
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-I#{dir}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+          puts "ok"
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "ok\n", stdout
+
+      lines = File.readlines(event_log_path, chomp: true)
+      assert_equal 1, lines.length
+
+      event = JSON.parse(lines.first)
+      assert_equal "rails_dependency_pruner", event.fetch("component")
+      assert_equal payload.fetch("profile_id"), event.fetch("profile_id")
+      assert_equal "boot_prune", event.fetch("mode")
+      assert_equal "skipped", event.fetch("event")
+      assert_equal "boot:skipped:blocked_feature", event.fetch("event_id")
+      assert_equal "skip_railtie:blocked_feature", event.fetch("transform_id")
+      assert_equal true, event.fetch("expected")
+      assert_includes event.fetch("caller"), "-e:"
+    end
+  end
+
   def test_early_boot_canary_fails_unexpected_skip_event
     Dir.mktmpdir("rails_dependency_pruner_early_unexpected_event") do |dir|
       File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")

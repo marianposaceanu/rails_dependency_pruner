@@ -108,6 +108,18 @@ production boot fails if the constant is reached outside the declared phase or
 if the policy points at a gem that is not approved in `extreme_boot.lazy_gems`.
 Unconfigured constants are ignored by the lazy loader.
 
+Telemetry is opt-in:
+
+- `RAILS_DEPENDENCY_PRUNER_EVENT_LOG=tmp/pruner-events.ndjson` appends one JSON
+  object per event
+- `RAILS_DEPENDENCY_PRUNER_EVENT_STDERR=1` mirrors the same JSON to stderr
+- when `ActiveSupport::Notifications` is already loaded, events are instrumented
+  as `event.rails_dependency_pruner`
+
+The telemetry payload includes `component`, `profile_id`, `mode`, `event`,
+`event_id`, `phase`, `path`, `matched_path`, `gem`, `constant`, `transform_id`,
+`expected`, `caller`, `caller_path`, `caller_line`, and `pid` when available.
+
 ## migration
 
 `ProfileSchema.migrate_v2` can project a v2 payload into the v3 shape for

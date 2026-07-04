@@ -138,11 +138,15 @@ Runtime event manifest smoke:
 - corrected `production`: `2` events, `2` expected, `0` unexpected
 - lazy-constant policy follow-up canary on the corrected profile: `2` events,
   `2` expected, `0` unexpected
+- telemetry follow-up canary on the corrected profile: `2` early events and `2`
+  NDJSON telemetry events, all expected
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-production-smoke.json`,
-  `tmp/lobsters-ruby405-rails813-lazy-constant-policy-smoke.json`
+  `tmp/lobsters-ruby405-rails813-lazy-constant-policy-smoke.json`,
+  `tmp/lobsters-ruby405-rails813-telemetry-smoke.json`,
+  `tmp/lobsters-ruby405-rails813-telemetry-smoke.ndjson`
 
 The RSS tables above are still from the measured full profile. Because
 `svg-graph` is now known to load during boot, do not treat that exact profile as
