@@ -4,6 +4,7 @@ require "set"
 require "pathname"
 
 require_relative "boot_plan"
+require_relative "memory_policy"
 require_relative "runtime_framework_matcher"
 require_relative "transform_registry"
 
@@ -78,14 +79,15 @@ module RailsDependencyPruner
     }.freeze
     RAILTIE_FRAMEWORKS = BootPlan::RAILTIE_REQUIRE_PATHS.invert.freeze
 
-    attr_reader :profile, :context, :index, :usage, :production
+    attr_reader :profile, :context, :index, :usage, :production, :measurement
 
-    def initialize(profile:, context:, index:, usage:, production: false)
+    def initialize(profile:, context:, index:, usage:, production: false, measurement: nil)
       @profile = profile
       @context = context
       @index = index
       @usage = usage
       @production = production
+      @measurement = measurement
     end
 
     def verify
@@ -132,6 +134,9 @@ module RailsDependencyPruner
         disabled_framework_runtime_matches.each do |match|
           errors << "production verify found disabled framework runtime evidence: #{format_runtime_framework_match(match)}"
         end
+        memory_policy_result.fetch("errors").each do |error|
+          errors << "production verify #{error}"
+        end
       end
 
       {
@@ -151,6 +156,7 @@ module RailsDependencyPruner
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
+          "memory_policy" => memory_policy_result,
         },
         "profile" => {
           "schema_version" => profile.schema_version,
@@ -413,6 +419,24 @@ module RailsDependencyPruner
 
       def coverage_workloads
         @coverage_workloads ||= Array(profile.payload.dig("evidence", "workloads")).map(&:to_s).sort
+      end
+
+      def memory_policy_result
+        @memory_policy_result ||= begin
+          policy = profile.payload["memory_policy"]
+          if policy.nil? || policy.empty?
+            { "configured" => false, "passed" => true, "errors" => [], "warnings" => [] }
+          elsif measurement.nil?
+            {
+              "configured" => true,
+              "passed" => false,
+              "errors" => ["memory policy requires --measurement"],
+              "warnings" => [],
+            }
+          else
+            MemoryPolicy.new(policy: policy, measurement: measurement).evaluate
+          end
+        end
       end
 
       def dynamic_constantization_risks

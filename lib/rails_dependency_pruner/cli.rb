@@ -135,6 +135,7 @@ module RailsDependencyPruner
           index: index,
           usage: usage,
           production: options.fetch(:production),
+          measurement: measurement_payload(options[:measurement_path]),
         ).verify
         if options.fetch(:approve_production)
           report["profile_approved"] = false
@@ -568,7 +569,8 @@ module RailsDependencyPruner
           Common path:
             rails-dependency-pruner plan
             rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
-            rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml
+            rails-dependency-pruner measure ablation --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --output tmp/pruner-ablation.json
+            rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json
             rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
             rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json
 
@@ -577,6 +579,7 @@ module RailsDependencyPruner
             --profile PATH             Defaults to config/rails_dependency_pruner_profile.json
             --patch PATH
             --coverage PATH
+            --measurement PATH         Measurement JSON for production memory policy
             --runtime-evidence PATHS
             --disable-eager-load
             --skip-railties PATHS
@@ -683,6 +686,14 @@ module RailsDependencyPruner
             --rails-root PATH
             --json
         HELP
+      end
+
+      def measurement_payload(path)
+        return unless path
+
+        JSON.parse(File.read(path))
+      rescue JSON::ParserError => error
+        raise ArgumentError, "measurement JSON is invalid: #{error.message}"
       end
 
       def runtime_evidence_for(paths, index)

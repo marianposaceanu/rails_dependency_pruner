@@ -68,7 +68,8 @@ early boot:
 bundle exec rails-dependency-pruner approve \
   --app . \
   --profile config/rails_dependency_pruner_profile.json \
-  --coverage config/pruner_coverage.yml
+  --coverage config/pruner_coverage.yml \
+  --measurement tmp/pruner-ablation.json
 ```
 
 Production approval rejects unclassified dynamic require/load edges in
@@ -271,7 +272,7 @@ events and does not change boot behavior.
 - `bundle exec rails-dependency-pruner plan`
 - `bundle exec rails-dependency-pruner plan --coverage config/pruner_coverage.yml --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner check --app . --profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml`
+- `bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json`
 - `bundle exec rails-dependency-pruner diff --old config/pruner.prev.json --new config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner doctor --app .`
 - `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`

@@ -1989,6 +1989,202 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_profile_build_copies_memory_policy_from_coverage_manifest
+    Dir.mktmpdir("rails_dependency_pruner_memory_policy_profile_build") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        memory_policy:
+          min_total_savings_mib: 20
+          min_total_savings_percent: 10
+          preserve_at_least_percent_of_reference_savings: 80
+          reference_savings_mib: 98.3
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "build",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--write",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal 20, payload.dig("memory_policy", "min_total_savings_mib")
+      assert_equal 10, payload.dig("memory_policy", "min_total_savings_percent")
+      assert_equal 80, payload.dig("memory_policy", "preserve_at_least_percent_of_reference_savings")
+      assert_equal 98.3, payload.dig("memory_policy", "reference_savings_mib")
+      assert_equal payload.fetch("profile_id"), JSON.parse(File.read(profile_path)).fetch("profile_id")
+    end
+  end
+
+  def test_verify_production_requires_measurement_for_memory_policy
+    Dir.mktmpdir("rails_dependency_pruner_memory_policy_requires_measurement") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        memory_policy:
+          min_total_savings_mib: 20
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify memory policy requires --measurement"
+      assert_equal true, payload.dig("production_risks", "memory_policy", "configured")
+      assert_equal false, payload.dig("production_risks", "memory_policy", "passed")
+    end
+  end
+
+  def test_verify_production_enforces_memory_policy_measurement
+    Dir.mktmpdir("rails_dependency_pruner_memory_policy_measurement") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        memory_policy:
+          min_total_savings_mib: 20
+          min_total_savings_percent: 10
+          preserve_at_least_percent_of_reference_savings: 80
+          reference_savings_mib: 40
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+      profile_id = JSON.parse(File.read(profile_path)).fetch("profile_id")
+      weak_measurement_path = File.join(dir, "weak-measurement.json")
+      write_measurement_report(
+        path: weak_measurement_path,
+        profile_id: profile_id,
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 95_000,
+      )
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        weak_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert payload.fetch("errors").any? { |error| error.include?("min_total_savings_mib not met") }
+      assert payload.fetch("errors").any? { |error| error.include?("min_total_savings_percent not met") }
+      assert payload.fetch("errors").any? { |error| error.include?("reference savings not preserved") }
+      assert_equal 5_000, payload.dig("production_risks", "memory_policy", "measurement", "saved_kb")
+
+      passing_measurement_path = File.join(dir, "passing-measurement.json")
+      write_measurement_report(
+        path: passing_measurement_path,
+        profile_id: profile_id,
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 60_000,
+      )
+
+      approve_stdout, approve_stderr, approve_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "approve",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        passing_measurement_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert approve_status.success?, approve_stderr
+
+      approved_payload = JSON.parse(approve_stdout)
+      assert_equal true, approved_payload.fetch("verified")
+      assert_equal true, approved_payload.fetch("profile_approved")
+      assert_equal 40_000, approved_payload.dig("production_risks", "memory_policy", "measurement", "saved_kb")
+    end
+  end
+
   def test_verify_approve_production_rewrites_profile_after_success
     Dir.mktmpdir("rails_dependency_pruner_approve_production") do |dir|
       app_root = File.join(dir, "app")
@@ -3719,6 +3915,65 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_memory_policy_evaluates_ablation_measurement
+    result = RailsDependencyPruner::MemoryPolicy.new(
+      policy: {
+        "min_total_savings_mib" => 20,
+        "min_total_savings_percent" => 10,
+        "min_transform_savings_mib" => 2,
+        "reference_profile_id" => "sha256:test",
+      },
+      measurement: {
+        "ablation" => true,
+        "source_profile" => {
+          "profile_id" => "sha256:test",
+        },
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+          },
+          "disable_eager_load_only" => {
+            "status" => "ok",
+            "rss_kb_median" => 90_000,
+          },
+          "all_approved_transforms" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+          },
+        },
+        "ablation_variants" => [
+          {
+            "name" => "baseline",
+            "transform_ids" => [],
+          },
+          {
+            "name" => "disable_eager_load_only",
+            "transform_ids" => ["disable_eager_load"],
+          },
+          {
+            "name" => "all_approved_transforms",
+            "transform_ids" => ["disable_eager_load"],
+          },
+        ],
+      },
+    ).evaluate
+
+    assert_equal true, result.fetch("passed")
+    assert_empty result.fetch("errors")
+    assert_equal "all_approved_transforms", result.dig("measurement", "candidate_variant")
+    assert_equal 40_000, result.dig("measurement", "saved_kb")
+    assert_equal [
+      {
+        "variant" => "disable_eager_load_only",
+        "transform_ids" => ["disable_eager_load"],
+        "rss_kb" => 90_000,
+        "saved_kb" => 10_000,
+        "saved_mib" => 9.765625,
+      },
+    ], result.fetch("transform_savings")
+  end
+
   def test_measure_environment_no_eager_load_variant_skips_eager_load
     Dir.mktmpdir("rails_dependency_pruner_measure_environment") do |dir|
       app_root = File.join(dir, "app")
@@ -3934,6 +4189,25 @@ class RailsDependencyPrunerTest < Minitest::Test
           include: all
       YAML
       coverage_path
+    end
+
+    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune")
+      File.write(path, JSON.pretty_generate(
+        "target" => "requests",
+        "profile" => {
+          "profile_id" => profile_id,
+        },
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => baseline_rss_kb,
+          },
+          candidate_variant => {
+            "status" => "ok",
+            "rss_kb_median" => candidate_rss_kb,
+          },
+        },
+      ))
     end
 
     def build_profile(profile_path:, app_root:, coverage_path:, frameworks: "actionpack,activerecord", runtime_evidence_path: nil)

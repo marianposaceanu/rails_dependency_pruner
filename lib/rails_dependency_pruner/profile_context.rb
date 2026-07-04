@@ -141,6 +141,10 @@ module RailsDependencyPruner
       }
     end
 
+    def memory_policy_context
+      coverage_manifest&.memory_policy || {}
+    end
+
     def app_files_digest
       @app_files_digest ||= SourceDigest.for_paths(app_source_files, root: app_root)
     end

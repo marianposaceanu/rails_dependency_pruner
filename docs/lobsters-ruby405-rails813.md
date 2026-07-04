@@ -62,6 +62,8 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-lazy-more-profiler-vips-environment-measurement.md`
 - `tmp/lobsters-ruby405-rails813-ablation-request.json`
 - `tmp/lobsters-ruby405-rails813-ablation-request.md`
+- `tmp/lobsters-ruby405-rails813-policy-profile.json`
+- `tmp/lobsters-ruby405-rails813-policy-approve.json`
 
 Request ablation smoke, one run per variant:
 
@@ -82,6 +84,17 @@ All ablation variants returned `/privacy:200`, `/login:200`, and `/404:404`.
 The single-run ablation baseline is lower than the three-run measurement above,
 so use the ablation table for transform attribution and the three-run table for
 the more stable headline RSS number.
+
+Memory policy approval smoke:
+
+- policy thresholds: `min_total_savings_mib: 20`, `min_total_savings_percent: 10`,
+  preserve `80%` of a `76.5 MiB` reference saving
+- measurement candidate: `all_approved_transforms`
+- policy result: passed
+- measured policy saving: `78336 KB` (`76.5 MiB`, `38.3%`)
+- verifier errors: `0`
+- approved policy profile id:
+  `sha256:6fec6cca5c99ca981badba5ad6e54859ba2c3fefa39155ecf1fde0c24b60a777`
 
 ## what eats memory
 

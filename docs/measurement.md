@@ -44,6 +44,45 @@ Variants are derived from the source profile:
 Some variants are omitted when the source profile does not contain the matching
 transform.
 
+## memory policy
+
+A coverage manifest can define a profile-level memory policy:
+
+```yaml
+memory_policy:
+  min_total_savings_mib: 20
+  min_total_savings_percent: 10
+  preserve_at_least_percent_of_reference_savings: 80
+  reference_savings_mib: 98.3
+  reference_profile_id: sha256:...
+```
+
+The policy is copied into generated schema v3 profiles. Production verification
+then requires a measurement artifact:
+
+```bash
+bundle exec rails-dependency-pruner approve \
+  --app . \
+  --profile config/rails_dependency_pruner_profile.json \
+  --coverage config/pruner_coverage.yml \
+  --measurement tmp/pruner-ablation.json
+```
+
+For ablation reports, the default candidate is `all_approved_transforms`. For
+regular measurement reports, the default candidate is `boot_prune`. The policy
+fails production approval when:
+
+- the measurement artifact is missing
+- baseline or candidate RSS is missing
+- total saved RSS is below `min_total_savings_mib`
+- total saved RSS is below `min_total_savings_percent`
+- saved RSS is below the requested percentage of `reference_savings_mib`
+- `reference_profile_id` is set and does not match the measurement profile id
+
+`min_transform_savings_mib` can also be set for stricter local release checks.
+It evaluates individual ablation transform groups and is intentionally harsh:
+low-risk transforms that do not save RSS will fail that gate.
+
 ## what eats memory
 
 The report records:

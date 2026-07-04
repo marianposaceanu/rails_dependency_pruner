@@ -10,6 +10,7 @@ readiness fields:
 - `fingerprints`: material input digests
 - `transforms`: registered boot mutations
 - `expected_events`: events expected from registered transforms
+- `memory_policy`: optional RSS savings gates copied from the coverage manifest
 
 The profile id is stored in both `profile_id` and
 `fingerprints.profile_id` while v2 compatibility remains. The digest ignores
@@ -38,6 +39,22 @@ inputs are material:
 - runtime evidence files
 
 Files under `tmp`, `vendor/bundle`, and `node_modules` are ignored.
+
+## memory policy
+
+When `memory_policy` is present, production approval must receive a measurement
+or ablation JSON file through `--measurement`. The verifier compares the
+baseline RSS with `boot_prune` for regular measurements, or with
+`all_approved_transforms` for ablations.
+
+Supported gates:
+
+- `min_total_savings_mib`
+- `min_total_savings_percent`
+- `preserve_at_least_percent_of_reference_savings`
+- `reference_savings_kb` or `reference_savings_mib`
+- `reference_profile_id`
+- `min_transform_savings_mib`
 
 ## migration
 

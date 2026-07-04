@@ -123,6 +123,8 @@ module RailsDependencyPruner
         },
         "explanations" => explanations || {},
       }
+      memory_policy = context.memory_policy_context
+      payload["memory_policy"] = memory_policy unless memory_policy.empty?
       payload["transforms"] = TransformRegistry.transforms_for_payload(payload)
       payload["expected_events"] = payload.fetch("transforms").flat_map { |transform| Array(transform["expected_events"]) }
 

@@ -69,6 +69,13 @@ module RailsDependencyPruner
       }
     end
 
+    def memory_policy
+      policy = payload["memory_policy"]
+      return {} unless policy.is_a?(Hash)
+
+      policy
+    end
+
     private
       def present?(value)
         case value
