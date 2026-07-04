@@ -335,26 +335,27 @@ and route-specific hooks such as `mount ActionCable.server` or
 
 ## lobsters benchmark
 
-Latest local run: Lobsters on arm64 Darwin, Ruby `4.0.5`, Rails `8.1.3`.
-The profile keeps Action Mailbox and Active Storage, disables eager loading,
-skips Rails test-unit, defers selected gems, stubs `rack-mini-profiler`, and
-stubs Active Storage's Vips analyzer for this no-attachment workload.
+Latest local strict-profile smoke: Lobsters on arm64 Darwin, Ruby `4.0.5`,
+Rails `8.1.3`. The profile keeps Action Mailbox and Active Storage, disables
+eager loading, skips Rails test-unit, defers selected gems except `svg-graph`,
+stubs `rack-mini-profiler`, and stubs Active Storage's Vips analyzer for this
+no-attachment workload.
 
 | target | baseline RSS | pruned RSS | saved |
 | --- | ---: | ---: | ---: |
-| requests `/privacy,/login,/404` | `216768 KB` | `127680 KB` | `89088 KB` (`87.0 MiB`, `41.1%`) |
-| environment boot | `220128 KB` | `109264 KB` | `110864 KB` (`108.3 MiB`, `50.4%`) |
+| requests `/privacy,/login,/404`, one run | `233072 KB` | `129920 KB` | `103152 KB` (`100.7 MiB`, `44.3%`) |
 
-Production approval passed with no verifier errors for this profile. Lobsters
-uses `Vips` directly in `StoryImage`, but does not declare `has_one_attached` or
-`has_many_attached`; apps that use Active Storage attachments must provide
-attachment workload coverage before approving the `ruby-vips` analyzer stub.
-The biggest Rails-side reductions are ActiveRecord, Action View, Active Model,
-and Active Storage. The Vips analyzer stub accounts for about `23 MiB` of the
-request-warmed RSS win in the paired reference run. Strict runtime-event canary
-found that Lobsters loads `svg-graph` during boot through `lib/time_series.rb`;
-the no-`svg-graph` profile passes canary and production event checks, but needs a
-fresh RSS measurement before replacing the headline numbers above.
+Boot time moved from `2610.6 ms` to `871.0 ms`. First request moved from
+`14.3 ms` to `231.4 ms` because the profile defers boot work; warmed p95 moved
+from `4.2 ms` to `23.9 ms`. Lobsters uses `Vips` directly in `StoryImage`, but
+does not declare `has_one_attached` or `has_many_attached`; apps that use Active
+Storage attachments must provide attachment workload coverage before approving
+the `ruby-vips` analyzer stub. The biggest Rails-side reductions are
+ActiveRecord, Action View, and Active Storage.
+
+Small-app benchmark target: `generic_blog_app` is the
+generic blog simple app. The target is at least `40%` RSS reduction on a measured
+production request workload.
 
 Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.

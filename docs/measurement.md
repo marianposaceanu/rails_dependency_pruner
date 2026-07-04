@@ -1,9 +1,10 @@
 # measurement
 
-The measurement commands answer two different questions:
+The measurement commands answer three different questions:
 
 - how much process RSS changed
 - which Rails and Ruby buckets moved when it changed
+- whether boot or request timing moved while RSS changed
 
 RSS is the hard process number. The Rails and Ruby buckets are attribution
 signals. They explain where the win probably came from, but they are not
@@ -93,11 +94,22 @@ The report records:
 - `GC.stat[:heap_live_slots]`
 - live Ruby object type counts from `ObjectSpace.count_objects`
 - request status and response size for request-warmed runs
+- app boot time, first request time, and warmed request percentiles
 
-The Rails framework table groups loaded files by gem, for example
-`activerecord`, `actionview`, `activestorage`, and `railties`. This is not a
-byte ledger. It tells you which framework stopped loading code when RSS moved.
-If `disable_eager_load_only` removes many `activerecord` and `actionview` files,
+The Rails part of memory shows up in three surfaces:
+
+- framework code and constants loaded from gems such as `activerecord`,
+  `actionview`, `activestorage`, and `railties`
+- Ruby heap objects created by those frameworks, visible as movement in object
+  types such as `T_STRING`, `T_ARRAY`, `T_HASH`, `T_CLASS`, `T_MODULE`,
+  `T_IMEMO`, and `T_DATA`
+- native or external storage behind those objects, including external string
+  buffers, regexp data, array and hash backing storage, VM tables, and extension
+  payloads
+
+The Rails framework table groups loaded files by gem. This is not a byte ledger.
+It tells you which framework stopped loading code when RSS moved. If
+`disable_eager_load_only` removes many `activerecord` and `actionview` files,
 that is the Rails-side bucket to investigate first.
 
 Use the tables together:
@@ -125,3 +137,10 @@ payloads can still move RSS without showing up as Ruby slot savings.
 For request workloads, trust a variant only when the request matrix still
 returns the expected statuses. A smaller RSS number with a broken request is not
 a valid memory win.
+
+## benchmark apps
+
+Use Lobsters for the larger real-app workload. For a smaller generic blog app,
+use `generic_blog_app`. The target for that app is at
+least `40%` RSS reduction on a production request workload, measured with the
+same baseline and candidate request paths before it is reported as a result.

@@ -36,6 +36,24 @@ module RailsDependencyPruner
           JSON.parse(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS", "[]"))
         end
 
+        def monotonic_ms
+          Process.clock_gettime(Process::CLOCK_MONOTONIC) * 1000.0
+        end
+
+        def round_ms(value)
+          value&.round(3)
+        end
+
+        def percentile(values, percentile)
+          return nil if values.empty?
+
+          sorted = values.sort
+          rank = (percentile / 100.0) * (sorted.length - 1)
+          lower = sorted.fetch(rank.floor)
+          upper = sorted.fetch(rank.ceil)
+          round_ms(lower + ((upper - lower) * (rank - rank.floor)))
+        end
+
         def no_eager_load_variant?
           %w[no_eager_load no_eager_load_skip_railties].include?(measure_variant)
         end
@@ -104,6 +122,7 @@ module RailsDependencyPruner
         install_skip_require!(skipped)
         install_config_namespace_stubs!(skipped)
 
+        boot_started_ms = monotonic_ms
         if measure_target == "application"
           require File.join(app_root, "config/application")
         else
@@ -115,23 +134,29 @@ module RailsDependencyPruner
           end
           Rails.application.initialize!
         end
+        boot_finished_ms = monotonic_ms
 
         if measure_target == "requests"
           require "rack/mock"
           request = Rack::MockRequest.new(Rails.application)
           requests = request_paths.map do |path|
+            request_started_ms = monotonic_ms
             response = request.get(path, "HTTP_HOST" => "example.org", "HTTPS" => "on")
+            duration_ms = monotonic_ms - request_started_ms
             {
               "path" => path,
               "status" => response.status,
               "bytes" => response.body.bytesize,
               "location" => response["Location"],
+              "duration_ms" => round_ms(duration_ms),
             }.compact
           rescue => error
+            duration_ms = monotonic_ms - request_started_ms if request_started_ms
             {
               "path" => path,
               "error" => error.class.name,
               "message" => error.message,
+              "duration_ms" => round_ms(duration_ms),
             }
           end
         end
@@ -140,7 +165,19 @@ module RailsDependencyPruner
 
         GC.start
         snapshot = RailsDependencyPruner::Measurement::MemoryProbe.snapshot
-        snapshot["requests"] = requests if measure_target == "requests"
+        snapshot["boot_time_ms"] = round_ms(boot_finished_ms - boot_started_ms)
+        if measure_target == "requests"
+          request_durations = requests.filter_map { |entry| entry["duration_ms"] }
+          warmed_request_durations = request_durations.drop(1)
+          snapshot["requests"] = requests
+          snapshot["first_request_duration_ms"] = request_durations.first
+          snapshot["request_duration_ms_p50"] = percentile(request_durations, 50)
+          snapshot["request_duration_ms_p95"] = percentile(request_durations, 95)
+          snapshot["request_duration_ms_p99"] = percentile(request_durations, 99)
+          snapshot["warmed_request_duration_ms_p50"] = percentile(warmed_request_durations, 50)
+          snapshot["warmed_request_duration_ms_p95"] = percentile(warmed_request_durations, 95)
+          snapshot["warmed_request_duration_ms_p99"] = percentile(warmed_request_durations, 99)
+        end
         puts JSON.generate(snapshot)
       RUBY
 
@@ -304,7 +341,7 @@ module RailsDependencyPruner
           runs = runs.select { |run| run["status"] == "ok" }
           return { "status" => "error", "successful_runs" => 0 } if runs.empty?
 
-          {
+          summary = {
             "status" => "ok",
             "successful_runs" => runs.length,
             "rss_kb_median" => median(runs.map { |run| run.fetch("rss_kb") }),
@@ -316,6 +353,22 @@ module RailsDependencyPruner
             "object_counts_median" => summarize_numeric_hash(runs, "object_counts"),
             "gc_heap_live_slots_median" => median(runs.map { |run| run.fetch("gc_heap_live_slots") }),
           }
+          {
+            "boot_time_ms_median" => median_for_key(runs, "boot_time_ms"),
+            "first_request_duration_ms_median" => median_for_key(runs, "first_request_duration_ms"),
+            "request_duration_ms_p50_median" => median_for_key(runs, "request_duration_ms_p50"),
+            "request_duration_ms_p95_median" => median_for_key(runs, "request_duration_ms_p95"),
+            "request_duration_ms_p99_median" => median_for_key(runs, "request_duration_ms_p99"),
+            "warmed_request_duration_ms_p50_median" => median_for_key(runs, "warmed_request_duration_ms_p50"),
+            "warmed_request_duration_ms_p95_median" => median_for_key(runs, "warmed_request_duration_ms_p95"),
+            "warmed_request_duration_ms_p99_median" => median_for_key(runs, "warmed_request_duration_ms_p99"),
+          }.each do |key, value|
+            summary[key] = value unless value.nil?
+          end
+
+          request_status_matrix = summarize_request_status_matrix(runs)
+          summary["request_status_matrix"] = request_status_matrix unless request_status_matrix.empty?
+          summary
         end
 
         def deltas(results)
@@ -339,8 +392,54 @@ module RailsDependencyPruner
                 summary.fetch("object_counts_median", {}),
               ),
               "gc_heap_live_slots" => summary.fetch("gc_heap_live_slots_median") - baseline.fetch("gc_heap_live_slots_median"),
-            }]
+              "boot_time_ms" => numeric_delta(summary, baseline, "boot_time_ms_median"),
+              "first_request_duration_ms" => numeric_delta(summary, baseline, "first_request_duration_ms_median"),
+              "request_duration_ms_p95" => numeric_delta(summary, baseline, "request_duration_ms_p95_median"),
+              "request_duration_ms_p99" => numeric_delta(summary, baseline, "request_duration_ms_p99_median"),
+              "warmed_request_duration_ms_p95" => numeric_delta(summary, baseline, "warmed_request_duration_ms_p95_median"),
+              "warmed_request_duration_ms_p99" => numeric_delta(summary, baseline, "warmed_request_duration_ms_p99_median"),
+            }.compact]
           end.compact.to_h
+        end
+
+        def median_for_key(runs, key)
+          values = runs.filter_map { |run| run[key] }
+          return nil if values.empty?
+
+          median(values)
+        end
+
+        def summarize_request_status_matrix(runs)
+          paths = []
+          matrix = {}
+          runs.each do |run|
+            Array(run["requests"]).each do |request|
+              path = request["path"] || "(unknown)"
+              unless matrix.key?(path)
+                paths << path
+                matrix[path] = { "statuses" => [], "errors" => [] }
+              end
+              matrix.fetch(path).fetch("statuses") << request["status"] if request.key?("status")
+              matrix.fetch(path).fetch("errors") << request["error"] if request.key?("error")
+            end
+          end
+
+          paths.each_with_object({}) do |path, result|
+            entry = matrix.fetch(path)
+            path_result = {}
+            statuses = entry.fetch("statuses").uniq.sort
+            errors = entry.fetch("errors").uniq.sort
+            path_result["statuses"] = statuses unless statuses.empty?
+            path_result["errors"] = errors unless errors.empty?
+            result[path] = path_result unless path_result.empty?
+          end
+        end
+
+        def numeric_delta(summary, baseline, key)
+          return nil unless summary.key?(key) && baseline.key?(key)
+
+          delta = summary.fetch(key) - baseline.fetch(key)
+          delta.is_a?(Float) ? delta.round(3) : delta
         end
 
         def summarize_framework_features(runs)

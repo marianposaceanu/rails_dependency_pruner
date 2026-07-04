@@ -12,10 +12,10 @@ Runtime:
 
 ## profile
 
-The current profile keeps Action Mailbox and Active Storage. It disables eager
-loading, skips `rails/test_unit/railtie`, defers selected boot gems, installs a
-no-op `Rack::MiniProfiler` shim, and stubs Active Storage's Vips analyzer for
-this no-attachment workload.
+The current strict smoke profile keeps Action Mailbox and Active Storage. It
+disables eager loading, skips `rails/test_unit/railtie`, defers selected boot
+gems except `svg-graph`, installs a no-op `Rack::MiniProfiler` shim, and stubs
+Active Storage's Vips analyzer for this no-attachment workload.
 
 Lobsters does not declare `has_one_attached` or `has_many_attached`. It uses
 `Vips` directly in `app/models/story_image.rb`, so direct image-generation code
@@ -23,7 +23,14 @@ still loads `ruby-vips` on first use. Apps that use Active Storage attachments
 need attachment analysis coverage before approving the `ruby-vips` analyzer
 stub, because the stub makes that analyzer decline instead of loading libvips.
 
-Production approval:
+Strict no-`svg-graph` profile:
+
+- artifact: `tmp/lobsters-ruby405-rails813-policy-profile-no-svg-graph.json`
+- `production_allowed`: `true`
+- expected runtime events: `2`
+- profile id: `sha256:46725bec00671762321dc0c575e120261d1b5341baea7099d61ed317d30815dd`
+
+Earlier full-profile approval:
 
 - artifact: `tmp/lobsters-ruby405-rails813-lazy-more-profiler-vips-request-approve.json`
 - `verified`: `true`
@@ -42,6 +49,18 @@ Registered transforms:
 - `lazy_gem:*` for the approved boot-deferred gems
 
 ## results
+
+Strict no-`svg-graph` profile smoke, one run:
+
+| target | baseline RSS | pruned RSS | saved RSS | boot ms | first req ms | warm p95 ms | Rails features | GC live slots |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| requests | `233072 KB` | `129920 KB` | `103152 KB` (`100.7 MiB`, `44.3%`) | `2610.6 -> 871.0` | `14.3 -> 231.4` | `4.2 -> 23.9` | `-201` | `-273497` |
+
+The strict-profile request smoke hit `/privacy` and `/login` with `200`, and
+`/404` with `404`. The first request is slower because deferred boot work moves
+into that request. Warmed p95 moved by `+19.6 ms` in this one-run smoke.
+
+Earlier full-profile measurements:
 
 | target | baseline RSS | pruned RSS | saved RSS | Rails features | GC live slots |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -63,6 +82,10 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-ablation-request.json`
 - `tmp/lobsters-ruby405-rails813-ablation-request.md`
 - `tmp/lobsters-ruby405-rails813-policy-profile.json`
+- `tmp/lobsters-ruby405-rails813-policy-profile-no-svg-graph.json`
+- `tmp/lobsters-ruby405-rails813-latency-smoke.json`
+- `tmp/lobsters-ruby405-rails813-latency-smoke.md`
+- `tmp/lobsters-ruby405-rails813-latency-smoke.stdout.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
 - `tmp/lobsters-ruby405-rails813-coverage-template.yml`
@@ -161,9 +184,10 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-rails813-telemetry-smoke.json`,
   `tmp/lobsters-ruby405-rails813-telemetry-smoke.ndjson`
 
-The RSS tables above are still from the measured full profile. Because
-`svg-graph` is now known to load during boot, do not treat that exact profile as
-a production candidate until the no-`svg-graph` variant has been remeasured.
+The current strict-profile smoke above uses the no-`svg-graph` profile. The
+older full-profile RSS rows are still useful as historical context, but do not
+use that exact profile as a production candidate because `svg-graph` is now
+known to load during boot.
 The runtime can now express this as a `lazy_constants` phase policy: a gem such
 as `svg-graph` should not be approved as lazy for Lobsters boot unless its
 configured constant phase matches the observed `lib/time_series.rb` boot use.

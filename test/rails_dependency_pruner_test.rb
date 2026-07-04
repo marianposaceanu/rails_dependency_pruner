@@ -4506,6 +4506,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "## Rails Memory Buckets"
       assert_includes markdown, "## Ruby Object Buckets"
       assert_includes markdown, "## Transform Sets"
+      assert_includes markdown, "boot ms"
+      assert_includes markdown, "warm p95 ms"
       assert_includes markdown, "RSS is process memory"
     end
   end
@@ -4698,10 +4700,23 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "ok", report.dig("variants", "baseline", "status")
       assert_equal 200, report.dig("runs", "baseline", 0, "requests", 0, "status")
       assert_equal "/hello", report.dig("runs", "baseline", 0, "requests", 0, "path")
+      assert_kind_of Numeric, report.dig("runs", "baseline", 0, "boot_time_ms")
+      assert_operator report.dig("runs", "baseline", 0, "boot_time_ms"), :>, 0
+      assert_kind_of Numeric, report.dig("runs", "baseline", 0, "requests", 0, "duration_ms")
+      assert_kind_of Numeric, report.dig("variants", "baseline", "boot_time_ms_median")
+      assert_kind_of Numeric, report.dig("variants", "baseline", "first_request_duration_ms_median")
+      assert_kind_of Numeric, report.dig("variants", "baseline", "request_duration_ms_p95_median")
+      assert_nil report.dig("variants", "baseline", "warmed_request_duration_ms_p95_median")
+      assert_equal [200], report.dig("variants", "baseline", "request_status_matrix", "/hello", "statuses")
 
       markdown = RailsDependencyPruner::Measurement::Report.new(report).to_markdown
       assert_includes markdown, "- Target: `requests`"
       assert_includes markdown, "- Request paths: `/hello`"
+      assert_includes markdown, "boot ms"
+      assert_includes markdown, "first req ms"
+      assert_includes markdown, "warm p95 ms"
+      assert_includes markdown, "## Request Status Matrix"
+      assert_includes markdown, "| baseline | /hello | 200 | none |"
     end
   end
 

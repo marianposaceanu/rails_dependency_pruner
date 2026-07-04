@@ -40,8 +40,8 @@ module RailsDependencyPruner
         def append_summary(lines)
           lines << "## Summary"
           lines << ""
-          lines << "| variant | status | transforms | RSS median | RSS saved | saved | Rails features | GC slots | T_STRING |"
-          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          lines << "| variant | status | transforms | RSS median | RSS saved | saved | boot ms | first req ms | p95 req ms | warm p95 ms | Rails features | GC slots | T_STRING |"
+          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           payload.fetch("variants", {}).each do |variant, summary|
             delta = delta_for(variant)
             lines << [
@@ -51,6 +51,10 @@ module RailsDependencyPruner
               kb(summary["rss_kb_median"]),
               saved_kb(delta["rss_kb"]),
               saved_percent(delta["rss_kb"]),
+              ms(summary["boot_time_ms_median"]),
+              ms(summary["first_request_duration_ms_median"]),
+              ms(summary["request_duration_ms_p95_median"]),
+              ms(summary["warmed_request_duration_ms_p95_median"]),
               signed(delta["rails_loaded_features"]),
               signed(delta["gc_heap_live_slots"]),
               signed(delta.dig("object_counts", "T_STRING")),
@@ -163,6 +167,12 @@ module RailsDependencyPruner
           return "" if delta.nil? || baseline.nil? || baseline.zero?
 
           format("`%.1f%%`", (-delta.to_f / baseline) * 100)
+        end
+
+        def ms(number)
+          return "" if number.nil?
+
+          "`#{format("%.1f", number)} ms`"
         end
 
         def signed(number)

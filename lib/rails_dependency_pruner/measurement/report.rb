@@ -18,11 +18,12 @@ module RailsDependencyPruner
         append_target(lines)
         append_profile(lines)
         append_variants(lines)
+        append_request_status_matrix(lines)
         append_framework_features(lines)
         append_deltas(lines)
         append_framework_deltas(lines)
         append_object_deltas(lines)
-        lines << "RSS is reported from the measured process. Compare it with loaded-feature and GC-slot deltas before claiming a memory win."
+        lines << "RSS is reported from the measured process. Request timings are in-process Rack mock timings. Compare RSS with loaded-feature and GC-slot deltas before claiming a memory win."
         lines << ""
         lines.join("\n")
       end
@@ -70,8 +71,8 @@ module RailsDependencyPruner
         def append_variants(lines)
           lines << "## Variants"
           lines << ""
-          lines << "| variant | status | runs | RSS median | RSS min | RSS max | loaded features | Rails features | GC live slots |"
-          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          lines << "| variant | status | runs | RSS median | RSS min | RSS max | boot ms | first req ms | p95 req ms | warm p95 ms | loaded features | Rails features | GC live slots |"
+          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           payload.fetch("variants", {}).each do |variant, summary|
             lines << [
               table_cell(variant),
@@ -80,9 +81,41 @@ module RailsDependencyPruner
               kb(summary["rss_kb_median"]),
               kb(summary["rss_kb_min"]),
               kb(summary["rss_kb_max"]),
+              ms(summary["boot_time_ms_median"]),
+              ms(summary["first_request_duration_ms_median"]),
+              ms(summary["request_duration_ms_p95_median"]),
+              ms(summary["warmed_request_duration_ms_p95_median"]),
               value(summary["loaded_features_median"]),
               value(summary["rails_loaded_features_median"]),
               value(summary["gc_heap_live_slots_median"]),
+            ].join(" | ").then { |row| "| #{row} |" }
+          end
+          lines << ""
+        end
+
+        def append_request_status_matrix(lines)
+          rows = payload.fetch("variants", {}).flat_map do |variant, summary|
+            summary.fetch("request_status_matrix", {}).map do |path, result|
+              [
+                variant,
+                path,
+                Array(result["statuses"]).join(", "),
+                Array(result["errors"]).join(", "),
+              ]
+            end
+          end
+          return if rows.empty?
+
+          lines << "## Request Status Matrix"
+          lines << ""
+          lines << "| variant | path | statuses | errors |"
+          lines << "| --- | --- | --- | --- |"
+          rows.each do |variant, path, statuses, errors|
+            lines << [
+              table_cell(variant),
+              table_cell(path),
+              table_cell(statuses.empty? ? "none" : statuses),
+              table_cell(errors.empty? ? "none" : errors),
             ].join(" | ").then { |row| "| #{row} |" }
           end
           lines << ""
@@ -112,12 +145,16 @@ module RailsDependencyPruner
 
           lines << "## Deltas Vs Baseline"
           lines << ""
-          lines << "| variant | RSS | loaded features | Rails features | GC live slots |"
-          lines << "| --- | ---: | ---: | ---: | ---: |"
+          lines << "| variant | RSS | boot ms | first req ms | p95 req ms | warm p95 ms | loaded features | Rails features | GC live slots |"
+          lines << "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           deltas.each do |variant, delta|
             lines << [
               table_cell(variant),
               signed_kb(delta["rss_kb"]),
+              signed_ms(delta["boot_time_ms"]),
+              signed_ms(delta["first_request_duration_ms"]),
+              signed_ms(delta["request_duration_ms_p95"]),
+              signed_ms(delta["warmed_request_duration_ms_p95"]),
               signed(delta["loaded_features"]),
               signed(delta["rails_loaded_features"]),
               signed(delta["gc_heap_live_slots"]),
@@ -190,6 +227,12 @@ module RailsDependencyPruner
           "`#{number} KB`"
         end
 
+        def ms(number)
+          return "" if number.nil?
+
+          "`#{format("%.1f", number)} ms`"
+        end
+
         def signed(number)
           return "" if number.nil?
 
@@ -200,6 +243,17 @@ module RailsDependencyPruner
           return "" if number.nil?
 
           "`#{signed(number)} KB`"
+        end
+
+        def signed_ms(number)
+          return "" if number.nil?
+
+          "`#{signed_float(number)} ms`"
+        end
+
+        def signed_float(number)
+          formatted = format("%.1f", number)
+          number.positive? ? "+#{formatted}" : formatted
         end
     end
   end
