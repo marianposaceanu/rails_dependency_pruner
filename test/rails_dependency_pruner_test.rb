@@ -360,6 +360,77 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_profile_diff_reports_pruning_changes
+    Dir.mktmpdir("rails_dependency_pruner_profile_diff") do |dir|
+      old_profile = File.join(dir, "old.json")
+      new_profile = File.join(dir, "new.json")
+      File.write(old_profile, JSON.pretty_generate(
+        "schema_version" => 1,
+        "unused_constants" => ["ActiveRecord::OldThing"],
+        "unused_require_paths" => ["active_record/old_thing"],
+      ))
+      File.write(new_profile, JSON.pretty_generate(
+        "schema_version" => 1,
+        "unused_constants" => ["ActiveRecord::NewThing"],
+        "unused_require_paths" => ["active_record/new_thing"],
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "diff",
+        "--old",
+        old_profile,
+        "--new",
+        new_profile,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("changed")
+      assert_includes payload.dig("pruning_changes", "disabled_constants", "added"), "ActiveRecord::NewThing"
+      assert_includes payload.dig("pruning_changes", "disabled_constants", "removed"), "ActiveRecord::OldThing"
+      assert_includes payload.dig("pruning_changes", "disabled_require_paths", "added"), "active_record/new_thing"
+      assert_includes payload.dig("pruning_changes", "disabled_require_paths", "removed"), "active_record/old_thing"
+    end
+  end
+
+  def test_profile_diff_reports_equivalent_profiles
+    Dir.mktmpdir("rails_dependency_pruner_profile_diff_same") do |dir|
+      old_profile = File.join(dir, "old.json")
+      new_profile = File.join(dir, "new.json")
+      payload = {
+        "schema_version" => 2,
+        "profile_id" => "sha256:same",
+        "pruning" => {
+          "disabled_constants" => ["ActiveRecord::Thing"],
+          "disabled_require_paths" => ["active_record/thing"],
+        },
+      }
+      File.write(old_profile, JSON.pretty_generate(payload))
+      File.write(new_profile, JSON.pretty_generate(payload))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "diff",
+        "--old",
+        old_profile,
+        "--new",
+        new_profile,
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+      assert_includes stdout, "Profiles are equivalent"
+    end
+  end
+
   def test_cli_merges_runtime_evidence
     stdout, stderr, status = Open3.capture3(
       RUBY,

@@ -12,6 +12,7 @@ require_relative "constant_index"
 require_relative "planner"
 require_relative "profile"
 require_relative "profile_context"
+require_relative "profile_diff"
 require_relative "profile_validator"
 require_relative "measurement/runner"
 require_relative "runtime_evidence"
@@ -208,6 +209,8 @@ module RailsDependencyPruner
         subcommand = @argv.shift || "help"
 
         case subcommand
+        when "diff"
+          run_profile_diff
         when "validate"
           run_profile_validate
         when "help", "-h", "--help"
@@ -218,6 +221,22 @@ module RailsDependencyPruner
           warn profile_help
           1
         end
+      end
+
+      def run_profile_diff
+        options = parse_profile_diff_options
+        diff = ProfileDiff.new(
+          old_profile: Profile.load(options.fetch(:old_profile_path)),
+          new_profile: Profile.load(options.fetch(:new_profile_path)),
+        ).to_h
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(diff)
+        else
+          print_profile_diff(diff)
+        end
+
+        0
       end
 
       def run_profile_validate
@@ -317,6 +336,32 @@ module RailsDependencyPruner
         options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
         raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
         raise ArgumentError, "--app is required" if blank?(options[:app_root])
+
+        options
+      end
+
+      def parse_profile_diff_options
+        options = {
+          old_profile_path: nil,
+          new_profile_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner profile diff [options]"
+          parser.on("--old PATH", "Previous profile") { |path| options[:old_profile_path] = path }
+          parser.on("--new PATH", "New profile") { |path| options[:new_profile_path] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(@argv)
+
+        raise ArgumentError, "--old is required" if blank?(options[:old_profile_path])
+        raise ArgumentError, "--new is required" if blank?(options[:new_profile_path])
 
         options
       end
@@ -471,11 +516,17 @@ module RailsDependencyPruner
 
       def profile_help
         <<~HELP
-          Usage: rails-dependency-pruner profile validate [options]
+          Usage:
+            rails-dependency-pruner profile validate [options]
+            rails-dependency-pruner profile diff --old old.json --new new.json
 
-          Required:
+          Validate required:
             --profile PATH
             --app PATH
+
+          Diff required:
+            --old PATH
+            --new PATH
 
           Useful options:
             --rails-root PATH          Optional checkout override; installed Rails 8.x gems are used by default
@@ -483,6 +534,7 @@ module RailsDependencyPruner
             --frameworks NAMES
             --runtime-evidence PATHS
             --coverage PATH
+            --json
         HELP
       end
 
@@ -606,6 +658,41 @@ module RailsDependencyPruner
 
         puts
         puts "Report written to: #{output_path}" if output_path
+      end
+
+      def print_profile_diff(diff)
+        unless diff.fetch("changed")
+          puts "Profiles are equivalent"
+          return
+        end
+
+        unless diff.fetch("context_changes").empty?
+          puts "Context changes:"
+          diff.fetch("context_changes").each do |change|
+            puts "  #{change.fetch("key")}: #{short_value(change.fetch("old"))} -> #{short_value(change.fetch("new"))}"
+          end
+        end
+
+        puts
+        puts "Pruning changes:"
+        diff.fetch("pruning_changes").each do |key, change|
+          next if change.fetch("added").empty? && change.fetch("removed").empty?
+
+          puts "  #{key}: #{change.fetch("old_count")} -> #{change.fetch("new_count")}"
+          change.fetch("added").first(20).each { |value| puts "    + #{value}" }
+          change.fetch("removed").first(20).each { |value| puts "    - #{value}" }
+        end
+      end
+
+      def short_value(value)
+        case value
+        when Hash
+          "{#{value.keys.sort.join(", ")}}"
+        when Array
+          "[#{value.length} entries]"
+        else
+          value.inspect
+        end
       end
   end
 end
