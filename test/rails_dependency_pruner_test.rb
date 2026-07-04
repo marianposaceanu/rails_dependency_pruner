@@ -2336,6 +2336,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert status.success?, stderr
 
       payload = JSON.parse(stdout)
+      assert_equal "application", payload.fetch("target")
       assert_equal "ok", payload.dig("variants", "baseline", "status")
       assert_equal "ok", payload.dig("variants", "shadow", "status")
       assert_operator payload.dig("variants", "baseline", "rss_kb_median"), :>, 0
@@ -2350,11 +2351,97 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       markdown = File.read(markdown_path)
       assert_includes markdown, "# Rails Dependency Pruner Measurement"
+      assert_includes markdown, "- Target: `application`"
       assert_includes markdown, "| baseline | ok |"
       assert_includes markdown, "| shadow | ok |"
       assert_includes markdown, "## Deltas Vs Baseline"
       assert_includes markdown, "## Rails Features By Framework"
       assert_includes markdown, "## Rails Feature Deltas By Framework"
+    end
+  end
+
+  def test_measure_environment_no_eager_load_variant_skips_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_measure_environment") do |dir|
+      app_root = File.join(dir, "app")
+      probe_path = File.join(dir, "eager_load_probe")
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails"
+        require "logger"
+
+        module MeasureEnvironmentApp
+          class EagerProbe
+            def self.eager_load!
+              File.write(#{probe_path.dump}, "called")
+            end
+          end
+
+          class Application < Rails::Application
+            config.root = #{app_root.dump}
+            config.secret_key_base = "x" * 64
+            config.logger = Logger.new(nil)
+            config.eager_load = true
+            config.eager_load_namespaces << EagerProbe
+          end
+        end
+      RUBY
+
+      baseline = RailsDependencyPruner::Measurement::Runner.new(
+        app_root: app_root,
+        variants: ["baseline"],
+        runs: 1,
+        target: "environment",
+      ).run
+      assert_equal "environment", baseline.fetch("target")
+      assert_equal "ok", baseline.dig("variants", "baseline", "status")
+      assert File.exist?(probe_path)
+
+      FileUtils.rm_f(probe_path)
+      no_eager_load = RailsDependencyPruner::Measurement::Runner.new(
+        app_root: app_root,
+        variants: ["no_eager_load"],
+        runs: 1,
+        target: "environment",
+      ).run
+      assert_equal "ok", no_eager_load.dig("variants", "no_eager_load", "status")
+      refute File.exist?(probe_path)
+    end
+  end
+
+  def test_measure_environment_skip_railties_variant_stubs_config_namespaces
+    Dir.mktmpdir("rails_dependency_pruner_measure_skip_railties") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails"
+        require "action_mailbox/engine"
+        require "logger"
+
+        module MeasureSkipRailtiesApp
+          class Application < Rails::Application
+            config.root = #{app_root.dump}
+            config.secret_key_base = "x" * 64
+            config.logger = Logger.new(nil)
+            config.eager_load = false
+            config.action_mailbox.ingress = :relay
+          end
+        end
+      RUBY
+
+      report = RailsDependencyPruner::Measurement::Runner.new(
+        app_root: app_root,
+        variants: ["no_eager_load_skip_railties"],
+        runs: 1,
+        target: "environment",
+        skip_railties: ["action_mailbox/engine"],
+      ).run
+
+      assert_equal ["action_mailbox/engine"], report.fetch("skip_railties")
+      assert_equal "ok", report.dig("variants", "no_eager_load_skip_railties", "status")
     end
   end
 
@@ -2372,6 +2459,23 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       assert_equal File.join(app_root, "Gemfile"), runner.send(:env_for, "baseline").fetch("BUNDLE_GEMFILE")
     end
+  end
+
+  def test_measure_runner_parses_json_after_app_stdout_noise
+    runner = RailsDependencyPruner::Measurement::Runner.new(
+      app_root: FAKE_APP_ROOT.to_s,
+      variants: ["baseline"],
+      runs: 1,
+    )
+    payload = runner.send(
+      :parse_successful_run,
+      "W, app warning\n{\"rss_kb\":1,\"loaded_features\":2,\"rails_loaded_features\":3,\"gc_heap_live_slots\":4}\n",
+      "",
+    )
+
+    assert_equal "ok", payload.fetch("status")
+    assert_equal 1, payload.fetch("rss_kb")
+    assert_equal 3, payload.fetch("rails_loaded_features")
   end
 
   def test_doctor_reports_boot_and_load_path_recommendations

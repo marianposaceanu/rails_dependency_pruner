@@ -357,6 +357,45 @@ require/load closure keeps Action Cable because the app still has static
 evidence for it. The early boot hooks add overhead here instead of saving
 memory.
 
+Full environment experiment:
+
+```bash
+mkdir -p tmp/lobsters-ruby405-rails813/log \
+  tmp/lobsters-ruby405-rails813/tmp/pids \
+  tmp/lobsters-ruby405-rails813/tmp/cache \
+  tmp/lobsters-ruby405-rails813/storage
+cp tmp/lobsters-ruby405-rails813/config/database.yml.sample \
+  tmp/lobsters-ruby405-rails813/config/database.yml
+
+RAILS_ENV=production \
+SECRET_KEY_BASE_DUMMY=1 \
+DATABASE_HOST=127.0.0.1 \
+bundle exec exe/rails-dependency-pruner measure \
+  --app tmp/lobsters-ruby405-rails813 \
+  --target environment \
+  --variants baseline,no_eager_load,no_eager_load_skip_railties \
+  --skip-railties action_mailbox/engine,active_storage/engine,rails/test_unit/railtie \
+  --runs 3 \
+  --output tmp/lobsters-ruby405-rails813-environment-extreme-measurement.json \
+  --markdown tmp/lobsters-ruby405-rails813-environment-extreme-measurement.md
+```
+
+This initializes Rails, but does not run a server or request workload. The
+extreme variant disables eager loading and skips the listed railties with inert
+config namespace stubs.
+
+| variant | RSS | Rails loaded features | GC live slots |
+| --- | ---: | ---: | ---: |
+| baseline | `230864 KB` (`225.5 MiB`) | `1073` | `541209` |
+| no eager load | `150928 KB` (`147.4 MiB`) | `644` | `288215` |
+| no eager load plus skipped railties | `133616 KB` (`130.5 MiB`) | `600` | `274645` |
+| extreme delta | `-97248 KB` (`-95.0 MiB`, `-42.1%`) | `-473` | `-266564` |
+
+The skipped railties were Action Mailbox, Active Storage, and Rails test-unit.
+This is an experiment, not a safe production default. The next safety gate is
+to prove routes, attachments, inbound email, jobs, and request coverage before
+emitting a patch or boot shim for another app.
+
 Local outputs are ignored under `tmp/`.
 
 ## limits

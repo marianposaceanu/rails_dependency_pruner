@@ -15,6 +15,7 @@ module RailsDependencyPruner
           "",
         ]
 
+        append_target(lines)
         append_profile(lines)
         append_variants(lines)
         append_framework_features(lines)
@@ -26,6 +27,16 @@ module RailsDependencyPruner
       end
 
       private
+        def append_target(lines)
+          target = payload["target"]
+          return unless target
+
+          lines << "- Target: `#{target}`"
+          skip_railties = Array(payload["skip_railties"])
+          lines << "- Skip railties: #{list(skip_railties)}" unless skip_railties.empty?
+          lines << ""
+        end
+
         def append_profile(lines)
           profile = payload["profile"]
           return unless profile

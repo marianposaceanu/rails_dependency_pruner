@@ -15,19 +15,115 @@ module RailsDependencyPruner
         end
         require "rails_dependency_pruner/measurement/memory_probe"
 
+        CONFIG_NAMESPACES = {
+          "action_mailbox/engine" => "action_mailbox",
+          "action_mailer/railtie" => "action_mailer",
+          "active_job/railtie" => "active_job",
+          "active_storage/engine" => "active_storage",
+        }.freeze
+
+        def measure_variant
+          ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT"].to_s
+        end
+
+        def measure_target
+          ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_TARGET"].to_s
+        end
+
+        def no_eager_load_variant?
+          %w[no_eager_load no_eager_load_skip_railties].include?(measure_variant)
+        end
+
+        def skip_railties_variant?
+          %w[skip_railties no_eager_load_skip_railties].include?(measure_variant)
+        end
+
+        def skipped_railties
+          return [] unless skip_railties_variant?
+
+          ENV.fetch("RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES", "")
+            .split(",")
+            .map(&:strip)
+            .reject(&:empty?)
+        end
+
+        def install_skip_require!(paths)
+          return if paths.empty?
+
+          blocked = paths
+          Kernel.module_eval do
+            unless private_method_defined?(:rails_dependency_pruner_measure_original_require)
+              alias_method :rails_dependency_pruner_measure_original_require, :require
+
+              define_method(:require) do |path|
+                return false if blocked.include?(path.to_s)
+
+                rails_dependency_pruner_measure_original_require(path)
+              end
+
+              private :require
+            end
+          end
+        end
+
+        def install_config_namespace_stubs!(paths)
+          namespaces = paths.filter_map { |path| CONFIG_NAMESPACES[path] }.uniq
+          return if namespaces.empty?
+
+          require "rails"
+          require "active_support/ordered_options"
+          unless defined?(RailsDependencyPrunerMeasureOptions)
+            Object.const_set(:RailsDependencyPrunerMeasureOptions, Class.new(ActiveSupport::OrderedOptions) do
+              def method_missing(name, *args)
+                return super if name.to_s.end_with?("=")
+
+                self[name] ||= self.class.new
+              end
+            end)
+          end
+          [Rails::Application::Configuration, Rails::Engine::Configuration].each do |klass|
+            namespaces.each do |namespace|
+              next if klass.method_defined?(namespace)
+
+              klass.define_method(namespace) do
+                @rails_dependency_pruner_measure_config_namespaces ||= {}
+                @rails_dependency_pruner_measure_config_namespaces[namespace] ||= RailsDependencyPrunerMeasureOptions.new
+              end
+            end
+          end
+        end
+
         app_root = ARGV.fetch(0)
-        require File.join(app_root, "config/application")
+        skipped = skipped_railties
+        install_skip_require!(skipped)
+        install_config_namespace_stubs!(skipped)
+
+        if measure_target == "environment"
+          require File.join(app_root, "config/application")
+          if no_eager_load_variant?
+            Rails.application.initializer("rails_dependency_pruner.measure.no_eager_load", before: :eager_load!) do |application|
+              application.config.eager_load = false
+            end
+          end
+          Rails.application.initialize!
+        else
+          require File.join(app_root, "config/application")
+        end
         GC.start
         puts JSON.generate(RailsDependencyPruner::Measurement::MemoryProbe.snapshot)
       RUBY
 
-      attr_reader :app_root, :variants, :runs, :profile_path
+      TARGETS = %w[application environment].freeze
 
-      def initialize(app_root:, variants:, runs:, profile_path: nil)
-        @app_root = app_root
+      attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties
+
+      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [])
+        @app_root = File.expand_path(app_root)
         @variants = variants
         @runs = runs
         @profile_path = profile_path && File.expand_path(profile_path)
+        @target = target
+        @skip_railties = Array(skip_railties)
       end
 
       def run
@@ -36,6 +132,8 @@ module RailsDependencyPruner
         end
 
         report = {
+          "target" => target,
+          "skip_railties" => skip_railties,
           "variants" => summarize_variants(results),
           "runs" => results,
           "deltas" => deltas(results),
@@ -69,7 +167,7 @@ module RailsDependencyPruner
         end
 
         def parse_successful_run(stdout, stderr)
-          payload = JSON.parse(stdout)
+          payload = JSON.parse(json_payload(stdout))
           required_keys = %w[rss_kb loaded_features rails_loaded_features gc_heap_live_slots]
           missing_keys = required_keys.reject { |key| payload.key?(key) }
           unless missing_keys.empty?
@@ -92,6 +190,18 @@ module RailsDependencyPruner
           }
         end
 
+        def json_payload(stdout)
+          stdout.lines.reverse_each do |line|
+            candidate = line.strip
+            next if candidate.empty?
+            next unless candidate.start_with?("{")
+
+            return candidate
+          end
+
+          stdout
+        end
+
         def ruby_command
           File.exist?(File.join(app_root, "Gemfile")) ? ["bundle", "exec", "ruby"] : [Gem.ruby]
         end
@@ -103,14 +213,20 @@ module RailsDependencyPruner
         def env_for(variant)
           env = {
             "RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT" => variant,
+            "RAILS_DEPENDENCY_PRUNER_MEASURE_TARGET" => target,
             "RUBYLIB" => ruby_lib,
           }
+          env["RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES"] = skip_railties.join(",") if skip_railties_variant?(variant)
           env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))
           return env unless profile_path
 
           env["RAILS_DEPENDENCY_PRUNER_PROFILE"] = profile_path
           env["RAILS_DEPENDENCY_PRUNER_MODE"] = variant if %w[shadow boot_prune production].include?(variant)
           env
+        end
+
+        def skip_railties_variant?(variant)
+          %w[skip_railties no_eager_load_skip_railties].include?(variant)
         end
 
         def profile_metadata
