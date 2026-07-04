@@ -7,6 +7,7 @@ require "pathname"
 require_relative "app_usage"
 require_relative "apply/boot_plan_patch"
 require_relative "apply/early_boot_patch"
+require_relative "apply/rollout_patch"
 require_relative "boot_prune_planner"
 require_relative "boot_plan_explainer"
 require_relative "constant_index"
@@ -68,6 +69,8 @@ module RailsDependencyPruner
         run_profile
       when "runtime"
         run_runtime
+      when "rollout"
+        run_rollout
       when "shim"
         run_apply_early_boot_shim(usage: "shim")
       when "verify"
@@ -385,6 +388,30 @@ module RailsDependencyPruner
         0
       end
 
+      def run_rollout
+        options = options_parser.rollout
+        patch = Apply::RolloutPatch.new(
+          app_root: options.fetch(:app_root),
+          profile_path: options.fetch(:profile_path),
+          coverage_path: options[:coverage_path],
+          profile_target: options.fetch(:profile_target),
+          coverage_target: options.fetch(:coverage_target),
+          rails_env: options.fetch(:rails_env),
+        )
+        patch.write(options.fetch(:patch_path))
+        report = patch.to_h.merge("patch_path" => options.fetch(:patch_path))
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          puts "Rollout patch written to: #{options.fetch(:patch_path)}"
+          puts "Profile id: #{report.fetch("profile_id") || "(no id)"}"
+          puts "Sections: #{report.fetch("sections").join(", ")}"
+        end
+
+        0
+      end
+
       def run_runtime
         subcommand = @argv.shift || "help"
 
@@ -595,6 +622,7 @@ module RailsDependencyPruner
             approve         Same as check --production --approve-production
             patch           Write a reviewed patch replacing rails/all
             shim            Write a reviewed config/boot.rb shim patch
+            rollout         Write one reviewed production rollout patch
             diff            Compare two profiles
             explain TARGET  Explain a constant/framework/require decision
             measure         Measure boot memory in fresh processes
@@ -611,6 +639,7 @@ module RailsDependencyPruner
             rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
             rails-dependency-pruner measure ablation --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --output tmp/pruner-ablation.json
             rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json
+            rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
             rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml
             rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
             rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json

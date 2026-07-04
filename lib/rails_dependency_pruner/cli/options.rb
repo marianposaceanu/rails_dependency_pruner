@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "optparse"
+require "pathname"
 
 module RailsDependencyPruner
   class CLI
@@ -405,6 +406,49 @@ module RailsDependencyPruner
         options
       end
 
+      def rollout
+        options = {
+          app_root: Dir.pwd,
+          profile_path: nil,
+          coverage_path: nil,
+          patch_path: nil,
+          profile_target: "config/rails_dependency_pruner_profile.json",
+          coverage_target: "config/pruner_coverage.yml",
+          rails_env: CoverageTemplate::DEFAULT_RAILS_ENV,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner rollout [options]"
+          parser.on("--app PATH", "Rails app root; defaults to current directory") { |path| options[:app_root] = path }
+          parser.on("--profile PATH", "Approved profile to include in the patch") { |path| options[:profile_path] = path }
+          parser.on("--coverage PATH", "Reviewed coverage manifest to include; otherwise generate a template") { |path| options[:coverage_path] = path }
+          parser.on("--patch PATH", "Write the production rollout patch") { |path| options[:patch_path] = path }
+          parser.on("--profile-target PATH", "App-relative profile target; defaults to config/rails_dependency_pruner_profile.json") { |path| options[:profile_target] = path }
+          parser.on("--coverage-target PATH", "App-relative coverage target; defaults to config/pruner_coverage.yml") { |path| options[:coverage_target] = path }
+          parser.on("--rails-env NAME", "Coverage template Rails env; defaults to production") { |env| options[:rails_env] = env }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        options[:app_root] = File.expand_path(options.fetch(:app_root))
+        raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
+        raise ArgumentError, "--patch is required" if blank?(options[:patch_path])
+
+        options[:profile_path] = input_path(options.fetch(:app_root), options.fetch(:profile_path))
+        raise ArgumentError, "--profile does not exist" unless File.exist?(options.fetch(:profile_path))
+        if options[:coverage_path]
+          options[:coverage_path] = input_path(options.fetch(:app_root), options.fetch(:coverage_path))
+          raise ArgumentError, "--coverage does not exist" unless File.exist?(options.fetch(:coverage_path))
+        end
+        options[:patch_path] = app_relative_path(options.fetch(:app_root), options.fetch(:patch_path))
+        options
+      end
+
       def measure_boot(usage: "measure")
         options = {
           app_root: nil,
@@ -537,6 +581,15 @@ module RailsDependencyPruner
 
         def app_relative_path(app_root, path)
           File.absolute_path(path, app_root)
+        end
+
+        def input_path(app_root, path)
+          return File.expand_path(path) if Pathname.new(path).absolute?
+
+          current_path = File.expand_path(path)
+          return current_path if File.exist?(current_path)
+
+          app_relative_path(app_root, path)
         end
 
         def blank?(value)

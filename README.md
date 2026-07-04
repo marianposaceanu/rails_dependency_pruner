@@ -53,7 +53,7 @@ bundle exec rails-dependency-pruner plan \
   --patch tmp/pruner-boot-plan.patch
 ```
 
-The generated schema v2 profile stores the boot plan, disabled frameworks,
+The generated schema v3 profile stores the boot plan, disabled frameworks,
 disabled railties, and per-framework explanations. The patch is still only a
 review artifact; the command does not modify the app.
 When a pruned framework owns conventional app paths, such as `app/jobs` or
@@ -82,6 +82,19 @@ Production approval rejects unclassified dynamic require/load edges in
 boot-critical `config/*.rb` files and dynamic constantization that could resolve
 to pruned Rails namespaces. It also rejects profiles built from truncated
 runtime evidence.
+
+Write one reviewed rollout patch after approval:
+
+```bash
+bundle exec rails-dependency-pruner rollout \
+  --app . \
+  --profile config/rails_dependency_pruner_profile.json \
+  --coverage config/pruner_coverage.yml \
+  --patch tmp/pruner-rollout.patch
+```
+
+The rollout patch includes the boot-plan change, early boot shim, production
+config, approved profile, and coverage manifest. It does not edit the app.
 
 Ask why a framework or require path was kept or pruned:
 
@@ -295,6 +308,7 @@ events to an NDJSON file. Set
 - `bundle exec rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml`
 - `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch`
+- `bundle exec rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch`
 - `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json --markdown tmp/pruner-memory-report.md`
 - `bundle exec rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`

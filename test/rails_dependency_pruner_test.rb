@@ -4394,6 +4394,105 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_rollout_writes_review_patch_for_production_files
+    Dir.mktmpdir("rails_dependency_pruner_rollout") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      application_path = File.join(app_root, "config/application.rb")
+      File.write(application_path, <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails/all"
+      RUBY
+      File.write(File.join(app_root, "config/boot.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "bundler/setup"
+        require "bootsnap/setup"
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      production_path = File.join(app_root, "config/environments/production.rb")
+      File.write(production_path, <<~RUBY)
+        Rails.application.configure do
+          config.eager_load = true
+        end
+      RUBY
+      coverage_path = File.join(dir, "coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+      YAML
+      profile_path = File.join(dir, "profile.json")
+      profile_payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "boot_plan" => {
+          "required_frameworks" => %w[actionpack actionview activemodel activerecord],
+          "pruned_frameworks" => ["activejob"],
+          "autoload_ignores" => ["app/jobs"],
+          "eager_load_ignores" => ["app/jobs"],
+        },
+        "pruning" => {
+          "disabled_frameworks" => ["activejob"],
+          "disabled_railties" => ["active_job/railtie"],
+          "disabled_initializers" => [],
+          "disabled_require_paths" => [],
+          "disabled_require_path_provenance" => [],
+          "disabled_constants" => [],
+          "autoload_ignores" => ["app/jobs"],
+          "eager_load_ignores" => ["app/jobs"],
+        },
+        "extreme_boot" => {
+          "disable_eager_load" => true,
+          "skip_railties" => ["rails/test_unit/railtie"],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+      )
+      RailsDependencyPruner::Profile.new(profile_payload).write(profile_path)
+      patch_path = File.join(dir, "rollout.patch")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "rollout",
+        "--app",
+        app_root,
+        "--profile",
+        profile_path,
+        "--coverage",
+        coverage_path,
+        "--patch",
+        patch_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal patch_path, payload.fetch("patch_path")
+      assert_equal "config/rails_dependency_pruner_profile.json", payload.fetch("profile_target")
+      assert_equal "config/pruner_coverage.yml", payload.fetch("coverage_target")
+      assert_includes payload.fetch("sections"), "production_config"
+
+      patch = File.read(patch_path)
+      assert_includes patch, "-require \"rails/all\""
+      assert_includes patch, "+require \"active_record/railtie\""
+      assert_includes patch, "+# require \"active_job/railtie\" # pruned by rails_dependency_pruner"
+      assert_includes patch, "+require \"rails_dependency_pruner/early_boot\" if ENV[\"RAILS_DEPENDENCY_PRUNER_EARLY\"] == \"1\""
+      assert_includes patch, "+  config.rails_dependency_pruner.enabled = true"
+      assert_includes patch, "+++ b/config/rails_dependency_pruner_profile.json"
+      assert_includes patch, profile_payload.fetch("profile_id")
+      assert_includes patch, "+++ b/config/pruner_coverage.yml"
+      assert_includes patch, "+rails_env: production"
+      assert_includes File.read(application_path), "require \"rails/all\""
+      refute_includes File.read(production_path), "rails_dependency_pruner"
+    end
+  end
+
   def test_measure_boot_reports_process_memory
     Dir.mktmpdir("rails_dependency_pruner_measure") do |dir|
       report_path = File.join(dir, "measurement.json")
