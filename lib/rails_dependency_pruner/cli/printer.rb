@@ -127,6 +127,7 @@ module RailsDependencyPruner
         puts
         puts "Pruned frameworks:"
         boot_plan.pruned_frameworks.each { |framework| puts "  #{framework}" }
+        app_path_ignores(boot_plan.to_h)
         puts
         puts "Patch written to: #{patch_path}" if patch_path
       end
@@ -143,6 +144,7 @@ module RailsDependencyPruner
         puts
         puts "Pruned frameworks:"
         boot_plan.fetch("pruned_frameworks").each { |framework| puts "  #{framework}" }
+        app_path_ignores(boot_plan)
         puts
         puts "Patch written to: #{report.fetch("patch_path")}" if report["patch_path"]
       end
@@ -249,6 +251,15 @@ module RailsDependencyPruner
       end
 
       private
+        def app_path_ignores(boot_plan)
+          ignores = Array(boot_plan["eager_load_ignores"])
+          return if ignores.empty?
+
+          puts
+          puts "App paths suggested for autoload/eager-load ignores:"
+          ignores.each { |path| puts "  #{path}" }
+        end
+
         def short_value(value)
           case value
           when Hash

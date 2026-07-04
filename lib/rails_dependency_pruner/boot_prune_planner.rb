@@ -18,6 +18,12 @@ module RailsDependencyPruner
 
     ALWAYS_KEEP = %w[activesupport railties].freeze
     COMPONENT_NEUTRAL_CONSTANTS = %w[Rails].freeze
+    FRAMEWORK_APP_PATHS = {
+      "actioncable" => %w[app/channels],
+      "actionmailbox" => %w[app/mailboxes],
+      "actionmailer" => %w[app/mailers],
+      "activejob" => %w[app/jobs],
+    }.freeze
 
     attr_reader :planner
 
@@ -29,6 +35,8 @@ module RailsDependencyPruner
       BootPlan.new(
         required_frameworks: required_frameworks.to_a,
         pruned_frameworks: pruned_frameworks.to_a,
+        autoload_ignores: pruned_app_paths,
+        eager_load_ignores: pruned_app_paths,
       )
     end
 
@@ -51,6 +59,14 @@ module RailsDependencyPruner
     end
 
     private
+      def pruned_app_paths
+        pruned_frameworks.flat_map do |framework|
+          FRAMEWORK_APP_PATHS.fetch(framework, []).select do |path|
+            planner.usage.app_root.join(path).directory?
+          end
+        end.sort
+      end
+
       def expand_dependencies(required)
         queue = required.to_a
 

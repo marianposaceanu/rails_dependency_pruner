@@ -15,11 +15,13 @@ module RailsDependencyPruner
       "activestorage" => "active_storage/engine",
     }.freeze
 
-    attr_reader :required_frameworks, :pruned_frameworks
+    attr_reader :required_frameworks, :pruned_frameworks, :autoload_ignores, :eager_load_ignores
 
-    def initialize(required_frameworks:, pruned_frameworks:)
+    def initialize(required_frameworks:, pruned_frameworks:, autoload_ignores: [], eager_load_ignores: [])
       @required_frameworks = required_frameworks.sort
       @pruned_frameworks = pruned_frameworks.sort
+      @autoload_ignores = autoload_ignores.sort
+      @eager_load_ignores = eager_load_ignores.sort
     end
 
     def require_lines
@@ -58,6 +60,8 @@ module RailsDependencyPruner
         "pruned_frameworks" => pruned_frameworks,
         "required_railties" => required_railties,
         "pruned_railties" => pruned_railties,
+        "autoload_ignores" => autoload_ignores,
+        "eager_load_ignores" => eager_load_ignores,
         "require_lines" => require_lines,
         "pruned_lines" => pruned_lines,
       }

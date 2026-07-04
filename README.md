@@ -46,6 +46,8 @@ bundle exec rails-dependency-pruner plan \
 The generated schema v2 profile stores the boot plan, disabled frameworks,
 disabled railties, and per-framework explanations. The patch is still only a
 review artifact; the command does not modify the app.
+When a pruned framework owns conventional app paths, such as `app/jobs` or
+`app/channels`, the profile also records autoload/eager-load ignore suggestions.
 
 Validate it before using it:
 

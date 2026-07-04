@@ -96,8 +96,8 @@ module RailsDependencyPruner
           "disabled_require_paths" => planner.unused_require_paths,
           "disabled_require_path_provenance" => planner.unused_require_path_provenance,
           "disabled_constants" => planner.unused_constants.to_a.sort,
-          "autoload_ignores" => [],
-          "eager_load_ignores" => [],
+          "autoload_ignores" => Array(boot_plan_payload["autoload_ignores"]),
+          "eager_load_ignores" => Array(boot_plan_payload["eager_load_ignores"]),
         },
         "boot_plan" => boot_plan_payload,
         "safety" => {

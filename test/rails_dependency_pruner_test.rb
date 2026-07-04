@@ -1191,6 +1191,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.open(File.join(app_root, "config/application.rb"), "a") do |file|
         file.puts "require \"active_job/railtie\""
       end
+      FileUtils.mkdir_p(File.join(app_root, "app/jobs"))
       profile_path = File.join(app_root, "config/rails_dependency_pruner_profile.json")
       patch_path = File.join(dir, "boot_plan.patch")
 
@@ -1231,6 +1232,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes boot_plan.fetch("required_frameworks"), "actionpack"
       assert_includes boot_plan.fetch("required_frameworks"), "actionview"
       assert_includes boot_plan.fetch("pruned_frameworks"), "activejob"
+      assert_equal ["app/jobs"], boot_plan.fetch("autoload_ignores")
+      assert_equal ["app/jobs"], boot_plan.fetch("eager_load_ignores")
 
       patch = File.read(patch_path)
       assert_includes patch, "-require \"active_job/railtie\""
@@ -1239,6 +1242,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal boot_plan.fetch("required_frameworks"), profile.dig("boot_plan", "required_frameworks")
       assert_equal boot_plan.fetch("pruned_frameworks"), profile.dig("boot_plan", "pruned_frameworks")
       assert_equal boot_plan.fetch("pruned_railties"), profile.dig("boot_plan", "pruned_railties")
+      assert_equal ["app/jobs"], profile.dig("pruning", "autoload_ignores")
+      assert_equal ["app/jobs"], profile.dig("pruning", "eager_load_ignores")
       assert_equal "disable_framework", profile.dig("explanations", "activejob", "decision")
       assert_equal "active_job/railtie", profile.dig("explanations", "activejob", "railtie")
       assert_includes profile.dig("explanations", "activejob", "negative_evidence"), "no static framework evidence in scanned app files"
