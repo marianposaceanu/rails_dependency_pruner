@@ -9,6 +9,7 @@ require_relative "app_usage"
 require_relative "apply/boot_plan_patch"
 require_relative "boot_prune_planner"
 require_relative "constant_index"
+require_relative "doctor"
 require_relative "planner"
 require_relative "profile"
 require_relative "profile_context"
@@ -33,6 +34,8 @@ module RailsDependencyPruner
         run_audit
       when "apply"
         run_apply
+      when "doctor"
+        run_doctor
       when "index"
         run_index
       when "explain"
@@ -66,6 +69,19 @@ module RailsDependencyPruner
           puts JSON.pretty_generate(payload)
         else
           print_index(index)
+        end
+
+        0
+      end
+
+      def run_doctor
+        options = parse_doctor_options
+        report = Doctor.new(app_root: options.fetch(:app_root)).report
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          print_doctor_report(report)
         end
 
         0
@@ -438,6 +454,29 @@ module RailsDependencyPruner
         options
       end
 
+      def parse_doctor_options
+        options = {
+          app_root: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner doctor [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(@argv)
+
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+
+        options
+      end
+
       def parse_apply_boot_plan_options
         options = {
           app_root: nil,
@@ -565,6 +604,7 @@ module RailsDependencyPruner
             index  Build a Rails constant dependency tree
             audit  Scan an app and find unused Rails constants
             apply boot-plan  Write a reviewed patch replacing rails/all
+            doctor  Print production-readiness recommendations
             explain CONSTANT  Explain why a Rails constant is used or unused
             measure boot  Measure boot memory in fresh processes
             profile validate  Validate a deterministic profile against current inputs
@@ -783,6 +823,20 @@ module RailsDependencyPruner
         puts
         puts "Rails parse errors: #{rails_errors}"
         puts "App parse errors: #{app_errors}"
+      end
+
+      def print_doctor_report(report)
+        recommendations = report.fetch("recommendations")
+        if recommendations.empty?
+          puts "No doctor recommendations"
+          return
+        end
+
+        puts "Doctor recommendations:"
+        recommendations.each do |recommendation|
+          puts "  [#{recommendation.fetch("severity")}] #{recommendation.fetch("id")}: #{recommendation.fetch("title")}"
+          puts "    #{recommendation.fetch("detail")}"
+        end
       end
   end
 end

@@ -918,6 +918,39 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_doctor_reports_boot_and_load_path_recommendations
+    Dir.mktmpdir("rails_dependency_pruner_doctor") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "lib/assets"))
+      File.write(File.join(app_root, ".ruby-version"), "9.9.9\n")
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails/all"
+      RUBY
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "doctor",
+        "--app",
+        app_root,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      ids = payload.fetch("recommendations").map { |entry| entry.fetch("id") }
+      assert_includes ids, "ruby_version_mismatch"
+      assert_includes ids, "replace_rails_all"
+      assert_includes ids, "disable_autoload_paths_load_path"
+      assert_includes ids, "use_autoload_lib_ignore"
+    end
+  end
+
   private
     def write_deterministic_profile(profile_path:, app_root:)
       _stdout, stderr, status = Open3.capture3(
