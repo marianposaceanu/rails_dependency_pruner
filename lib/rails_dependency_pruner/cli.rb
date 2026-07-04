@@ -34,8 +34,14 @@ module RailsDependencyPruner
       command = @argv.shift || "audit"
 
       case command
+      when "approve"
+        run_verify(usage: "approve", default_production: true, default_approve_production: true)
       when "audit"
         run_audit
+      when "check"
+        run_verify(usage: "check")
+      when "diff"
+        run_profile_diff(usage: "diff")
       when "apply"
         run_apply
       when "doctor"
@@ -46,10 +52,14 @@ module RailsDependencyPruner
         run_explain
       when "measure"
         run_measure
+      when "patch"
+        run_apply_boot_plan(usage: "patch")
       when "plan"
         run_plan
       when "profile"
         run_profile
+      when "shim"
+        run_apply_early_boot_shim(usage: "shim")
       when "verify"
         run_verify
       when "why-kept"
@@ -95,8 +105,12 @@ module RailsDependencyPruner
         0
       end
 
-      def run_verify
-        options = options_parser.verify
+      def run_verify(usage: "verify", default_production: false, default_approve_production: false)
+        options = options_parser.verify(
+          usage: usage,
+          default_production: default_production,
+          default_approve_production: default_approve_production,
+        )
         profile = Profile.load(options.fetch(:profile_path))
         index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
         usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
@@ -136,12 +150,19 @@ module RailsDependencyPruner
       end
 
       def run_measure
-        subcommand = @argv.shift || "help"
+        subcommand = @argv.first
 
         case subcommand
         when "boot"
+          @argv.shift
+          run_measure_boot
+        when nil
+          puts measure_help
+          0
+        when /\A-/
           run_measure_boot
         when "help", "-h", "--help"
+          @argv.shift
           puts measure_help
           0
         else
@@ -228,8 +249,8 @@ module RailsDependencyPruner
         end
       end
 
-      def run_apply_boot_plan
-        options = options_parser.apply_boot_plan
+      def run_apply_boot_plan(usage: "apply boot-plan")
+        options = options_parser.apply_boot_plan(usage: usage)
         Profile.load(options.fetch(:profile_path))
 
         planner = build_planner(options)
@@ -248,8 +269,8 @@ module RailsDependencyPruner
         0
       end
 
-      def run_apply_early_boot_shim
-        options = options_parser.apply_early_boot_shim
+      def run_apply_early_boot_shim(usage: "apply early-boot-shim")
+        options = options_parser.apply_early_boot_shim(usage: usage)
         patch = Apply::EarlyBootPatch.new(app_root: options.fetch(:app_root))
 
         if options[:write_patch]
@@ -372,8 +393,8 @@ module RailsDependencyPruner
         0
       end
 
-      def run_profile_diff
-        options = options_parser.profile_diff
+      def run_profile_diff(usage: "profile diff")
+        options = options_parser.profile_diff(usage: usage)
         diff = ProfileDiff.new(
           old_profile: Profile.load(options.fetch(:old_profile_path)),
           new_profile: Profile.load(options.fetch(:new_profile_path)),
@@ -425,23 +446,34 @@ module RailsDependencyPruner
           Usage: rails-dependency-pruner plan [options]
                  rails-dependency-pruner COMMAND [options]
 
+          Common flow:
+            plan     Build the profile and optional boot-plan patch
+            check    Verify a profile against the current app
+            approve  Run production checks and mark the profile production-ready
+            patch    Write the reviewed boot-plan patch
+            shim     Write the reviewed config/boot.rb shim patch
+            measure  Measure boot memory in fresh processes
+
           Commands:
-            plan  Build a deterministic profile and optional boot-plan patch
-            index  Build a Rails constant dependency tree
-            audit  Scan an app and find unused Rails constants
-            apply boot-plan  Write a reviewed patch replacing rails/all
-            apply early-boot-shim  Write a reviewed config/boot.rb shim patch
-            doctor  Print production-readiness recommendations
+            plan            Build a deterministic profile and optional boot-plan patch
+            check           Verify a profile and app safety gates
+            approve         Same as check --production --approve-production
+            patch           Write a reviewed patch replacing rails/all
+            shim            Write a reviewed config/boot.rb shim patch
+            diff            Compare two profiles
             explain TARGET  Explain a constant/framework/require decision
-            measure boot  Measure boot memory in fresh processes
-            profile build  Build a deterministic profile
-            profile validate  Validate a deterministic profile against current inputs
-            verify  Validate profile and app safety gates
-            why-kept TARGET  Alias for explain TARGET
+            measure         Measure boot memory in fresh processes
+            doctor          Print production-readiness recommendations
+            audit, index    Lower-level scan commands
+
+          Compatibility aliases:
+            verify, profile validate, profile diff, apply boot-plan,
+            apply early-boot-shim, measure boot
 
           Common path:
             rails-dependency-pruner plan
-            rails-dependency-pruner plan --coverage config/pruner_coverage.yml --patch tmp/pruner-boot-plan.patch
+            rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
+            rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml
             rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json
 
           Plan options:
@@ -460,6 +492,11 @@ module RailsDependencyPruner
             rails-dependency-pruner profile build --app . --write config/rails_dependency_pruner_profile.json
             rails-dependency-pruner profile validate [options]
             rails-dependency-pruner profile diff --old old.json --new new.json
+
+          Prefer:
+            rails-dependency-pruner plan
+            rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
+            rails-dependency-pruner diff --old old.json --new new.json
 
           Build required:
             --app PATH
@@ -488,6 +525,10 @@ module RailsDependencyPruner
           Usage: rails-dependency-pruner apply boot-plan [options]
                  rails-dependency-pruner apply early-boot-shim [options]
 
+          Prefer:
+            rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch
+            rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch
+
           Boot-plan required:
             --profile PATH
             --app PATH
@@ -507,7 +548,8 @@ module RailsDependencyPruner
 
       def measure_help
         <<~HELP
-          Usage: rails-dependency-pruner measure boot [options]
+          Usage: rails-dependency-pruner measure [options]
+                 rails-dependency-pruner measure boot [options]
 
           Required:
             --app PATH

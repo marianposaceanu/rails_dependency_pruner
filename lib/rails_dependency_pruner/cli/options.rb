@@ -57,7 +57,7 @@ module RailsDependencyPruner
         options
       end
 
-      def profile_validate
+      def profile_validate(usage: "profile validate")
         options = {
           app_root: nil,
           rails_root: nil,
@@ -69,7 +69,7 @@ module RailsDependencyPruner
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner profile validate [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--profile PATH", "Profile to validate") { |path| options[:profile_path] = path }
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
           parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
@@ -91,7 +91,7 @@ module RailsDependencyPruner
         options
       end
 
-      def profile_build
+      def profile_build(usage: "profile build")
         options = {
           app_root: nil,
           rails_root: nil,
@@ -105,7 +105,7 @@ module RailsDependencyPruner
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner profile build [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
           parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
           parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
@@ -205,7 +205,7 @@ module RailsDependencyPruner
         options
       end
 
-      def profile_diff
+      def profile_diff(usage: "profile diff")
         options = {
           old_profile_path: nil,
           new_profile_path: nil,
@@ -213,7 +213,7 @@ module RailsDependencyPruner
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner profile diff [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--old PATH", "Previous profile") { |path| options[:old_profile_path] = path }
           parser.on("--new PATH", "New profile") { |path| options[:new_profile_path] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
@@ -230,7 +230,7 @@ module RailsDependencyPruner
         options
       end
 
-      def verify
+      def verify(usage: "verify", default_production: false, default_approve_production: false)
         options = {
           app_root: nil,
           rails_root: nil,
@@ -239,13 +239,13 @@ module RailsDependencyPruner
           profile_path: nil,
           coverage_path: nil,
           runtime_evidence_paths: [],
-          production: false,
-          approve_production: false,
+          production: default_production,
+          approve_production: default_approve_production,
           json: false,
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner verify [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--profile PATH", "Profile to verify") { |path| options[:profile_path] = path }
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
           parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
@@ -293,7 +293,7 @@ module RailsDependencyPruner
         options
       end
 
-      def apply_boot_plan
+      def apply_boot_plan(usage: "apply boot-plan")
         options = {
           app_root: nil,
           rails_root: nil,
@@ -306,13 +306,14 @@ module RailsDependencyPruner
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner apply boot-plan [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--profile PATH", "Profile used for review context") { |path| options[:profile_path] = path }
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
           parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
           parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
           parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
           parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--patch PATH", "Alias for --write-patch") { |path| options[:write_patch] = path }
           parser.on("--write-patch PATH", "Write a reviewed boot-plan patch") { |path| options[:write_patch] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
@@ -329,7 +330,7 @@ module RailsDependencyPruner
         options
       end
 
-      def apply_early_boot_shim
+      def apply_early_boot_shim(usage: "apply early-boot-shim")
         options = {
           app_root: nil,
           write_patch: nil,
@@ -337,8 +338,9 @@ module RailsDependencyPruner
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner apply early-boot-shim [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--patch PATH", "Alias for --write-patch") { |path| options[:write_patch] = path }
           parser.on("--write-patch PATH", "Write a reviewed config/boot.rb patch") { |path| options[:write_patch] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
@@ -353,7 +355,7 @@ module RailsDependencyPruner
         options
       end
 
-      def measure_boot
+      def measure_boot(usage: "measure")
         options = {
           app_root: nil,
           profile_path: nil,
@@ -364,7 +366,7 @@ module RailsDependencyPruner
         }
 
         parser = OptionParser.new do |parser|
-          parser.banner = "Usage: rails-dependency-pruner measure boot [options]"
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
           parser.on("--profile PATH", "Profile used by shadow/boot_prune/production variants") { |path| options[:profile_path] = path }
           parser.on("--variants NAMES", "Comma-separated variant names") { |names| options[:variants] = split_csv(names) }

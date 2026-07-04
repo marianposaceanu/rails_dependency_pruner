@@ -523,7 +523,6 @@ class RailsDependencyPrunerTest < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
-        "profile",
         "diff",
         "--old",
         old_profile,
@@ -576,7 +575,7 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
-  def test_verify_accepts_current_deterministic_profile
+  def test_check_accepts_current_deterministic_profile
     Dir.mktmpdir("rails_dependency_pruner_verify") do |dir|
       app_root = File.join(dir, "app")
       FileUtils.cp_r(FAKE_APP_ROOT, app_root)
@@ -586,7 +585,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
-        "verify",
+        "check",
         "--profile",
         profile_path,
         "--app",
@@ -791,8 +790,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       _stdout, build_stderr, build_status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
-        "profile",
-        "build",
+        "plan",
         "--app",
         app_root,
         "--rails-root",
@@ -801,7 +799,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         "actionpack,activerecord",
         "--coverage",
         coverage_path,
-        "--write",
+        "--profile",
         profile_path,
         chdir: ROOT.to_s,
       )
@@ -814,7 +812,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
-        "verify",
+        "approve",
         "--profile",
         profile_path,
         "--app",
@@ -825,8 +823,6 @@ class RailsDependencyPrunerTest < Minitest::Test
         "actionpack,activerecord",
         "--coverage",
         coverage_path,
-        "--production",
-        "--approve-production",
         "--json",
         chdir: ROOT.to_s,
       )
@@ -1347,11 +1343,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
-        "apply",
-        "early-boot-shim",
+        "shim",
         "--app",
         app_root,
-        "--write-patch",
+        "--patch",
         patch_path,
         "--json",
         chdir: ROOT.to_s,
@@ -1419,8 +1414,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
-        "apply",
-        "boot-plan",
+        "patch",
         "--profile",
         profile_path,
         "--app",
@@ -1429,7 +1423,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         FAKE_RAILS_ROOT.to_s,
         "--frameworks",
         "actionpack,actionview,activejob,activemodel,activerecord",
-        "--write-patch",
+        "--patch",
         patch_path,
         "--json",
         chdir: ROOT.to_s,
@@ -1515,7 +1509,6 @@ class RailsDependencyPrunerTest < Minitest::Test
         RUBY,
         ROOT.join("exe/rails-dependency-pruner").to_s,
         "measure",
-        "boot",
         "--app",
         FAKE_APP_ROOT.to_s,
         "--profile",

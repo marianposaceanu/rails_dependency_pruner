@@ -50,7 +50,7 @@ review artifact; the command does not modify the app.
 Validate it before using it:
 
 ```bash
-bundle exec rails-dependency-pruner profile validate \
+bundle exec rails-dependency-pruner check \
   --app . \
   --profile config/rails_dependency_pruner_profile.json
 ```
@@ -59,12 +59,10 @@ After a production verification passes, approve the profile for production-mode
 early boot:
 
 ```bash
-bundle exec rails-dependency-pruner verify \
+bundle exec rails-dependency-pruner approve \
   --app . \
   --profile config/rails_dependency_pruner_profile.json \
-  --coverage config/pruner_coverage.yml \
-  --production \
-  --approve-production
+  --coverage config/pruner_coverage.yml
 ```
 
 Ask why a framework or require path was kept or pruned:
@@ -167,10 +165,10 @@ fails if the manifest changes.
 Merge that evidence into the next profile:
 
 ```bash
-bundle exec rails-dependency-pruner audit \
+bundle exec rails-dependency-pruner plan \
   --app . \
   --runtime-evidence tmp/rails_dependency_pruner_runtime.json \
-  --write-profile config/rails_dependency_pruner_profile.json
+  --profile config/rails_dependency_pruner_profile.json
 ```
 
 The generated profile keeps the raw ObjectSpace snapshot and a short
@@ -211,9 +209,9 @@ require "rails_dependency_pruner/early_boot" if ENV["RAILS_DEPENDENCY_PRUNER_EAR
 To generate that as a reviewed patch:
 
 ```bash
-bundle exec rails-dependency-pruner apply early-boot-shim \
+bundle exec rails-dependency-pruner shim \
   --app . \
-  --write-patch tmp/pruner-early-boot.patch
+  --patch tmp/pruner-early-boot.patch
 ```
 
 Shadow mode records would-block require events and does not change boot behavior.
@@ -226,24 +224,24 @@ Shadow mode records would-block require events and does not change boot behavior
 
 - `bundle exec rails-dependency-pruner plan`
 - `bundle exec rails-dependency-pruner plan --coverage config/pruner_coverage.yml --patch tmp/pruner-boot-plan.patch`
-- `bundle exec rails-dependency-pruner index`
-- `bundle exec rails-dependency-pruner audit --app .`
-- `bundle exec rails-dependency-pruner audit --app . --json --no-tree`
-- `bundle exec rails-dependency-pruner audit --app . --write-profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner audit --app . --deterministic --write-profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner profile build --app . --coverage config/pruner_coverage.yml --write config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner profile validate --app . --profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner profile diff --old config/pruner.prev.json --new config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner verify --app . --profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner verify --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --production --approve-production`
+- `bundle exec rails-dependency-pruner check --app . --profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml`
+- `bundle exec rails-dependency-pruner diff --old config/pruner.prev.json --new config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner doctor --app .`
-- `bundle exec rails-dependency-pruner apply boot-plan --app . --profile config/rails_dependency_pruner_profile.json --write-patch tmp/pruner-boot-plan.patch`
-- `bundle exec rails-dependency-pruner apply early-boot-shim --app . --write-patch tmp/pruner-early-boot.patch`
-- `bundle exec rails-dependency-pruner measure boot --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json`
+- `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`
+- `bundle exec rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch`
+- `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner why-kept ActiveStorage --profile config/rails_dependency_pruner_profile.json`
-- `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`
+
+Lower-level scan commands are still available for experiments:
+
+- `bundle exec rails-dependency-pruner index`
+- `bundle exec rails-dependency-pruner audit --app . --json --no-tree`
+
+Older nested commands such as `profile validate`, `profile diff`,
+`apply boot-plan`, `apply early-boot-shim`, `measure boot`, and `verify` remain
+as aliases.
 
 Installed Rails `8.x` gems are used by default. `--rails-root PATH` exists only
 for fixture and development checks against a Rails checkout.
