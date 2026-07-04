@@ -835,6 +835,83 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_explain_reads_profile_decisions_without_rescanning_app
+    Dir.mktmpdir("rails_dependency_pruner_profile_explain") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,actionview,activejob,activemodel,activerecord",
+        "--profile",
+        profile_path,
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      pruned_stdout, pruned_stderr, pruned_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "explain",
+        "active_job",
+        "--profile",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert pruned_status.success?, pruned_stderr
+      pruned = JSON.parse(pruned_stdout)
+      assert_equal "activejob", pruned.fetch("target")
+      assert_equal "framework", pruned.fetch("target_type")
+      assert_equal "pruned", pruned.fetch("decision")
+      assert_equal "disable_framework", pruned.dig("evidence", "decision")
+
+      kept_stdout, kept_stderr, kept_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "why-kept",
+        "ActiveRecord",
+        "--profile",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert kept_status.success?, kept_stderr
+      kept = JSON.parse(kept_stdout)
+      assert_equal "activerecord", kept.fetch("target")
+      assert_equal "kept", kept.fetch("decision")
+      assert kept.dig("evidence", "positive_evidence").any? { |entry| entry.include?("ActiveRecord::Base") }
+
+      require_stdout, require_stderr, require_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "explain",
+        "require:active_job/railtie",
+        "--profile",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert require_status.success?, require_stderr
+      require_payload = JSON.parse(require_stdout)
+      assert_equal "require_path", require_payload.fetch("target_type")
+      assert_equal "pruned", require_payload.fetch("decision")
+      assert_equal ["active_job/railtie"], require_payload.dig("evidence", "disabled_railties")
+    end
+  end
+
   def test_cli_merges_runtime_evidence
     stdout, stderr, status = Open3.capture3(
       RUBY,

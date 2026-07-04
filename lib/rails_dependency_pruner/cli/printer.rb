@@ -97,6 +97,30 @@ module RailsDependencyPruner
         end
       end
 
+      def profile_explanation(explanation)
+        puts "#{explanation.fetch("target")}: #{explanation.fetch("decision")}"
+        puts "Type: #{explanation.fetch("target_type")}"
+        puts "Reason: #{explanation.fetch("reason")}"
+
+        evidence = explanation.fetch("evidence")
+        return if evidence.empty?
+
+        if evidence["positive_evidence"]&.any?
+          puts
+          puts "Positive evidence:"
+          evidence.fetch("positive_evidence").first(20).each { |entry| puts "  #{entry}" }
+        end
+
+        if evidence["negative_evidence"]&.any?
+          puts
+          puts "Negative evidence:"
+          evidence.fetch("negative_evidence").first(20).each { |entry| puts "  #{entry}" }
+        end
+
+        puts
+        puts "Railtie: #{evidence.fetch("railtie")}" if evidence["railtie"]
+      end
+
       def boot_plan(boot_plan, patch_path:)
         puts "Required frameworks:"
         boot_plan.required_frameworks.each { |framework| puts "  #{framework}" }

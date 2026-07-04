@@ -129,6 +129,39 @@ module RailsDependencyPruner
         options
       end
 
+      def explain
+        options = {
+          app_root: nil,
+          rails_root: nil,
+          scan_roots: AppUsage::DEFAULT_SCAN_ROOTS,
+          frameworks: ConstantIndex::DEFAULT_FRAMEWORKS,
+          runtime_evidence_paths: [],
+          profile_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner explain TARGET [options]"
+          parser.on("--profile PATH", "Read explanation from an existing profile") { |path| options[:profile_path] = path }
+          parser.on("--app PATH", "Rails app root to scan when --profile is not used") { |path| options[:app_root] = path }
+          parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
+          parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
+          parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
+          parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
+        raise ArgumentError, "--app is required when --profile is not used" if blank?(options[:profile_path]) && blank?(options[:app_root])
+
+        options
+      end
+
       def plan
         options = {
           app_root: Dir.pwd,

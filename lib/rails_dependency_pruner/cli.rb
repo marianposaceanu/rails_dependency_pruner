@@ -15,6 +15,7 @@ require_relative "planner"
 require_relative "profile"
 require_relative "profile_context"
 require_relative "profile_diff"
+require_relative "profile_explainer"
 require_relative "profile_verifier"
 require_relative "profile_validator"
 require_relative "measurement/runner"
@@ -51,6 +52,8 @@ module RailsDependencyPruner
         run_profile
       when "verify"
         run_verify
+      when "why-kept"
+        run_explain
       when "help", "-h", "--help"
         puts help
         0
@@ -255,15 +258,20 @@ module RailsDependencyPruner
       end
 
       def run_explain
-        options = options_parser.audit(require_app: true)
+        options = options_parser.explain
         target = @argv.shift
-        raise ArgumentError, "CONSTANT is required" if blank?(target)
+        raise ArgumentError, "TARGET is required" if blank?(target)
 
-        planner = build_planner(options)
-        explanation = planner.explain_constant(target)
+        explanation = if options[:profile_path]
+          ProfileExplainer.new(profile: Profile.load(options.fetch(:profile_path))).explain(target)
+        else
+          build_planner(options).explain_constant(target)
+        end
 
         if options.fetch(:json)
           puts JSON.pretty_generate(explanation)
+        elsif options[:profile_path]
+          printer.profile_explanation(explanation)
         else
           printer.explanation(explanation)
         end
@@ -413,15 +421,17 @@ module RailsDependencyPruner
             apply boot-plan  Write a reviewed patch replacing rails/all
             apply early-boot-shim  Write a reviewed config/boot.rb shim patch
             doctor  Print production-readiness recommendations
-            explain CONSTANT  Explain why a Rails constant is used or unused
+            explain TARGET  Explain a constant/framework/require decision
             measure boot  Measure boot memory in fresh processes
             profile build  Build a deterministic profile
             profile validate  Validate a deterministic profile against current inputs
             verify  Validate profile and app safety gates
+            why-kept TARGET  Alias for explain TARGET
 
           Common path:
             rails-dependency-pruner plan
             rails-dependency-pruner plan --coverage config/pruner_coverage.yml --patch tmp/pruner-boot-plan.patch
+            rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json
 
           Plan options:
             --app PATH                 Defaults to current directory

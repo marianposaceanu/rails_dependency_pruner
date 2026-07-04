@@ -55,6 +55,16 @@ bundle exec rails-dependency-pruner profile validate \
   --profile config/rails_dependency_pruner_profile.json
 ```
 
+Ask why a framework or require path was kept or pruned:
+
+```bash
+bundle exec rails-dependency-pruner explain ActiveStorage \
+  --profile config/rails_dependency_pruner_profile.json
+
+bundle exec rails-dependency-pruner explain require:active_storage/engine \
+  --profile config/rails_dependency_pruner_profile.json
+```
+
 Enable the engine in `config/environments/development.rb` or another controlled
 environment:
 
@@ -218,6 +228,8 @@ Shadow mode records would-block require events and does not change boot behavior
 - `bundle exec rails-dependency-pruner apply early-boot-shim --app . --write-patch tmp/pruner-early-boot.patch`
 - `bundle exec rails-dependency-pruner measure boot --app . --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
+- `bundle exec rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner why-kept ActiveStorage --profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`
 
 Installed Rails `8.x` gems are used by default. `--rails-root PATH` exists only
