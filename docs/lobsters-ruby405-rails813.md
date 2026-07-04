@@ -86,6 +86,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-latency-smoke.json`
 - `tmp/lobsters-ruby405-rails813-latency-smoke.md`
 - `tmp/lobsters-ruby405-rails813-latency-smoke.stdout.json`
+- `tmp/lobsters-ruby405-rails813-latency-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
@@ -126,6 +127,16 @@ Gem policy smoke:
 - artifact: `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - lazy gems in the strict profile: `18`
 - unsupported lazy gems: `0`
+
+Latency policy smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-latency-policy-smoke.json`
+- policy: `min_total_savings_mib: 20`, `min_total_savings_percent: 10`,
+  `max_first_request_latency_regression_ms: 100`,
+  `max_warmed_p95_latency_regression_percent: 5`
+- result: failed latency gates while still saving `100.7 MiB`
+- first request delta: `+217.1 ms`
+- warmed p95 delta: `+464.4%`
 
 Request ablation smoke, one run per variant:
 

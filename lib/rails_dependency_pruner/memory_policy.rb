@@ -8,6 +8,38 @@ module RailsDependencyPruner
       baseline
       process_warmup
     ].freeze
+    LATENCY_GATES = [
+      {
+        "name" => "first_request",
+        "metric_key" => "first_request_duration_ms_median",
+        "max_ms_key" => "max_first_request_latency_regression_ms",
+        "max_percent_key" => "max_first_request_latency_regression_percent",
+      },
+      {
+        "name" => "request_p95",
+        "metric_key" => "request_duration_ms_p95_median",
+        "max_ms_key" => "max_request_p95_latency_regression_ms",
+        "max_percent_key" => "max_request_p95_latency_regression_percent",
+      },
+      {
+        "name" => "request_p99",
+        "metric_key" => "request_duration_ms_p99_median",
+        "max_ms_key" => "max_request_p99_latency_regression_ms",
+        "max_percent_key" => "max_request_p99_latency_regression_percent",
+      },
+      {
+        "name" => "warmed_p95",
+        "metric_key" => "warmed_request_duration_ms_p95_median",
+        "max_ms_key" => "max_warmed_p95_latency_regression_ms",
+        "max_percent_key" => "max_warmed_p95_latency_regression_percent",
+      },
+      {
+        "name" => "warmed_p99",
+        "metric_key" => "warmed_request_duration_ms_p99_median",
+        "max_ms_key" => "max_warmed_p99_latency_regression_ms",
+        "max_percent_key" => "max_warmed_p99_latency_regression_percent",
+      },
+    ].freeze
 
     attr_reader :policy, :measurement
 
@@ -28,6 +60,7 @@ module RailsDependencyPruner
       check_reference_profile(errors)
       check_reference_savings(errors, summary)
       check_transform_savings(errors, transform_savings)
+      check_latency_regressions(errors, summary)
 
       {
         "configured" => true,
@@ -69,7 +102,7 @@ module RailsDependencyPruner
         end
 
         saved_kb = baseline_rss_kb - candidate_rss_kb
-        {
+        summary = {
           "baseline_variant" => baseline_variant,
           "candidate_variant" => candidate_variant,
           "baseline_rss_kb" => baseline_rss_kb,
@@ -78,6 +111,9 @@ module RailsDependencyPruner
           "saved_mib" => saved_kb / 1024.0,
           "saved_percent" => baseline_rss_kb.positive? ? (saved_kb.to_f / baseline_rss_kb) * 100 : 0.0,
         }
+        latency = latency_summary(baseline, candidate)
+        summary["latency"] = latency unless latency.empty?
+        summary
       end
 
       def check_total_savings(errors, summary)
@@ -146,6 +182,43 @@ module RailsDependencyPruner
         end
       end
 
+      def check_latency_regressions(errors, summary)
+        LATENCY_GATES.each do |gate|
+          max_ms = number(policy[gate.fetch("max_ms_key")])
+          max_percent = number(policy[gate.fetch("max_percent_key")])
+          next unless max_ms || max_percent
+
+          metric = summary.dig("latency", gate.fetch("name"))
+          unless metric && metric.key?("delta_ms")
+            errors << "memory policy #{gate.fetch("name")} latency gate requires #{gate.fetch("metric_key")}"
+            next
+          end
+
+          if max_ms && metric.fetch("delta_ms") > max_ms
+            errors << format(
+              "memory policy #{gate.fetch("max_ms_key")} not met: regression %.1f ms, allowed %.1f ms",
+              metric.fetch("delta_ms"),
+              max_ms,
+            )
+          end
+
+          next unless max_percent
+
+          delta_percent = metric["delta_percent"]
+          unless delta_percent
+            errors << "memory policy #{gate.fetch("max_percent_key")} requires positive baseline #{gate.fetch("metric_key")}"
+            next
+          end
+          next if delta_percent <= max_percent
+
+          errors << format(
+            "memory policy #{gate.fetch("max_percent_key")} not met: regression %.1f%%, allowed %.1f%%",
+            delta_percent,
+            max_percent,
+          )
+        end
+      end
+
       def transform_savings_summary
         baseline = variant_summary("baseline")
         baseline_rss_kb = number(baseline && baseline["rss_kb_median"])
@@ -195,6 +268,25 @@ module RailsDependencyPruner
 
         explicit_mib = number(policy["reference_savings_mib"] || policy["reference_total_savings_mib"])
         explicit_mib && explicit_mib * 1024.0
+      end
+
+      def latency_summary(baseline, candidate)
+        LATENCY_GATES.each_with_object({}) do |gate, summary|
+          baseline_ms = number(baseline[gate.fetch("metric_key")])
+          candidate_ms = number(candidate[gate.fetch("metric_key")])
+          next if baseline_ms.nil? && candidate_ms.nil?
+
+          metric = {
+            "baseline_ms" => baseline_ms,
+            "candidate_ms" => candidate_ms,
+          }.compact
+          if baseline_ms && candidate_ms
+            delta_ms = candidate_ms - baseline_ms
+            metric["delta_ms"] = delta_ms
+            metric["delta_percent"] = (delta_ms / baseline_ms) * 100.0 if baseline_ms.positive?
+          end
+          summary[gate.fetch("name")] = metric
+        end
       end
 
       def number(value)

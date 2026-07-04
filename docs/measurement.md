@@ -53,6 +53,9 @@ A coverage manifest can define a profile-level memory policy:
 memory_policy:
   min_total_savings_mib: 20
   min_total_savings_percent: 10
+  max_first_request_latency_regression_ms: 100
+  max_warmed_p95_latency_regression_percent: 5
+  max_warmed_p99_latency_regression_percent: 10
   preserve_at_least_percent_of_reference_savings: 80
   reference_savings_mib: 98.3
   reference_profile_id: sha256:...
@@ -77,6 +80,12 @@ fails production approval when:
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`
 - total saved RSS is below `min_total_savings_percent`
+- first request latency exceeds `max_first_request_latency_regression_ms`
+  or `max_first_request_latency_regression_percent`
+- request p95/p99 latency exceeds `max_request_p95_latency_regression_*`
+  or `max_request_p99_latency_regression_*`
+- warmed p95/p99 latency exceeds `max_warmed_p95_latency_regression_*`
+  or `max_warmed_p99_latency_regression_*`
 - saved RSS is below the requested percentage of `reference_savings_mib`
 - `reference_profile_id` is set and does not match the measurement profile id
 

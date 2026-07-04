@@ -2059,6 +2059,8 @@ class RailsDependencyPrunerTest < Minitest::Test
         memory_policy:
           min_total_savings_mib: 20
           min_total_savings_percent: 10
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
           preserve_at_least_percent_of_reference_savings: 80
           reference_savings_mib: 98.3
       YAML
@@ -2088,6 +2090,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal 20, payload.dig("memory_policy", "min_total_savings_mib")
       assert_equal 10, payload.dig("memory_policy", "min_total_savings_percent")
+      assert_equal 100, payload.dig("memory_policy", "max_first_request_latency_regression_ms")
+      assert_equal 5, payload.dig("memory_policy", "max_warmed_p95_latency_regression_percent")
       assert_equal 80, payload.dig("memory_policy", "preserve_at_least_percent_of_reference_savings")
       assert_equal 98.3, payload.dig("memory_policy", "reference_savings_mib")
       assert_equal payload.fetch("profile_id"), JSON.parse(File.read(profile_path)).fetch("profile_id")
@@ -4674,6 +4678,43 @@ class RailsDependencyPrunerTest < Minitest::Test
         "saved_mib" => 9.765625,
       },
     ], result.fetch("transform_savings")
+  end
+
+  def test_memory_policy_enforces_latency_regression_gates
+    result = RailsDependencyPruner::MemoryPolicy.new(
+      policy: {
+        "min_total_savings_mib" => 20,
+        "max_first_request_latency_regression_ms" => 100,
+        "max_warmed_p95_latency_regression_percent" => 5,
+        "max_warmed_p99_latency_regression_ms" => 10,
+      },
+      measurement: {
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 30.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+            "first_request_duration_ms_median" => 140.0,
+            "warmed_request_duration_ms_p95_median" => 11.0,
+            "warmed_request_duration_ms_p99_median" => 45.0,
+          },
+        },
+      },
+    ).evaluate
+
+    assert_equal false, result.fetch("passed")
+    assert_equal 40_000, result.dig("measurement", "saved_kb")
+    assert_equal 120.0, result.dig("measurement", "latency", "first_request", "delta_ms")
+    assert_equal 10.0, result.dig("measurement", "latency", "warmed_p95", "delta_percent")
+    assert_includes result.fetch("errors"), "memory policy max_first_request_latency_regression_ms not met: regression 120.0 ms, allowed 100.0 ms"
+    assert_includes result.fetch("errors"), "memory policy max_warmed_p95_latency_regression_percent not met: regression 10.0%, allowed 5.0%"
+    assert_includes result.fetch("errors"), "memory policy max_warmed_p99_latency_regression_ms not met: regression 15.0 ms, allowed 10.0 ms"
   end
 
   def test_measure_environment_no_eager_load_variant_skips_eager_load

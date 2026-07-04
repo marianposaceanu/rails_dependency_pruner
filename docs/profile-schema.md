@@ -53,6 +53,16 @@ Supported gates:
 
 - `min_total_savings_mib`
 - `min_total_savings_percent`
+- `max_first_request_latency_regression_ms`
+- `max_first_request_latency_regression_percent`
+- `max_request_p95_latency_regression_ms`
+- `max_request_p95_latency_regression_percent`
+- `max_request_p99_latency_regression_ms`
+- `max_request_p99_latency_regression_percent`
+- `max_warmed_p95_latency_regression_ms`
+- `max_warmed_p95_latency_regression_percent`
+- `max_warmed_p99_latency_regression_ms`
+- `max_warmed_p99_latency_regression_percent`
 - `preserve_at_least_percent_of_reference_savings`
 - `reference_savings_kb` or `reference_savings_mib`
 - `reference_profile_id`
