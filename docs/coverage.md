@@ -34,6 +34,10 @@ coverage normalizes to `attachments` only when a storage action such as upload,
 analyze, variant, preview, or representation is marked covered. A declaration
 inventory by itself is not attachment coverage.
 
+Production verification also checks coverage required by the Rails feature
+catalog. For example, Active Storage catalog evidence requires the normalized
+`attachments` workload before an Active Storage railtie skip can be approved.
+
 High-risk overrides are explicit and temporary:
 
 ```yaml

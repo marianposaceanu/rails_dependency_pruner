@@ -52,6 +52,9 @@ any contract field.
 When static evidence blocks an extreme-boot transform,
 `production_risks.extreme_boot_static_matches` includes the matched catalog
 pattern, owned railties, required coverage sections, and negative rules.
+When catalog evidence also lacks matching coverage,
+`production_risks.catalog_coverage_gaps` records the target transform,
+evidence location, required workloads, and missing workloads.
 
 ## fingerprints
 

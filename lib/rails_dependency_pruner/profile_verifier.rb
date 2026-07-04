@@ -105,6 +105,9 @@ module RailsDependencyPruner
         coverage_workload_gaps.each do |gap|
           errors << "production verify missing coverage workload for disabled framework: #{format_coverage_workload_gap(gap)}"
         end
+        catalog_coverage_gaps.each do |gap|
+          errors << "production verify missing catalog coverage workload: #{format_catalog_coverage_gap(gap)}"
+        end
         extreme_boot_workload_gaps.each do |gap|
           errors << "production verify missing coverage workload for extreme boot: #{format_coverage_workload_gap(gap)}"
         end
@@ -139,6 +142,7 @@ module RailsDependencyPruner
           "dynamic_boot_require_matches" => dynamic_boot_require_risks,
           "dynamic_constantization_matches" => dynamic_constantization_risks,
           "coverage_workload_gaps" => coverage_workload_gaps,
+          "catalog_coverage_gaps" => catalog_coverage_gaps,
           "extreme_boot_workload_gaps" => extreme_boot_workload_gaps,
           "missing_profile_transforms" => missing_profile_transforms,
           "unknown_profile_transforms" => unknown_profile_transforms,
@@ -247,6 +251,40 @@ module RailsDependencyPruner
             "missing_workloads" => missing_workloads,
           }
         end.sort_by { |gap| gap.fetch("framework") }
+      end
+
+      def catalog_coverage_gaps
+        @catalog_coverage_gaps ||= catalog_coverage_targets.flat_map do |target|
+          framework = target.fetch("framework")
+          catalog_static_matches(framework).filter_map do |match|
+            required_workloads = catalog_required_workloads(match)
+            missing_workloads = required_workloads - coverage_workloads
+            next if missing_workloads.empty?
+
+            {
+              "source" => "feature_catalog",
+              "target" => target.fetch("target"),
+              "target_kind" => target.fetch("target_kind"),
+              "framework" => framework,
+              "feature" => match.fetch("feature"),
+              "evidence_kind" => match.fetch("evidence_kind"),
+              "pattern" => match["pattern"],
+              "path" => match.fetch("path"),
+              "line" => match.fetch("line"),
+              "required_workloads" => required_workloads,
+              "missing_workloads" => missing_workloads,
+              "negative_rules" => Array(match["negative_rules"]),
+            }
+          end
+        end.uniq.sort_by do |gap|
+          [
+            gap.fetch("target"),
+            gap.fetch("feature"),
+            gap.fetch("path"),
+            gap.fetch("line").to_i,
+            gap.fetch("pattern").to_s,
+          ]
+        end
       end
 
       def extreme_boot_workload_gaps
@@ -376,6 +414,41 @@ module RailsDependencyPruner
           match["framework"] == "activestorage" &&
             ACTIVE_STORAGE_ATTACHMENT_PATTERNS.include?(match["pattern"])
         end
+      end
+
+      def catalog_coverage_targets
+        disabled_targets = disabled_frameworks.map do |framework|
+          {
+            "target" => framework,
+            "target_kind" => "disabled_framework",
+            "framework" => framework,
+          }
+        end
+
+        skipped_targets = Array(extreme_boot["skip_railties"]).filter_map do |railtie|
+          framework = RAILTIE_FRAMEWORKS[railtie]
+          next unless framework
+
+          {
+            "target" => railtie,
+            "target_kind" => "skip_railtie",
+            "framework" => framework,
+          }
+        end
+
+        (disabled_targets + skipped_targets).uniq
+      end
+
+      def catalog_static_matches(framework)
+        (usage.feature_matches + usage.config_matches + usage.route_matches).select do |match|
+          static_path_relevant?(match.fetch("path")) && match["framework"] == framework
+        end
+      end
+
+      def catalog_required_workloads(match)
+        Array(match["coverage_required"]).map do |workload|
+          CoverageManifest.normalize_workload_key(workload)
+        end.uniq.sort
       end
 
       def disable_eager_load_latency_policy_gaps
@@ -613,6 +686,17 @@ module RailsDependencyPruner
 
       def format_coverage_workload_gap(gap)
         "#{gap.fetch("framework")} requires #{gap.fetch("missing_workloads").join(", ")}"
+      end
+
+      def format_catalog_coverage_gap(gap)
+        evidence = [
+          gap.fetch("feature"),
+          gap["pattern"],
+          gap.fetch("path"),
+          gap.fetch("line"),
+        ].compact.join(":")
+
+        "#{gap.fetch("target")} #{evidence} requires #{gap.fetch("missing_workloads").join(", ")}"
       end
 
       def high_risk_gap(transform_id, requirement, missing_requirements, alternative: nil)

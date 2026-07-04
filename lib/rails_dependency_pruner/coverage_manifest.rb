@@ -55,6 +55,10 @@ module RailsDependencyPruner
       raise ArgumentError, "coverage manifest is invalid YAML: #{error.message}"
     end
 
+    def self.normalize_workload_key(key)
+      WORKLOAD_ALIASES.fetch(key.to_s, key.to_s)
+    end
+
     def digest
       SourceDigest.file(path)
     end
@@ -148,7 +152,7 @@ module RailsDependencyPruner
       end
 
       def normalize_workload_key(key)
-        WORKLOAD_ALIASES.fetch(key.to_s, key.to_s)
+        self.class.normalize_workload_key(key)
       end
 
       def high_risk_override_key(transform_id)

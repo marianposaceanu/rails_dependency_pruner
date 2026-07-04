@@ -1260,7 +1260,20 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: disable_eager_load requires requests"
       assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: active_storage/engine requires attachments"
+      assert_includes payload.fetch("errors"), "production verify missing catalog coverage workload: active_storage/engine active_storage:has_one_attached:app/models/avatar.rb:2 requires attachments"
       assert_equal %w[active_storage/engine disable_eager_load], payload.dig("production_risks", "extreme_boot_workload_gaps").map { |gap| gap.fetch("framework") }.sort
+      catalog_gap = payload.dig("production_risks", "catalog_coverage_gaps").find do |gap|
+        gap.fetch("target") == "active_storage/engine" && gap.fetch("feature") == "active_storage"
+      end
+      assert_equal "feature_catalog", catalog_gap.fetch("source")
+      assert_equal "skip_railtie", catalog_gap.fetch("target_kind")
+      assert_equal "activestorage", catalog_gap.fetch("framework")
+      assert_equal "dsl", catalog_gap.fetch("evidence_kind")
+      assert_equal "has_one_attached", catalog_gap.fetch("pattern")
+      assert_equal "app/models/avatar.rb", catalog_gap.fetch("path")
+      assert_equal ["attachments"], catalog_gap.fetch("required_workloads")
+      assert_equal ["attachments"], catalog_gap.fetch("missing_workloads")
+      assert catalog_gap.fetch("negative_rules").any? { |rule| rule.fetch("evidence") == "has_one_attached" }
       static_match = payload.dig("production_risks", "extreme_boot_static_matches").find do |match|
         match.fetch("railtie") == "active_storage/engine" && match.fetch("kind") == "feature"
       end
