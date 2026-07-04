@@ -985,6 +985,71 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_attachment_coverage_for_vips_lazy_gem_with_attachments
+    Dir.mktmpdir("rails_dependency_pruner_vips_attachment_coverage_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "ruby-vips",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: ruby-vips requires attachments"
+      assert_equal [
+        {
+          "framework" => "ruby-vips",
+          "required_workloads" => %w[attachments],
+          "missing_workloads" => %w[attachments],
+        },
+      ], payload.dig("production_risks", "extreme_boot_workload_gaps")
+    end
+  end
+
   def test_verify_production_rejects_missing_lazy_require_coverage
     Dir.mktmpdir("rails_dependency_pruner_lazy_require_coverage_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -2812,6 +2877,92 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal "constant", payload.fetch("defined")
       assert_equal false, payload.fetch("loaded")
+    end
+  end
+
+  def test_early_boot_stubs_active_storage_vips_analyzer
+    Dir.mktmpdir("rails_dependency_pruner_early_vips_analyzer_stub") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      fake_analyzer_path = File.join(dir, "active_storage/analyzer/image_analyzer")
+      FileUtils.mkdir_p(fake_analyzer_path)
+      File.write(File.join(fake_analyzer_path, "vips.rb"), <<~RUBY)
+        VIPS_ANALYZER_FILE_LOADED = true
+        require "ruby-vips"
+      RUBY
+      File.write(File.join(dir, "vips.rb"), <<~RUBY)
+        module Vips
+          class Image
+          end
+        end
+      RUBY
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["ruby-vips"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+
+          module ActiveStorage
+            class Analyzer
+            end
+            class Analyzer::ImageAnalyzer < Analyzer
+              autoload :Vips, "active_storage/analyzer/image_analyzer/vips"
+            end
+          end
+
+          analyzer = ActiveStorage::Analyzer::ImageAnalyzer::Vips
+          analyzer_accepts = analyzer.accept?(Object.new)
+          analyzer_file_loaded = Object.const_defined?(:VIPS_ANALYZER_FILE_LOADED, false)
+          vips_before = Object.const_defined?(:Vips, false)
+          image_class = Vips::Image
+          vips_after = Object.const_defined?(:Vips, false)
+
+          puts JSON.generate(
+            "analyzer_class" => analyzer.name,
+            "analyzer_accepts" => analyzer_accepts,
+            "analyzer_file_loaded" => analyzer_file_loaded,
+            "vips_before" => vips_before,
+            "vips_after" => vips_after,
+            "image_class" => image_class.name,
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "ActiveStorage::Analyzer::ImageAnalyzer::Vips", payload.fetch("analyzer_class")
+      assert_equal false, payload.fetch("analyzer_accepts")
+      assert_equal false, payload.fetch("analyzer_file_loaded")
+      assert_equal false, payload.fetch("vips_before")
+      assert_equal true, payload.fetch("vips_after")
+      assert_equal "Vips::Image", payload.fetch("image_class")
+
+      early_payload = JSON.parse(File.read(output_path))
+      assert early_payload.fetch("events").any? { |event| event["action"] == "stubbed_lazy_gem_require" && event["gem"] == "ruby-vips" }
+      assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == "ruby-vips" }
     end
   end
 

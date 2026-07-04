@@ -9,6 +9,7 @@ require_relative "runtime_framework_matcher"
 module RailsDependencyPruner
   class ProfileVerifier
     UNIVERSAL_DYNAMIC_CONSTANT_RECEIVERS = %w[Kernel Object].freeze
+    ACTIVE_STORAGE_ATTACHMENT_PATTERNS = %w[has_many_attached has_one_attached].freeze
     COVERAGE_WORKLOAD_REQUIREMENTS = {
       "actioncable" => %w[cable],
       "actionmailbox" => %w[routes],
@@ -23,6 +24,7 @@ module RailsDependencyPruner
       "active_job/railtie" => %w[jobs],
       "active_storage/engine" => %w[attachments routes],
       "disable_eager_load" => %w[requests],
+      "rack-mini-profiler" => %w[requests],
     }.freeze
     SUPPORTED_LAZY_REQUIRE_PATHS = %w[
       action_mailbox/mail_ext
@@ -235,6 +237,10 @@ module RailsDependencyPruner
             required_workloads = extreme_boot_required_workloads(path)
             gaps << workload_gap(path, required_workloads)
           end
+          Array(extreme_boot["lazy_gems"]).each do |gem_name|
+            required_workloads = extreme_boot_required_workloads(gem_name)
+            gaps << workload_gap(gem_name, required_workloads)
+          end
 
           gaps.compact.sort_by { |gap| gap.fetch("framework") }
         end
@@ -244,6 +250,9 @@ module RailsDependencyPruner
         required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(name, [])
         if name == "active_storage/engine" && action_mailbox_static_usage?
           required_workloads += %w[inbound_email]
+        end
+        if name == "ruby-vips" && active_storage_attachment_static_usage?
+          required_workloads += %w[attachments]
         end
 
         required_workloads.uniq
@@ -284,6 +293,13 @@ module RailsDependencyPruner
             constant_matches("action_mailbox/engine", Array(rules["constants"])) +
             framework_feature_matches("action_mailbox/engine", rules["framework"])
           ).any?
+        end
+      end
+
+      def active_storage_attachment_static_usage?
+        @active_storage_attachment_static_usage ||= usage.feature_matches.any? do |match|
+          match["framework"] == "activestorage" &&
+            ACTIVE_STORAGE_ATTACHMENT_PATTERNS.include?(match["pattern"])
         end
       end
 

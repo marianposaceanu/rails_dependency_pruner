@@ -310,198 +310,28 @@ Routes are scanned as framework evidence too. Route DSL calls keep Action Pack,
 and route-specific hooks such as `mount ActionCable.server` or
 `direct :rails_blob` are reported in `route_matches`.
 
-## lobsters run
+## lobsters benchmark
 
-Against a temp copy of `LOBSTERS_APP`, using RVM Ruby
-`4.0.5` on arm64 Darwin and Rails `8.1.3`:
+Latest local run: Lobsters on arm64 Darwin, Ruby `4.0.5`, Rails `8.1.3`.
+The profile keeps Action Mailbox and Active Storage, disables eager loading,
+skips Rails test-unit, defers selected gems, stubs `rack-mini-profiler`, and
+stubs Active Storage's Vips analyzer for this no-attachment workload.
 
-- Rails Ruby files scanned: `1409`
-- Rails constants indexed: `2331`
-- Lobsters direct Rails constants: `58`
-- Reachable Rails constants after closure: `1532`
-- Static require/load matches: `24`
-- Unused Rails constant candidates: `799`
-- Unused Rails feature files: `517`
-- Disabled frameworks: `actiontext`
-- Disabled railties: `action_text/engine`
-- Rails parse errors: `0`
-- app parse errors: `0`
-
-Benchmark command:
-
-```bash
-RAILS_ENV=production rails-dependency-pruner measure \
-  --app tmp/lobsters-ruby405-rails813 \
-  --profile tmp/lobsters-ruby405-rails813-profile.json \
-  --variants baseline,production \
-  --runs 3 \
-  --output tmp/lobsters-ruby405-rails813-measurement.json \
-  --markdown tmp/lobsters-ruby405-rails813-measurement.md
-```
-
-This loads `config/application`, not a server and not a full Rails
-initialization. It is a smoke benchmark, not a production savings claim.
-Measurement JSON and Markdown include Rails loaded-feature counts by framework,
-so a boot-plan change can be checked against the exact railties it claims to
-remove.
-
-| variant | RSS | Rails loaded features | GC live slots |
+| target | baseline RSS | pruned RSS | saved |
 | --- | ---: | ---: | ---: |
-| baseline | `137040 KB` (`133.8 MiB`) | `415` | `234487` |
-| production early boot | `139968 KB` (`136.7 MiB`) | `415` | `234814` |
-| delta | `+2928 KB` (`+2.9 MiB`) | `0` | `+327` |
+| requests `/privacy,/login,/404` | `228576 KB` | `127904 KB` | `100672 KB` (`98.3 MiB`, `44.0%`) |
+| environment boot | `218592 KB` | `111312 KB` | `107280 KB` (`104.8 MiB`, `49.1%`) |
 
-The pruned Lobsters railtie is already commented out in `config/application.rb`,
-so the loaded Rails feature count does not move in this benchmark. Static
-require/load closure keeps Action Cable because the app still has static
-evidence for it. The early boot hooks add overhead here instead of saving
-memory.
+Production approval passed with no verifier errors for this profile. Lobsters
+uses `Vips` directly in `StoryImage`, but does not declare `has_one_attached` or
+`has_many_attached`; apps that use Active Storage attachments must provide
+attachment workload coverage before approving the `ruby-vips` analyzer stub.
+The biggest Rails-side reductions are ActiveRecord, Action View, Active Model,
+and Active Storage. The Vips analyzer stub accounts for about `23 MiB` of the
+request-warmed RSS win.
 
-Full environment experiment:
-
-```bash
-mkdir -p tmp/lobsters-ruby405-rails813/log \
-  tmp/lobsters-ruby405-rails813/tmp/pids \
-  tmp/lobsters-ruby405-rails813/tmp/cache \
-  tmp/lobsters-ruby405-rails813/storage
-cp tmp/lobsters-ruby405-rails813/config/database.yml.sample \
-  tmp/lobsters-ruby405-rails813/config/database.yml
-
-RAILS_ENV=production \
-SECRET_KEY_BASE_DUMMY=1 \
-DATABASE_HOST=127.0.0.1 \
-bundle exec exe/rails-dependency-pruner measure \
-  --app tmp/lobsters-ruby405-rails813 \
-  --target environment \
-  --variants baseline,no_eager_load,no_eager_load_skip_railties \
-  --skip-railties action_mailbox/engine,active_storage/engine,rails/test_unit/railtie \
-  --runs 3 \
-  --output tmp/lobsters-ruby405-rails813-environment-extreme-measurement.json \
-  --markdown tmp/lobsters-ruby405-rails813-environment-extreme-measurement.md
-```
-
-This initializes Rails, but does not run a server or request workload. The
-extreme variant disables eager loading and skips the listed railties with inert
-config namespace stubs.
-
-| variant | RSS | Rails loaded features | GC live slots |
-| --- | ---: | ---: | ---: |
-| baseline | `230864 KB` (`225.5 MiB`) | `1073` | `541209` |
-| no eager load | `150928 KB` (`147.4 MiB`) | `644` | `288215` |
-| no eager load plus skipped railties | `133616 KB` (`130.5 MiB`) | `600` | `274645` |
-| extreme delta | `-97248 KB` (`-95.0 MiB`, `-42.1%`) | `-473` | `-266564` |
-
-The skipped railties were Action Mailbox, Active Storage, and Rails test-unit.
-This is an experiment, not a safe production default. The next safety gate is
-to prove routes, attachments, inbound email, jobs, and request coverage before
-emitting a patch or boot shim for another app.
-
-The same extreme settings can be recorded in a profile and exercised through
-the early boot path. Use absolute paths for artifacts because `--coverage`
-is resolved from the app root:
-
-```bash
-APP="$PWD/tmp/lobsters-ruby405-rails813"
-COVERAGE="$PWD/tmp/lobsters-ruby405-rails813-coverage.yml"
-PROFILE="$PWD/tmp/lobsters-ruby405-rails813-extreme-profile.json"
-
-bundle exec exe/rails-dependency-pruner plan \
-  --app "$APP" \
-  --coverage "$COVERAGE" \
-  --profile "$PROFILE" \
-  --disable-eager-load \
-  --skip-railties action_mailbox/engine,active_storage/engine,rails/test_unit/railtie
-
-RAILS_ENV=production \
-SECRET_KEY_BASE_DUMMY=1 \
-DATABASE_HOST=127.0.0.1 \
-bundle exec exe/rails-dependency-pruner measure \
-  --app "$APP" \
-  --profile "$PROFILE" \
-  --target environment \
-  --variants baseline,boot_prune \
-  --runs 3 \
-  --output tmp/lobsters-ruby405-rails813-profile-extreme-measurement.json \
-  --markdown tmp/lobsters-ruby405-rails813-profile-extreme-measurement.md
-```
-
-| variant | RSS | Rails loaded features | GC live slots |
-| --- | ---: | ---: | ---: |
-| baseline | `231088 KB` (`225.7 MiB`) | `1073` | `541227` |
-| profile boot prune | `134784 KB` (`131.6 MiB`) | `600` | `275082` |
-| profile delta | `-96304 KB` (`-94.0 MiB`, `-41.7%`) | `-473` | `-266145` |
-
-Keeping Action Mailbox and Active Storage, then deferring more boot gems and
-stubbing mini-profiler, clears the 40% target for environment boot:
-
-```bash
-LAZY_GEMS="bcrypt,builder,commonmarker,faker,flamegraph,htmlentities"
-LAZY_GEMS="$LAZY_GEMS,memory_profiler,nokogiri,oauth,parslet,pdf-reader"
-LAZY_GEMS="$LAZY_GEMS,rack-mini-profiler,rotp,rqrcode,ruby-vips"
-LAZY_GEMS="$LAZY_GEMS,sentry-rails,sitemap_generator,stackprof,svg-graph"
-
-bundle exec exe/rails-dependency-pruner plan \
-  --app "$APP" \
-  --coverage "$COVERAGE" \
-  --profile tmp/lobsters-ruby405-rails813-lazy-more-profiler-request-profile.json \
-  --disable-eager-load \
-  --skip-railties rails/test_unit/railtie \
-  --lazy-gems "$LAZY_GEMS"
-```
-
-| variant | RSS | Rails loaded features | GC live slots |
-| --- | ---: | ---: | ---: |
-| baseline | `230368 KB` (`224.9 MiB`) | `1073` | `541232` |
-| profile boot prune | `134720 KB` (`131.6 MiB`) | `640` | `243372` |
-| profile delta | `-95648 KB` (`-93.4 MiB`, `-41.5%`) | `-433` | `-297860` |
-
-Those lazy gems are not removed. Bundler just does not require them during boot.
-The profile can load top-level constants such as `BCrypt`, `Faker`, `OAuth`,
-`PDF`, `ROTP`, `RQRCode`, `Sentry`, `SitemapGenerator`, and `Vips` on first use,
-and app files that already call `require` still load their gems normally.
-`rack-mini-profiler` is different: this profile installs a no-op
-`Rack::MiniProfiler` shim, so moderator profiling is disabled for this profile.
-
-The `sentry-rails` win is conditional. This local boot has no Telebugs
-credentials, so the initializer never references `Sentry`. With Telebugs
-credentials present, `Sentry.init` will load the gem during boot and the RSS win
-will be closer to the keep-storage profile without Sentry deferral.
-
-The same approved profile was measured after a small Rack request smoke:
-
-```bash
-bundle exec exe/rails-dependency-pruner measure \
-  --app tmp/lobsters-ruby405-rails813 \
-  --profile tmp/lobsters-ruby405-rails813-lazy-more-profiler-request-profile.json \
-  --target requests \
-  --request-paths /privacy,/login,/404 \
-  --variants baseline,boot_prune \
-  --runs 3
-```
-
-| variant | RSS | Rails loaded features | GC live slots |
-| --- | ---: | ---: | ---: |
-| baseline | `229168 KB` (`223.8 MiB`) | `1074` | `545150` |
-| profile boot prune | `151680 KB` (`148.1 MiB`) | `874` | `277187` |
-| profile delta | `-77488 KB` (`-75.7 MiB`, `-33.8%`) | `-200` | `-267963` |
-
-The request smoke hit `/privacy` and `/login` with `200`, and `/404` with
-`404`. Rebuilding the profile with that request coverage produces
-`production_allowed=true` with no verifier errors, but request autoloading
-narrows the RSS saving below 40%. More work is needed before claiming a 40%
-request-warmed web-process win.
-
-The more aggressive 48.8% lazy-gems profile skips Active Storage. That remains
-an experiment only. Lobsters has Action Mailbox source, and Action Mailbox stores
-raw inbound email through Active Storage, so the verifier now requires inbound
-email proof before approving that skip:
-
-```text
-production verify missing coverage workload for extreme boot: active_storage/engine requires attachments, inbound_email
-production verify missing coverage workload for extreme boot: disable_eager_load requires requests
-```
-
-Local outputs are ignored under `tmp/`.
+Detailed commands and local artifact paths are in
+`docs/lobsters-ruby405-rails813.md`.
 
 ## limits
 

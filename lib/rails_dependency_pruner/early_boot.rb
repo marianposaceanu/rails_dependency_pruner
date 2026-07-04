@@ -21,6 +21,7 @@ module RailsDependencyPruner
     }.freeze
     LAZY_GEM_STUBS = {
       "rack-mini-profiler" => :install_rack_mini_profiler_stub!,
+      "ruby-vips" => :install_active_storage_vips_analyzer_stub!,
     }.freeze
     LAZY_GEM_CONSTANTS = {
       "bcrypt" => {
@@ -118,6 +119,8 @@ module RailsDependencyPruner
     end
 
     def skip_require(path, caller_location, operation: "require")
+      return true if stub_lazy_gem_require(path, caller_location, operation: operation)
+
       lazy_path = matched_lazy_path(path, caller_location: caller_location)
       if lazy_path && !loading_lazy_require?(lazy_path)
         event = {
@@ -149,6 +152,26 @@ module RailsDependencyPruner
         "action" => blocking? ? "skipped" : "would_skip",
       }.compact
       @events << event
+      blocking?
+    end
+
+    def stub_lazy_gem_require(path, caller_location, operation:)
+      return false unless @lazy_gems&.include?("ruby-vips")
+      return false unless path_variants(path, caller_location: caller_location).include?("active_storage/analyzer/image_analyzer/vips")
+
+      event = {
+        "path" => path.to_s,
+        "matched_path" => "active_storage/analyzer/image_analyzer/vips",
+        "operation" => operation,
+        "caller_path" => caller_location&.path,
+        "caller_line" => caller_location&.lineno,
+        "caller_label" => caller_location&.label,
+        "mode" => @mode,
+        "action" => blocking? ? "stubbed_lazy_gem_require" : "would_stub_lazy_gem_require",
+        "gem" => "ruby-vips",
+      }.compact
+      @events << event
+      install_active_storage_vips_analyzer_stub! if blocking?
       blocking?
     end
 
@@ -487,6 +510,20 @@ module RailsDependencyPruner
       end
       ::Rack.const_set(:MiniProfiler, stub)
       @rack_mini_profiler_stub_installed = true
+    end
+
+    def install_active_storage_vips_analyzer_stub!
+      return false if @active_storage_vips_analyzer_stub_installed
+      return false unless defined?(::ActiveStorage::Analyzer::ImageAnalyzer)
+
+      analyzer = ::ActiveStorage::Analyzer::ImageAnalyzer
+      analyzer.send(:remove_const, :Vips) if analyzer.const_defined?(:Vips, false)
+      analyzer.const_set(:Vips, Class.new(analyzer) do
+        def self.accept?(*)
+          false
+        end
+      end)
+      @active_storage_vips_analyzer_stub_installed = true
     end
 
     def install_bundler_require_filter!
