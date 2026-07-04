@@ -1260,6 +1260,122 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_prune_mode_blocks_absolute_require_path
+    Dir.mktmpdir("rails_dependency_pruner_early_absolute_blocking") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      feature_path = File.join(dir, "blocked_absolute.rb")
+      File.write(feature_path, "BLOCKED_ABSOLUTE_LOADED = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_absolute"],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          require #{feature_path.dump}
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "#{feature_path} is disabled by rails_dependency_pruner early boot"
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal feature_path, payload.dig("events", 0, "path")
+      assert_equal "blocked_absolute", payload.dig("events", 0, "matched_path")
+      assert_equal "require", payload.dig("events", 0, "operation")
+    end
+  end
+
+  def test_early_boot_prune_mode_blocks_require_relative
+    Dir.mktmpdir("rails_dependency_pruner_early_relative_blocking") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      script_path = File.join(dir, "boot_script.rb")
+      File.write(File.join(dir, "relative_feature.rb"), "RELATIVE_FEATURE_LOADED = true\n")
+      File.write(script_path, <<~RUBY)
+        require "rails_dependency_pruner/early_boot"
+        require_relative "relative_feature"
+      RUBY
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_require_paths" => ["relative_feature"],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        script_path,
+      )
+
+      refute status.success?
+      assert_includes stderr, "relative_feature is disabled by rails_dependency_pruner early boot"
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal "relative_feature", payload.dig("events", 0, "path")
+      assert_equal "relative_feature", payload.dig("events", 0, "matched_path")
+      assert_equal "require_relative", payload.dig("events", 0, "operation")
+    end
+  end
+
+  def test_early_boot_shadow_records_load_without_blocking
+    Dir.mktmpdir("rails_dependency_pruner_early_load_shadow") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      feature_path = File.join(dir, "loaded_feature.rb")
+      File.write(feature_path, "LOADED_FEATURE = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "shadow",
+        "pruning" => {
+          "disabled_require_paths" => ["loaded_feature"],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "shadow",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          load #{feature_path.dump}
+          puts LOADED_FEATURE
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "true\n", stdout
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal feature_path, payload.dig("events", 0, "path")
+      assert_equal "loaded_feature", payload.dig("events", 0, "matched_path")
+      assert_equal "load", payload.dig("events", 0, "operation")
+      assert_equal "would_block", payload.dig("events", 0, "action")
+    end
+  end
+
   def test_early_boot_prune_mode_blocks_disabled_railtie
     Dir.mktmpdir("rails_dependency_pruner_early_railtie_blocking") do |dir|
       profile_path = File.join(dir, "profile.json")

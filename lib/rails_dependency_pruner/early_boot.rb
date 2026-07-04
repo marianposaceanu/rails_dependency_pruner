@@ -3,6 +3,7 @@
 require "json"
 require "set"
 require "digest"
+require "pathname"
 
 require_relative "canonical_json"
 
@@ -31,16 +32,19 @@ module RailsDependencyPruner
       @disabled_require_paths = disabled_require_paths(payload)
       @events = []
       @output_path = output_path
-      install_require_shadow!
+      install_shadow_hooks!
       at_exit { write! } if @output_path
       @installed = true
     end
 
-    def shadow_require(path, caller_location)
-      return unless disabled_require_path?(path)
+    def shadow_require(path, caller_location, operation: "require")
+      matched_path = matched_disabled_path(path, caller_location: caller_location)
+      return unless matched_path
 
       event = {
         "path" => path.to_s,
+        "matched_path" => matched_path,
+        "operation" => operation,
         "caller_path" => caller_location&.path,
         "caller_line" => caller_location&.lineno,
         "caller_label" => caller_location&.label,
@@ -53,7 +57,20 @@ module RailsDependencyPruner
     end
 
     def disabled_require_path?(path)
-      @disabled_require_paths&.include?(normalize(path))
+      !!matched_disabled_path(path)
+    end
+
+    def matched_disabled_path(path, caller_location: nil)
+      return unless @disabled_require_paths
+
+      path_variants(path, caller_location: caller_location).each do |candidate|
+        return candidate if @disabled_require_paths.include?(candidate)
+
+        absolute_match = absolute_path_match(candidate)
+        return absolute_match if absolute_match
+      end
+
+      nil
     end
 
     def blocking?
@@ -102,7 +119,42 @@ module RailsDependencyPruner
     end
 
     def normalize(path)
-      path.to_s
+      value = path.to_s
+      absolute_path?(value) ? File.expand_path(value) : value.delete_prefix("./")
+    end
+
+    def path_variants(path, caller_location: nil)
+      raw = path.to_s
+      variants = [normalize(raw)]
+      if relative_filesystem_path?(raw) && caller_location&.path
+        variants << File.expand_path(raw, File.dirname(caller_location.path))
+      end
+      variants.flat_map { |variant| [variant, variant.delete_suffix(".rb"), require_path_from_absolute(variant)] }.compact.uniq
+    end
+
+    def absolute_path_match(path)
+      return unless absolute_path?(path)
+
+      @disabled_require_paths.find do |disabled_path|
+        path.end_with?("/#{disabled_path}") || path.end_with?("/#{disabled_path}.rb")
+      end
+    end
+
+    def require_path_from_absolute(path)
+      return unless absolute_path?(path)
+
+      marker = "/lib/"
+      return unless path.include?(marker)
+
+      path.split(marker).last
+    end
+
+    def absolute_path?(path)
+      Pathname.new(path.to_s).absolute?
+    end
+
+    def relative_filesystem_path?(path)
+      path.start_with?("./", "../")
     end
 
     def validate_profile_safety!(payload)
@@ -122,7 +174,7 @@ module RailsDependencyPruner
       "sha256:#{Digest::SHA256.hexdigest(CanonicalJson.digestible(digest_payload))}"
     end
 
-    def install_require_shadow!
+    def install_shadow_hooks!
       return if @require_shadow_installed
 
       Kernel.module_eval do
@@ -135,6 +187,33 @@ module RailsDependencyPruner
           end
 
           private :require
+        end
+
+        unless private_method_defined?(:rails_dependency_pruner_original_require_relative)
+          alias_method :rails_dependency_pruner_original_require_relative, :require_relative
+
+          def require_relative(path)
+            caller_location = caller_locations(1, 1).first
+            RailsDependencyPruner::EarlyBoot.shadow_require(path, caller_location, operation: "require_relative")
+            if caller_location&.path
+              rails_dependency_pruner_original_require(File.expand_path(path.to_s, File.dirname(caller_location.path)))
+            else
+              rails_dependency_pruner_original_require_relative(path)
+            end
+          end
+
+          private :require_relative
+        end
+
+        unless private_method_defined?(:rails_dependency_pruner_original_load)
+          alias_method :rails_dependency_pruner_original_load, :load
+
+          def load(path, wrap = false)
+            RailsDependencyPruner::EarlyBoot.shadow_require(path, caller_locations(1, 1).first, operation: "load")
+            rails_dependency_pruner_original_load(path, wrap)
+          end
+
+          private :load
         end
       end
 

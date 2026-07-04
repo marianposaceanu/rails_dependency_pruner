@@ -199,7 +199,7 @@ only in throwaway experiments.
 
 ## early boot shadow
 
-For early require observation, load the shim from `config/boot.rb` after Bundler:
+For early require/load observation, load the shim from `config/boot.rb` after Bundler:
 
 ```ruby
 require "bundler/setup"
@@ -214,8 +214,9 @@ bundle exec rails-dependency-pruner shim \
   --patch tmp/pruner-early-boot.patch
 ```
 
-Shadow mode records would-block require events and does not change boot behavior.
-`RAILS_DEPENDENCY_PRUNER_MODE=boot_prune` blocks disabled require paths.
+Shadow mode records would-block `require`, `require_relative`, and `load`
+events and does not change boot behavior.
+`RAILS_DEPENDENCY_PRUNER_MODE=boot_prune` blocks disabled require/load paths.
 `RAILS_DEPENDENCY_PRUNER_MODE=production` also requires
 `safety.production_allowed=true` and a matching `profile_id` in the profile. Set
 `RAILS_DEPENDENCY_PRUNER_DISABLE=1` to skip it.
@@ -290,21 +291,22 @@ RAILS_ENV=production rails-dependency-pruner measure \
   --app tmp/lobsters-ruby405-rails813 \
   --profile tmp/lobsters-ruby405-rails813-profile.json \
   --variants baseline,production \
-  --runs 1 \
+  --runs 3 \
   --output tmp/lobsters-ruby405-rails813-measurement.json
 ```
 
 This loads `config/application`, not a server and not a full Rails
-initialization. It is a smoke benchmark, not a stable savings claim.
+initialization. It is a smoke benchmark, not a production savings claim.
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |
-| baseline | `134240 KB` (`131.1 MiB`) | `415` | `223479` |
-| production early boot | `132576 KB` (`129.5 MiB`) | `415` | `223829` |
-| delta | `-1664 KB` (`-1.6 MiB`) | `0` | `+350` |
+| baseline | `134400 KB` (`131.3 MiB`) | `415` | `223478` |
+| production early boot | `136592 KB` (`133.4 MiB`) | `415` | `223901` |
+| delta | `+2192 KB` (`+2.1 MiB`) | `0` | `+423` |
 
 The pruned Lobsters railties are already commented out in `config/application.rb`,
-so the loaded Rails feature count does not move in this benchmark.
+so the loaded Rails feature count does not move in this benchmark. The early
+boot hooks add overhead here instead of saving memory.
 
 Local outputs are ignored under `tmp/`.
 
