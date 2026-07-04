@@ -28,19 +28,30 @@ module RailsDependencyPruner
       action_mailbox/mail_ext
     ].freeze
     SUPPORTED_LAZY_GEMS = %w[
+      bcrypt
+      builder
       commonmarker
       faker
       flamegraph
+      htmlentities
       memory_profiler
+      nokogiri
+      oauth
       parslet
       pdf-reader
+      rotp
+      rqrcode
       ruby-vips
+      sentry-rails
+      sitemap_generator
       stackprof
+      svg-graph
     ].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {
         "paths" => %w[app/mailboxes],
         "constants" => %w[ActionMailbox],
+        "framework" => "actionmailbox",
       },
       "action_mailer/railtie" => {
         "paths" => %w[app/mailers],
@@ -216,16 +227,25 @@ module RailsDependencyPruner
           end
 
           Array(extreme_boot["skip_railties"]).each do |railtie|
-            required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(railtie, [])
+            required_workloads = extreme_boot_required_workloads(railtie)
             gaps << workload_gap(railtie, required_workloads)
           end
           Array(extreme_boot["lazy_require_paths"]).each do |path|
-            required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(path, [])
+            required_workloads = extreme_boot_required_workloads(path)
             gaps << workload_gap(path, required_workloads)
           end
 
           gaps.compact.sort_by { |gap| gap.fetch("framework") }
         end
+      end
+
+      def extreme_boot_required_workloads(name)
+        required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(name, [])
+        if name == "active_storage/engine" && action_mailbox_static_usage?
+          required_workloads += %w[inbound_email]
+        end
+
+        required_workloads.uniq
       end
 
       def unsupported_lazy_require_paths
@@ -252,6 +272,17 @@ module RailsDependencyPruner
           matches.uniq.sort_by do |match|
             [match.fetch("railtie"), match.fetch("kind"), match.fetch("path").to_s, match["line"].to_i, match["name"].to_s]
           end
+        end
+      end
+
+      def action_mailbox_static_usage?
+        @action_mailbox_static_usage ||= begin
+          rules = EXTREME_BOOT_STATIC_RULES.fetch("action_mailbox/engine")
+          (
+            path_matches("action_mailbox/engine", Array(rules["paths"])) +
+            constant_matches("action_mailbox/engine", Array(rules["constants"])) +
+            framework_feature_matches("action_mailbox/engine", rules["framework"])
+          ).any?
         end
       end
 

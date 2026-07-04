@@ -909,6 +909,82 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_inbound_email_when_storage_skip_keeps_mailboxes
+    Dir.mktmpdir("rails_dependency_pruner_storage_mailbox_coverage_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "app/mailboxes"))
+      File.write(File.join(app_root, "app/mailboxes/application_mailbox.rb"), <<~RUBY)
+        class ApplicationMailbox < ActionMailbox::Base
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        attachments:
+          - avatar
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--skip-railties",
+        "active_storage/engine",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: active_storage/engine requires inbound_email"
+      assert_equal [
+        {
+          "framework" => "active_storage/engine",
+          "required_workloads" => %w[attachments routes inbound_email],
+          "missing_workloads" => %w[inbound_email],
+        },
+      ], payload.dig("production_risks", "extreme_boot_workload_gaps")
+    end
+  end
+
   def test_verify_production_rejects_missing_lazy_require_coverage
     Dir.mktmpdir("rails_dependency_pruner_lazy_require_coverage_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -2623,6 +2699,69 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       early_payload = JSON.parse(File.read(output_path))
       assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == "faker" }
+    end
+  end
+
+  def test_early_boot_lazy_loads_hyphenated_gem_constant
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_hyphen_gem") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "sentry-rails.rb"), <<~RUBY)
+        module Sentry
+          def self.initialized?
+            true
+          end
+        end
+      RUBY
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["sentry-rails"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+
+          before = Object.const_defined?(:Sentry, false)
+          initialized = Sentry.initialized?
+          after = Object.const_defined?(:Sentry, false)
+
+          puts JSON.generate(
+            "before" => before,
+            "after" => after,
+            "initialized" => initialized,
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("before")
+      assert_equal true, payload.fetch("after")
+      assert_equal true, payload.fetch("initialized")
+
+      early_payload = JSON.parse(File.read(output_path))
+      assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == "sentry-rails" }
     end
   end
 

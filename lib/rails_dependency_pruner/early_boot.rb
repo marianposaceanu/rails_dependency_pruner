@@ -20,17 +20,57 @@ module RailsDependencyPruner
       "action_mailbox/mail_ext" => :install_action_mailbox_mail_ext_lazy_loader!,
     }.freeze
     LAZY_GEM_CONSTANTS = {
+      "bcrypt" => {
+        "require" => "bcrypt",
+        "constants" => %w[BCrypt],
+      },
+      "builder" => {
+        "require" => "builder",
+        "constants" => %w[Builder],
+      },
       "faker" => {
         "require" => "faker",
         "constants" => %w[Faker],
+      },
+      "htmlentities" => {
+        "require" => "htmlentities",
+        "constants" => %w[HTMLEntities],
+      },
+      "nokogiri" => {
+        "require" => "nokogiri",
+        "constants" => %w[Nokogiri],
+      },
+      "oauth" => {
+        "require" => "oauth",
+        "constants" => %w[OAuth],
       },
       "pdf-reader" => {
         "require" => "pdf-reader",
         "constants" => %w[PDF],
       },
+      "rotp" => {
+        "require" => "rotp",
+        "constants" => %w[ROTP],
+      },
+      "rqrcode" => {
+        "require" => "rqrcode",
+        "constants" => %w[RQRCode],
+      },
       "ruby-vips" => {
         "require" => "vips",
         "constants" => %w[Vips],
+      },
+      "sentry-rails" => {
+        "require" => "sentry-rails",
+        "constants" => %w[Sentry],
+      },
+      "sitemap_generator" => {
+        "require" => "sitemap_generator",
+        "constants" => %w[SitemapGenerator],
+      },
+      "svg-graph" => {
+        "require" => "SVG/Graph/TimeSeries",
+        "constants" => %w[SVG],
       },
     }.freeze
     SUPPORTED_LAZY_GEMS = (

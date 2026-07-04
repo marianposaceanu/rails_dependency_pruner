@@ -431,61 +431,56 @@ bundle exec exe/rails-dependency-pruner measure \
 | profile boot prune | `134784 KB` (`131.6 MiB`) | `600` | `275082` |
 | profile delta | `-96304 KB` (`-94.0 MiB`, `-41.7%`) | `-473` | `-266145` |
 
-Keeping Action Mailbox but still disabling eager load and skipping Active
-Storage plus Rails test-unit stays below the 40% target:
-
-| variant | RSS | Rails loaded features | GC live slots |
-| --- | ---: | ---: | ---: |
-| baseline | `230352 KB` (`224.9 MiB`) | `1073` | `541217` |
-| profile boot prune | `148496 KB` (`145.0 MiB`) | `611` | `276894` |
-| profile delta | `-81856 KB` (`-79.9 MiB`, `-35.5%`) | `-462` | `-264323` |
-
-The profile that keeps Action Mailbox and defers task/profiling/parser gems does
-clear the target:
+Keeping Action Mailbox and Active Storage, then deferring more boot gems, clears
+the 40% target in the local benchmark:
 
 ```bash
+LAZY_GEMS="bcrypt,builder,commonmarker,faker,flamegraph,htmlentities"
+LAZY_GEMS="$LAZY_GEMS,memory_profiler,nokogiri,oauth,parslet,pdf-reader"
+LAZY_GEMS="$LAZY_GEMS,rotp,rqrcode,ruby-vips,sentry-rails"
+LAZY_GEMS="$LAZY_GEMS,sitemap_generator,stackprof,svg-graph"
+
 bundle exec exe/rails-dependency-pruner plan \
   --app "$APP" \
   --coverage "$COVERAGE" \
-  --profile tmp/lobsters-ruby405-rails813-lazy-gems-profile.json \
+  --profile tmp/lobsters-ruby405-rails813-lazy-more-keep-storage-profile.json \
   --disable-eager-load \
-  --skip-railties active_storage/engine,rails/test_unit/railtie \
-  --lazy-gems flamegraph,memory_profiler,stackprof,commonmarker,parslet,pdf-reader,faker,ruby-vips
+  --skip-railties rails/test_unit/railtie \
+  --lazy-gems "$LAZY_GEMS"
 ```
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |
-| baseline | `228672 KB` (`223.3 MiB`) | `1073` | `541225` |
-| profile boot prune | `116992 KB` (`114.3 MiB`) | `611` | `251577` |
-| profile delta | `-111680 KB` (`-109.1 MiB`, `-48.8%`) | `-462` | `-289648` |
+| baseline | `226112 KB` (`220.8 MiB`) | `1073` | `541217` |
+| profile boot prune | `133952 KB` (`130.8 MiB`) | `640` | `245860` |
+| profile delta | `-92160 KB` (`-90.0 MiB`, `-40.8%`) | `-433` | `-295357` |
 
 Those lazy gems are not removed. Bundler just does not require them during boot.
-The profile can load `Faker`, `PDF`, and `Vips` on first constant use, and app
-files that already call `require` still load their gems normally.
+The profile can load top-level constants such as `BCrypt`, `Faker`, `OAuth`,
+`PDF`, `ROTP`, `RQRCode`, `Sentry`, `SitemapGenerator`, and `Vips` on first use,
+and app files that already call `require` still load their gems normally.
 
-Production approval rejects the full 41.7% profile. The current Lobsters
-coverage manifest only proves boot, routes, and assets precompile. It does not
-prove requests, attachments, or inbound email. The verifier also finds real
-Action Mailbox source, so the win depends on skipping code that Lobsters uses:
+The `sentry-rails` win is conditional. This local boot has no Telebugs
+credentials, so the initializer never references `Sentry`. With Telebugs
+credentials present, `Sentry.init` will load the gem during boot and the RSS win
+will be closer to the keep-storage profile without Sentry deferral.
+
+Production approval for this 40.8% profile is much narrower than the earlier
+Active Storage skip. There are no static blockers and no unsupported lazy gems,
+but the current Lobsters coverage manifest still does not prove request
+workloads:
 
 ```text
-production verify missing coverage workload for extreme boot: action_mailbox/engine requires inbound_email
-production verify missing coverage workload for extreme boot: active_storage/engine requires attachments
 production verify missing coverage workload for extreme boot: disable_eager_load requires requests
-production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/application_mailbox.rb
-production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/backstop_mailbox.rb
-production verify found extreme boot static evidence: action_mailbox/engine:path:app/mailboxes/inbox_mailbox.rb
 ```
 
-The ActiveStorage-only subset has no static blockers after config namespace
-stubs, but it still needs request and attachment workload evidence before
-production approval.
-
-The 48.8% lazy-gems profile keeps Action Mailbox and has no static blockers.
-Approval still requires request and attachment workload evidence:
+The more aggressive 48.8% lazy-gems profile skips Active Storage. That remains
+an experiment only. Lobsters has Action Mailbox source, and Action Mailbox stores
+raw inbound email through Active Storage, so the verifier now requires inbound
+email proof before approving that skip:
 
 ```text
-production verify missing coverage workload for extreme boot: active_storage/engine requires attachments
+production verify missing coverage workload for extreme boot: active_storage/engine requires attachments, inbound_email
 production verify missing coverage workload for extreme boot: disable_eager_load requires requests
 ```
 
