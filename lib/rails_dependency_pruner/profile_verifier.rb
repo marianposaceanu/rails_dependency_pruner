@@ -93,6 +93,9 @@ module RailsDependencyPruner
         truncated_runtime_evidence.each do |name|
           errors << "production verify found truncated runtime evidence: #{name}"
         end
+        unexpected_runtime_events.each do |event|
+          errors << "production verify found unexpected runtime event: #{format_runtime_event(event)}"
+        end
         dynamic_boot_require_risks.each do |risk|
           errors << "production verify found dynamic require/load risk: #{format_match(risk)}"
         end
@@ -132,6 +135,7 @@ module RailsDependencyPruner
         "warnings" => warnings,
         "production_risks" => {
           "truncated_runtime_evidence" => truncated_runtime_evidence,
+          "unexpected_runtime_events" => unexpected_runtime_events,
           "dynamic_boot_require_matches" => dynamic_boot_require_risks,
           "dynamic_constantization_matches" => dynamic_constantization_risks,
           "coverage_workload_gaps" => coverage_workload_gaps,
@@ -182,6 +186,26 @@ module RailsDependencyPruner
         profile.payload.dig("summary", "runtime_evidence_truncation") ||
           profile.payload["runtime_evidence_truncation"] ||
           {}
+      end
+
+      def runtime_event_summary
+        profile.payload.dig("summary", "runtime_event_summary") ||
+          profile.payload["runtime_event_summary"] ||
+          {}
+      end
+
+      def unexpected_runtime_events
+        @unexpected_runtime_events ||= begin
+          files = Array(runtime_event_summary["files"])
+          events = files.flat_map { |file| Array(file["unexpected_events"]) }
+          if events.empty? && runtime_event_summary["unexpected_events_count"].to_i.positive?
+            events << {
+              "event_id" => "runtime_evidence",
+              "unexpected_events_count" => runtime_event_summary["unexpected_events_count"],
+            }
+          end
+          events
+        end
       end
 
       def disabled_framework_runtime_matches
@@ -553,6 +577,16 @@ module RailsDependencyPruner
           match.fetch("kind"),
           match["name"] || match["path"] || match["controller"],
         ].compact.join(":")
+      end
+
+      def format_runtime_event(event)
+        event["event_id"] ||
+          [
+            event["mode"],
+            event["phase"],
+            event["action"],
+            event["path"] || event["matched_path"] || event["gem"] || event["constant"],
+          ].compact.join(":")
       end
 
       def format_extreme_boot_static_match(match)

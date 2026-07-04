@@ -117,6 +117,10 @@ lazy-loaded require paths. Events include:
 - `pid`
 - `expected`
 
+When an early-boot output JSON is passed back through `--runtime-evidence`, the
+profile stores `summary.runtime_event_summary`. Production verification rejects
+profiles whose runtime event summary contains unexpected events.
+
 Safety modes compare every event with `expected_events`. Expected event entries
 are partial matches, so a profile can match on `phase`, `action`, `path`, and
 `gem` without pinning caller lines.

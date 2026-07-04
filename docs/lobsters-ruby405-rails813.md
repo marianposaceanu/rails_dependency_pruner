@@ -92,6 +92,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-approval-metadata-smoke.json`
 - `tmp/lobsters-ruby405-rails813-rollout-env-gate-smoke.json`
 - `tmp/lobsters-ruby405-rails813-rollout-env-gate-smoke.patch`
+- `tmp/lobsters-ruby405-rails813-runtime-event-summary-smoke.json`
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
@@ -172,6 +173,12 @@ Rollout env-gate smoke:
 - result: generated production config is gated by
   `RAILS_DEPENDENCY_PRUNER_ENABLED=1`
 - rollback note: generated patch mentions `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
+
+Runtime event summary smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-runtime-event-summary-smoke.json`
+- input: corrected canary and production event-manifest smokes
+- result: `4` events, `4` expected, `0` unexpected
 
 Request ablation smoke, one run per variant:
 

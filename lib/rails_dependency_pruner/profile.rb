@@ -54,6 +54,7 @@ module RailsDependencyPruner
         "runtime_memory" => planner.runtime_memory,
         "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
         "runtime_rails_application" => planner.runtime_rails_application,
+        "runtime_event_summary" => planner.runtime_event_summary,
         "runtime_evidence_limits" => planner.runtime_evidence_limits,
         "runtime_evidence_truncation" => planner.runtime_evidence_truncation,
       )
@@ -99,6 +100,7 @@ module RailsDependencyPruner
           "unused_features_count" => planner.unused_features.length,
           "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
           "runtime_rails_application" => planner.runtime_rails_application,
+          "runtime_event_summary" => planner.runtime_event_summary,
           "runtime_evidence_limits" => planner.runtime_evidence_limits,
           "runtime_evidence_truncation" => planner.runtime_evidence_truncation,
         },

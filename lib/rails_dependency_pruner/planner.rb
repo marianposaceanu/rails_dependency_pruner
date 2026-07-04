@@ -128,6 +128,7 @@ module RailsDependencyPruner
         runtime_memory: runtime_memory,
         runtime_memory_summary: runtime_memory_summary.to_h,
         runtime_rails_application: runtime_rails_application,
+        runtime_event_summary: runtime_event_summary,
         runtime_evidence_limits: runtime_evidence_limits,
         runtime_evidence_truncation: runtime_evidence_truncation,
         top_unused_namespaces: unused_by_namespace,
@@ -196,6 +197,16 @@ module RailsDependencyPruner
 
     def runtime_rails_application
       runtime_evidence&.rails_application || []
+    end
+
+    def runtime_event_summary
+      runtime_evidence&.event_summary || {
+        "files_count" => 0,
+        "events_count" => 0,
+        "expected_events_count" => 0,
+        "unexpected_events_count" => 0,
+        "files" => [],
+      }
     end
 
     private

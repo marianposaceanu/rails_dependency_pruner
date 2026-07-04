@@ -168,6 +168,49 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_runtime_evidence_summarizes_early_boot_events
+    Dir.mktmpdir("rails_dependency_pruner_runtime_events") do |dir|
+      evidence_path = File.join(dir, "early.json")
+      File.write(evidence_path, JSON.pretty_generate(
+        "mode" => "canary",
+        "events" => [
+          {
+            "mode" => "canary",
+            "phase" => "boot",
+            "action" => "skipped",
+            "path" => "rails/test_unit/railtie",
+            "event_id" => "boot:skipped:rails/test_unit/railtie",
+            "expected" => true,
+          },
+          {
+            "mode" => "canary",
+            "phase" => "request",
+            "action" => "loaded_lazy_gem",
+            "gem" => "ruby-vips",
+            "event_id" => "request:loaded_lazy_gem:ruby-vips",
+            "expected" => false,
+            "caller_path" => "app/models/story_image.rb",
+            "caller_line" => 12,
+          },
+        ],
+      ))
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actionpack activerecord],
+      )
+      runtime_evidence = RailsDependencyPruner::RuntimeEvidence.new(paths: [evidence_path], index: index)
+      summary = runtime_evidence.event_summary
+
+      assert_equal 1, summary.fetch("files_count")
+      assert_equal 2, summary.fetch("events_count")
+      assert_equal 1, summary.fetch("expected_events_count")
+      assert_equal 1, summary.fetch("unexpected_events_count")
+      assert_equal "request:loaded_lazy_gem:ruby-vips", summary.dig("files", 0, "unexpected_events", 0, "event_id")
+      assert_equal "app/models/story_image.rb", summary.dig("files", 0, "unexpected_events", 0, "caller_path")
+    end
+  end
+
   def test_dependency_graph_matches_current_used_constant_closure
     index = RailsDependencyPruner::ConstantIndex.build(
       rails_root: FAKE_RAILS_ROOT,
@@ -2192,6 +2235,68 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal false, payload.fetch("verified")
       assert_includes payload.fetch("errors"), "production verify found truncated runtime evidence: called_methods"
       assert_equal ["called_methods"], payload.dig("production_risks", "truncated_runtime_evidence")
+    end
+  end
+
+  def test_verify_production_rejects_unexpected_runtime_events
+    Dir.mktmpdir("rails_dependency_pruner_unexpected_runtime_event_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      runtime_path = File.join(dir, "runtime-events.json")
+      File.write(runtime_path, JSON.pretty_generate(
+        "mode" => "canary",
+        "events" => [
+          {
+            "mode" => "canary",
+            "phase" => "request",
+            "action" => "loaded_lazy_gem",
+            "gem" => "ruby-vips",
+            "event_id" => "request:loaded_lazy_gem:ruby-vips",
+            "expected" => false,
+            "caller_path" => "app/models/story_image.rb",
+            "caller_line" => 12,
+          },
+        ],
+      ))
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        runtime_evidence_path: runtime_path,
+      )
+
+      profile = JSON.parse(File.read(profile_path))
+      assert_equal 1, profile.dig("summary", "runtime_event_summary", "unexpected_events_count")
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--runtime-evidence",
+        runtime_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify found unexpected runtime event: request:loaded_lazy_gem:ruby-vips"
+      assert_equal "request:loaded_lazy_gem:ruby-vips", payload.dig("production_risks", "unexpected_runtime_events", 0, "event_id")
     end
   end
 

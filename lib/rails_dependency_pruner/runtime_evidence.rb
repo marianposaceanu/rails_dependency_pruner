@@ -44,6 +44,7 @@ module RailsDependencyPruner
         process_memory: process_memory,
         snapshots: snapshots,
         rails_application: rails_application,
+        event_summary: event_summary,
         require_events: require_events,
         load_events: load_events,
         limits: limits,
@@ -68,6 +69,30 @@ module RailsDependencyPruner
         application = payload["rails_application"]
         application unless application.nil? || application.empty?
       end
+    end
+
+    def event_summary
+      summaries = payloads.filter_map do |payload|
+        events = Array(payload["events"])
+        next if events.empty? && !payload.key?("events_count") && !payload.key?("unexpected_events_count")
+
+        unexpected_events = events.select { |event| event["expected"] == false }
+        {
+          "mode" => payload["mode"],
+          "events_count" => integer(payload["events_count"]) || events.length,
+          "expected_events_count" => integer(payload["expected_events_count"]) || events.count { |event| event["expected"] == true },
+          "unexpected_events_count" => integer(payload["unexpected_events_count"]) || unexpected_events.length,
+          "unexpected_events" => unexpected_events.map { |event| compact_event(event) },
+        }.compact
+      end
+
+      {
+        "files_count" => summaries.length,
+        "events_count" => summaries.sum { |summary| summary.fetch("events_count", 0) },
+        "expected_events_count" => summaries.sum { |summary| summary.fetch("expected_events_count", 0) },
+        "unexpected_events_count" => summaries.sum { |summary| summary.fetch("unexpected_events_count", 0) },
+        "files" => summaries,
+      }
     end
 
     def require_events
@@ -100,6 +125,31 @@ module RailsDependencyPruner
         @payloads ||= paths.map do |path|
           JSON.parse(File.read(path))
         end
+      end
+
+      def integer(value)
+        return value if value.is_a?(Integer)
+        return if value.nil? || value.to_s.empty?
+
+        Integer(value)
+      rescue ArgumentError, TypeError
+        nil
+      end
+
+      def compact_event(event)
+        event.slice(
+          "mode",
+          "phase",
+          "action",
+          "event_id",
+          "path",
+          "matched_path",
+          "gem",
+          "constant",
+          "transform_id",
+          "caller_path",
+          "caller_line",
+        )
       end
 
       def legacy_limits(payload)

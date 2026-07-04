@@ -168,6 +168,8 @@ middleware and route summaries. Use `RAILS_DEPENDENCY_PRUNER_MAX_MIDDLEWARE` and
 `RAILS_DEPENDENCY_PRUNER_MAX_ROUTES` to bound those sections.
 Production approval rejects a profile when a disabled framework still appears in
 recorded middleware or routes.
+If early-boot or canary output JSON is passed through `--runtime-evidence`,
+production approval also rejects unexpected runtime events.
 
 For Ruby object type and Rails class instance sizes:
 

@@ -44,7 +44,8 @@ A profile is ready only when:
 - source, environment, bundle, runtime evidence, and profile fingerprints match
 - request, job, mail, storage, cable, and task coverage covers the transforms
 - lazy gems are classified in `config/rails_dependency_pruner/gem_policies.yml`
-- canary has no unexpected boot or request events
+- canary event evidence passed through `--runtime-evidence` has no unexpected
+  boot or request events
 - RSS savings satisfy the app memory policy
 - first request, p95, and p99 latency regressions satisfy the app policy
 - the approved profile records `approved_at`, `approved_by`, verifier version,
