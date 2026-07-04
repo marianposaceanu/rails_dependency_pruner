@@ -18,6 +18,20 @@ The profile id is stored in both `profile_id` and
 `fingerprints.profile_id` while v2 compatibility remains. The digest ignores
 both id fields.
 
+## safety approval
+
+Unapproved profiles carry `safety.production_allowed: false` and empty approval
+metadata. After `approve` succeeds, the profile records:
+
+- `approved_at`
+- `approved_by`
+- `verifier_version`
+- verifier `errors`
+- verifier `warnings`
+
+Approval metadata changes the profile digest, so the approved profile gets a new
+`profile_id`. Semantic profile diffs ignore approval metadata.
+
 ## transform contract
 
 Each transform entry must carry the production contract from the registry:

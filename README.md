@@ -75,13 +75,15 @@ bundle exec rails-dependency-pruner approve \
   --app . \
   --profile config/rails_dependency_pruner_profile.json \
   --coverage config/pruner_coverage.yml \
-  --measurement tmp/pruner-ablation.json
+  --measurement tmp/pruner-ablation.json \
+  --approved-by release-owner
 ```
 
 Production approval rejects unclassified dynamic require/load edges in
 boot-critical `config/*.rb` files and dynamic constantization that could resolve
 to pruned Rails namespaces. It also rejects profiles built from truncated
-runtime evidence.
+runtime evidence. Successful approval records `approved_at`, `approved_by`, the
+verifier version, and verifier errors/warnings in profile safety metadata.
 
 Write one reviewed rollout patch after approval:
 

@@ -119,6 +119,11 @@ module RailsDependencyPruner
           "manual_keep" => [],
           "confidence_threshold" => 0.98,
           "production_allowed" => false,
+          "approved_at" => nil,
+          "approved_by" => nil,
+          "verifier_version" => nil,
+          "errors" => [],
+          "warnings" => [],
           "failure_mode" => "raise",
         },
         "unexpected_event_policy" => "fail_boot",
@@ -189,10 +194,14 @@ module RailsDependencyPruner
       CanonicalJson.dump(payload)
     end
 
-    def approve_production!
+    def approve_production!(approved_by: nil, report: nil, approved_at: Time.now.utc.iso8601)
       payload["safety"] ||= {}
       payload["safety"]["production_allowed"] = true
-      payload["safety"]["verifier_version"] ||= RailsDependencyPruner::VERSION
+      payload["safety"]["approved_at"] = approved_at
+      payload["safety"]["approved_by"] = approved_by || ENV["RAILS_DEPENDENCY_PRUNER_APPROVED_BY"] || ENV["USER"]
+      payload["safety"]["verifier_version"] = RailsDependencyPruner::VERSION
+      payload["safety"]["errors"] = Array(report && report["errors"])
+      payload["safety"]["warnings"] = Array(report && report["warnings"])
       ProfileSchema.set_profile_id(payload, digest)
       self
     end

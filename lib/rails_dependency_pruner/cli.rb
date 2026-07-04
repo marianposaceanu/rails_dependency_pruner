@@ -182,11 +182,13 @@ module RailsDependencyPruner
         if options.fetch(:approve_production)
           report["profile_approved"] = false
           if report.fetch("verified")
-            profile.approve_production!
+            profile.approve_production!(approved_by: options[:approved_by], report: report)
             profile.write(options.fetch(:profile_path))
             report["profile_approved"] = true
             report["profile"]["profile_id"] = profile.profile_id
             report["profile"]["production_allowed"] = true
+            report["profile"]["approved_at"] = profile.payload.dig("safety", "approved_at")
+            report["profile"]["approved_by"] = profile.payload.dig("safety", "approved_by")
           end
         end
 
@@ -702,6 +704,7 @@ module RailsDependencyPruner
             --frameworks NAMES
             --runtime-evidence PATHS
             --coverage PATH
+            --approved-by NAME
             --disable-eager-load
             --skip-railties PATHS
             --json

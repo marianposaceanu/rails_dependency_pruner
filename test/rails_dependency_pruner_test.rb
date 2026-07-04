@@ -899,6 +899,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       approved["profile_id"] = "sha256:new"
       approved["fingerprints"]["profile_id"] = "sha256:new"
       approved["safety"]["production_allowed"] = true
+      approved["safety"]["approved_at"] = "2026-07-05T12:00:00Z"
+      approved["safety"]["approved_by"] = "release-owner"
+      approved["safety"]["verifier_version"] = "0.1.0"
+      approved["safety"]["errors"] = []
+      approved["safety"]["warnings"] = []
 
       File.write(old_profile, JSON.pretty_generate(payload))
       File.write(new_profile, JSON.pretty_generate(approved))
@@ -2606,6 +2611,11 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       before = JSON.parse(File.read(profile_path))
       assert_equal false, before.dig("safety", "production_allowed")
+      assert_nil before.dig("safety", "approved_at")
+      assert_nil before.dig("safety", "approved_by")
+      assert_nil before.dig("safety", "verifier_version")
+      assert_equal [], before.dig("safety", "errors")
+      assert_equal [], before.dig("safety", "warnings")
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -2621,6 +2631,8 @@ class RailsDependencyPrunerTest < Minitest::Test
         "actionpack,activerecord",
         "--coverage",
         coverage_path,
+        "--approved-by",
+        "release-owner",
         "--json",
         chdir: ROOT.to_s,
       )
@@ -2631,9 +2643,16 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, payload.fetch("verified")
       assert_equal true, payload.fetch("profile_approved")
       assert_equal true, payload.dig("profile", "production_allowed")
+      assert_equal "release-owner", payload.dig("profile", "approved_by")
+      refute_nil payload.dig("profile", "approved_at")
 
       approved = JSON.parse(File.read(profile_path))
       assert_equal true, approved.dig("safety", "production_allowed")
+      assert_equal "release-owner", approved.dig("safety", "approved_by")
+      assert_match(/\A\d{4}-\d{2}-\d{2}T/, approved.dig("safety", "approved_at"))
+      assert_equal RailsDependencyPruner::VERSION, approved.dig("safety", "verifier_version")
+      assert_equal [], approved.dig("safety", "errors")
+      assert_equal [], approved.dig("safety", "warnings")
       refute_equal before.fetch("profile_id"), approved.fetch("profile_id")
 
       early_stdout, early_stderr, early_status = Open3.capture3(

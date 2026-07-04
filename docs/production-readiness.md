@@ -11,7 +11,7 @@ bundle exec rails-dependency-pruner coverage template --app . --write config/pru
 bundle exec rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
 bundle exec rails-dependency-pruner plan --app . --coverage config/pruner_coverage.yml --runtime-evidence tmp/pruner-runtime.json
 bundle exec rails-dependency-pruner measure ablation --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --target requests --request-paths /,/login,/health --output tmp/pruner-ablation.json --markdown tmp/pruner-ablation.md
-bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json
+bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json --approved-by release-owner
 bundle exec rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
 ```
 
@@ -44,6 +44,8 @@ A profile is ready only when:
 - canary has no unexpected boot or request events
 - RSS savings satisfy the app memory policy
 - first request, p95, and p99 latency regressions satisfy the app policy
+- the approved profile records `approved_at`, `approved_by`, verifier version,
+  and verifier errors/warnings
 
 Start with `RAILS_DEPENDENCY_PRUNER_MODE=canary`. Move to production only with a
 matching `RAILS_DEPENDENCY_PRUNER_PROFILE_ID` and a rollback path through

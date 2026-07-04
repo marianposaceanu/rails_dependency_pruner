@@ -121,6 +121,9 @@ module RailsDependencyPruner
         context.dig("safety")&.delete("production_allowed")
         context.dig("safety")&.delete("approved_at")
         context.dig("safety")&.delete("approved_by")
+        context.dig("safety")&.delete("verifier_version")
+        context.dig("safety")&.delete("errors")
+        context.dig("safety")&.delete("warnings")
         context
       end
 

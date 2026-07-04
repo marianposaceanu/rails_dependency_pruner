@@ -89,6 +89,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-latency-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-high-risk-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-transform-contract-smoke.json`
+- `tmp/lobsters-ruby405-rails813-approval-metadata-smoke.json`
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
@@ -155,6 +156,13 @@ Transform contract smoke:
   transform contract gaps
 - next action before approval: regenerate the profile with the current registry
   so every transform carries its proof, rollback, and production rule fields
+
+Approval metadata smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-approval-metadata-smoke.json`
+- result: `profile_approved: false`
+- reason: the older local profile still fails contract and latency-policy gates
+  before approval metadata can be written
 
 Request ablation smoke, one run per variant:
 

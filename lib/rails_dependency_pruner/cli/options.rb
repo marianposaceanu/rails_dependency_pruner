@@ -261,6 +261,7 @@ module RailsDependencyPruner
           runtime_evidence_paths: [],
           production: default_production,
           approve_production: default_approve_production,
+          approved_by: ENV["RAILS_DEPENDENCY_PRUNER_APPROVED_BY"],
           json: false,
         }
 
@@ -276,6 +277,7 @@ module RailsDependencyPruner
           parser.on("--measurement PATH", "Measurement or ablation JSON used by production memory policy") { |path| options[:measurement_path] = path }
           parser.on("--production", "Require production verification gates") { options[:production] = true }
           parser.on("--approve-production", "Set safety.production_allowed=true after successful --production verify") { options[:approve_production] = true }
+          parser.on("--approved-by NAME", "Reviewer recorded in safety.approved_by") { |name| options[:approved_by] = name }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
             puts parser
