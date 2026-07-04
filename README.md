@@ -336,7 +336,9 @@ for fixture and development checks against a Rails checkout.
 Rails DSL usage is treated as framework evidence. The catalog in
 `config/rails_dependency_pruner/catalogs/rails_8_1.yml` maps calls such as
 `has_one_attached`, `has_rich_text`, `queue_as`, `mail`, and `stream_from` to
-framework constants that should stay reachable.
+framework constants that should stay reachable. Catalog entries also record
+owned railties, required coverage sections, and negative rules that keep a
+framework when boot-critical evidence is present.
 
 Literal dynamic constant usage is also kept. Calls such as
 `"ActionController::Base".constantize` and

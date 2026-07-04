@@ -1,131 +1,242 @@
 active_record:
   framework: activerecord
+  railties:
+    - active_record/railtie
   constants:
     - ActiveRecord
     - ActiveRecord::Base
-  app_patterns:
+  dsl:
     - belongs_to
     - has_many
     - has_one
-    - validates
     - transaction
-  config_patterns:
+  config:
     - active_record.*
+  coverage_required:
+    - active_record
+  negative_rules:
+    - evidence: config.active_record.*
+      decision: keep
+      reason: Active Record configuration is boot-critical evidence.
+
+active_model:
+  framework: activemodel
+  railties:
+    - active_model/railtie
+  constants:
+    - ActiveModel
+    - ActiveModel::Model
+  dsl:
+    - validates
+  config:
+    - active_model.*
+  coverage_required:
+    - active_model
+  negative_rules:
+    - evidence: validates
+      decision: keep
+      reason: Validation DSL can be used outside Active Record.
 
 active_job:
   framework: activejob
+  railties:
+    - active_job/railtie
   constants:
     - ActiveJob
     - ActiveJob::Base
-  app_patterns:
+  dsl:
     - perform_later
     - queue_as
-  config_patterns:
+  config:
     - active_job.*
+  coverage_required:
+    - jobs
+  negative_rules:
+    - evidence: config.active_job.*
+      decision: keep
+      reason: Active Job configuration can select production adapters.
 
 action_mailer:
   framework: actionmailer
+  railties:
+    - action_mailer/railtie
   constants:
     - ActionMailer
     - ActionMailer::Base
-  app_patterns:
-    - mail
+  dsl:
     - deliver_later
-  config_patterns:
+    - mail
+  config:
     - action_mailer.*
+  coverage_required:
+    - mailers
+  negative_rules:
+    - evidence: config.action_mailer.*
+      decision: keep
+      reason: Mailer configuration can affect delivery behavior.
 
 action_controller:
   framework: actionpack
+  railties:
+    - action_controller/railtie
   constants:
     - ActionController
     - ActionController::Base
-  config_patterns:
+  config:
     - action_controller.*
-  route_patterns:
+  routes:
     - route:delete
     - route:get
     - route:match
     - route:patch
     - route:post
     - route:put
-    - route:resources
     - route:resource
+    - route:resources
     - route:root
+  coverage_required:
+    - requests
+  negative_rules:
+    - evidence: routes
+      decision: keep
+      reason: Public routes require Action Pack request coverage.
 
 action_dispatch:
   framework: actionpack
+  railties:
+    - action_controller/railtie
   constants:
     - ActionController::Base
     - ActionDispatch
-  config_patterns:
+  config:
     - action_dispatch.*
-  route_patterns:
+  routes:
     - route:constraints
     - route:direct
     - route:mount
     - route:redirect
     - route:resolve
+  coverage_required:
+    - requests
+  negative_rules:
+    - evidence: mounted Rack apps
+      decision: keep
+      reason: Mounted apps and route helpers are request-stack evidence.
 
 action_view:
   framework: actionview
+  railties:
+    - action_view/railtie
   constants:
     - ActionView
     - ActionView::Base
-  config_patterns:
+  config:
     - action_view.*
+  coverage_required:
+    - requests
+  negative_rules:
+    - evidence: app/views
+      decision: keep
+      reason: Templates require request coverage before pruning Action View.
 
 active_storage:
   framework: activestorage
+  railties:
+    - active_storage/engine
   constants:
     - ActiveStorage
     - ActiveStorage::Attachment
     - ActiveStorage::Blob
-  app_patterns:
+  dsl:
     - has_many_attached
     - has_one_attached
-  config_patterns:
+  config:
     - active_storage.*
-  route_patterns:
+  routes:
     - direct:rails_blob
     - direct:rails_representation
     - resolve:ActiveStorage::Blob
+  coverage_required:
+    - active_storage
+  negative_rules:
+    - evidence: config.active_storage.*
+      decision: keep
+      reason: Active Storage configuration is stronger evidence than missing attachment DSL.
+    - evidence: has_one_attached
+      decision: keep
+      reason: Attachment declarations require upload, analyze, variant, and representation coverage.
+    - evidence: has_many_attached
+      decision: keep
+      reason: Attachment declarations require upload, analyze, variant, and representation coverage.
 
 action_text:
   framework: actiontext
+  railties:
+    - action_text/engine
   constants:
     - ActionText
     - ActionText::RichText
-  app_patterns:
+  dsl:
     - has_rich_text
-  config_patterns:
+  config:
     - action_text.*
+  coverage_required:
+    - action_text
+  negative_rules:
+    - evidence: has_rich_text
+      decision: keep
+      reason: Rich text declarations require editor and rendering coverage.
 
 action_cable:
   framework: actioncable
+  railties:
+    - action_cable/engine
   constants:
     - ActionCable
     - ActionCable::Channel::Base
-  app_patterns:
-    - stream_from
+  dsl:
     - stream_for
-  route_patterns:
+    - stream_from
+  config:
+    - action_cable.*
+  routes:
     - mount ActionCable.server
     - mount:ActionCable.server
-  config_patterns:
-    - action_cable.*
+  coverage_required:
+    - channels
+  negative_rules:
+    - evidence: mount ActionCable.server
+      decision: keep
+      reason: Mounted Action Cable server requires channel coverage.
 
 action_mailbox:
   framework: actionmailbox
+  railties:
+    - action_mailbox/engine
   constants:
     - ActionMailbox
     - ActionMailbox::Base
-  config_patterns:
+  config:
     - action_mailbox.*
+  coverage_required:
+    - mailers
+  negative_rules:
+    - evidence: config.action_mailbox.*
+      decision: keep
+      reason: Inbound mail routing requires explicit coverage.
 
 active_support:
   framework: activesupport
+  railties:
+    - active_support/railtie
   constants:
     - ActiveSupport
     - ActiveSupport::Dependencies
-  config_patterns:
+  config:
     - active_support.*
+  coverage_required:
+    - boot
+  negative_rules:
+    - evidence: config.active_support.*
+      decision: keep
+      reason: Active Support is foundational boot infrastructure.

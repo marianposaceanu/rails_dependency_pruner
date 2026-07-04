@@ -256,7 +256,9 @@ configured constant phase matches the observed `lib/time_series.rb` boot use.
 
 Latest static catalog smoke used the current local Lobsters lockfile, which has
 Rails `8.0.5`. The scanner selected `rails_8_0`, scanned `157` files, and did
-not boot the app. Max RSS for the smoke process was `41713664` bytes.
+not boot the app. The richer catalog metadata produced coverage requirements for
+`active_model`, `active_record`, `active_storage`, `boot`, `jobs`, `mailers`,
+and `requests`. Max RSS for the smoke process was `43646976` bytes.
 
 Artifact: `tmp/lobsters-ruby405-rails805-feature-catalog-smoke.json`.
 

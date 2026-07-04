@@ -7,6 +7,7 @@ require "prism"
 
 require_relative "constant_resolver"
 require_relative "feature_catalog"
+require_relative "source_digest"
 require_relative "static/config_visitor"
 require_relative "static/dynamic_constant_visitor"
 require_relative "static/rails_dsl_visitor"
@@ -18,7 +19,7 @@ module RailsDependencyPruner
   class AppUsage
     DEFAULT_SCAN_ROOTS = %w[app config lib].freeze
 
-    attr_reader :app_root, :index, :scan_roots, :references, :require_references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :require_matches, :parse_errors
+    attr_reader :app_root, :index, :scan_roots, :feature_catalog, :references, :require_references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :require_matches, :parse_errors
 
     def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default)
       @app_root = Pathname.new(app_root).expand_path
@@ -133,6 +134,7 @@ module RailsDependencyPruner
       {
         app_root: app_root.to_s,
         scan_roots: scan_roots,
+        feature_catalog: feature_catalog_context,
         files_scanned: ruby_files.length,
         parse_errors: parse_errors,
         direct_rails_constants_count: direct_rails_constants.length,
@@ -147,6 +149,14 @@ module RailsDependencyPruner
     end
 
     private
+      def feature_catalog_context
+        {
+          name: feature_catalog.name,
+          rails_version: feature_catalog.rails_version,
+          digest: feature_catalog.path && SourceDigest.file(feature_catalog.path),
+        }
+      end
+
       def constants_for_require_path(path)
         definitions_by_require_path.fetch(path.to_s.delete_suffix(".rb"), []).map(&:name)
       end

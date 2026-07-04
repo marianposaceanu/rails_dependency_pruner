@@ -50,49 +50,43 @@ module RailsDependencyPruner
 
     def matches_for_pattern(pattern)
       entries.filter_map do |feature, config|
-        patterns = Array(config["app_patterns"]).map(&:to_s)
+        patterns = patterns_for(config, "dsl", "app_patterns")
         next unless patterns.include?(pattern.to_s)
 
-        {
-          "feature" => feature,
-          "framework" => config["framework"],
+        match_payload(feature, config).merge(
+          "evidence_kind" => "dsl",
           "pattern" => pattern.to_s,
-          "constants" => Array(config["constants"]).map(&:to_s).sort,
-        }
+        )
       end
     end
 
     def matches_for_config_path(config_path)
       entries.filter_map do |feature, config|
-        pattern = Array(config["config_patterns"]).map(&:to_s).find do |candidate|
+        pattern = patterns_for(config, "config", "config_patterns").find do |candidate|
           pattern_matches?(candidate, config_path.to_s)
         end
         next unless pattern
 
-        {
-          "feature" => feature,
-          "framework" => config["framework"],
+        match_payload(feature, config).merge(
+          "evidence_kind" => "config",
           "pattern" => pattern,
           "config_path" => config_path.to_s,
-          "constants" => Array(config["constants"]).map(&:to_s).sort,
-        }
+        )
       end
     end
 
     def matches_for_route_signature(signature)
       entries.filter_map do |feature, config|
-        pattern = Array(config["route_patterns"]).map(&:to_s).find do |candidate|
+        pattern = patterns_for(config, "routes", "route_patterns").find do |candidate|
           pattern_matches?(candidate, signature.to_s)
         end
         next unless pattern
 
-        {
-          "feature" => feature,
-          "framework" => config["framework"],
+        match_payload(feature, config).merge(
+          "evidence_kind" => "route",
           "pattern" => pattern,
           "route_signature" => signature.to_s,
-          "constants" => Array(config["constants"]).map(&:to_s).sort,
-        }
+        )
       end
     end
 
@@ -121,6 +115,21 @@ module RailsDependencyPruner
         return DEFAULT_VERSION if parts.empty?
 
         [parts.fetch(0), parts.fetch(1, "0")].join(".")
+      end
+
+      def patterns_for(config, *keys)
+        keys.flat_map { |key| Array(config[key]) }.map(&:to_s).uniq
+      end
+
+      def match_payload(feature, config)
+        {
+          "feature" => feature,
+          "framework" => config["framework"],
+          "railties" => Array(config["railties"]).map(&:to_s).sort,
+          "constants" => Array(config["constants"]).map(&:to_s).sort,
+          "coverage_required" => Array(config["coverage_required"]).map(&:to_s).sort,
+          "negative_rules" => Array(config["negative_rules"]),
+        }
       end
 
       def pattern_matches?(pattern, value)

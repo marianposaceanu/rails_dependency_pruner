@@ -335,6 +335,13 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes features, "active_job"
       assert_includes features, "action_cable"
 
+      active_storage_match = usage.feature_matches.find { |match| match.fetch("feature") == "active_storage" }
+      assert_equal "dsl", active_storage_match.fetch("evidence_kind")
+      assert_equal ["active_storage/engine"], active_storage_match.fetch("railties")
+      assert_equal ["active_storage"], active_storage_match.fetch("coverage_required")
+      assert active_storage_match.fetch("negative_rules").any? { |rule| rule.fetch("evidence") == "has_one_attached" }
+      assert_equal "rails_8_1", usage.to_h.dig(:feature_catalog, :name)
+
       refute_includes planner.unused_constants, "ActiveStorage::Blob"
       refute_includes planner.unused_constants, "ActionText::RichText"
     end
@@ -353,6 +360,11 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal "8.1", fallback.rails_version
     assert_includes rails81.to_h.keys, "active_storage"
     assert_includes rails81.to_h.dig("active_storage", "constants"), "ActiveStorage::Blob"
+    assert_equal ["active_storage/engine"], rails81.to_h.dig("active_storage", "railties")
+    assert_equal ["has_many_attached", "has_one_attached"], rails81.to_h.dig("active_storage", "dsl")
+    assert_equal ["active_storage"], rails81.to_h.dig("active_storage", "coverage_required")
+    assert rails81.to_h.dig("active_storage", "negative_rules").any? { |rule| rule.fetch("evidence") == "config.active_storage.*" }
+    assert_includes rails81.to_h.keys, "active_model"
   end
 
   def test_dynamic_constant_patterns_keep_exact_literal_constants
@@ -489,6 +501,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes config_paths, "active_job.queue_adapter"
       assert_includes config_paths, "active_support.deprecation"
       assert_includes config_paths, "active_record.query_log_tags"
+
+      storage_config_match = usage.sorted_config_matches.find { |match| match.fetch("feature") == "active_storage" }
+      assert_equal "config", storage_config_match.fetch("evidence_kind")
+      assert_equal ["active_storage/engine"], storage_config_match.fetch("railties")
+      assert_equal ["active_storage"], storage_config_match.fetch("coverage_required")
     end
   end
 
@@ -531,6 +548,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes route_signatures, "route:resources"
       assert_includes route_signatures, "mount:ActionCable.server"
       assert_includes route_signatures, "direct:rails_blob"
+
+      cable_route_match = usage.sorted_route_matches.find { |match| match.fetch("feature") == "action_cable" }
+      assert_equal "route", cable_route_match.fetch("evidence_kind")
+      assert_equal ["action_cable/engine"], cable_route_match.fetch("railties")
+      assert_equal ["channels"], cable_route_match.fetch("coverage_required")
     end
   end
 
