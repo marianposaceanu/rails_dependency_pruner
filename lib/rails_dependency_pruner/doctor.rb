@@ -50,6 +50,28 @@ module RailsDependencyPruner
       sidekiq
       spring
     ].freeze
+    DIRECT_GEM_USAGE = {
+      "vips" => {
+        "constants" => %w[Vips],
+        "require_paths" => %w[vips],
+      },
+      "nokogiri" => {
+        "constants" => %w[Nokogiri],
+        "require_paths" => %w[nokogiri],
+      },
+      "sentry" => {
+        "constants" => %w[Sentry],
+        "require_paths" => %w[sentry-ruby sentry-rails],
+      },
+      "honeybadger" => {
+        "constants" => %w[Honeybadger],
+        "require_paths" => %w[honeybadger],
+      },
+      "rollbar" => {
+        "constants" => %w[Rollbar],
+        "require_paths" => %w[rollbar],
+      },
+    }.freeze
 
     attr_reader :app_root
 
@@ -265,10 +287,12 @@ module RailsDependencyPruner
       end
 
       def direct_gem_usage
-        {
-          "vips" => direct_usage_for("Vips", "vips"),
-          "nokogiri" => direct_usage_for("Nokogiri", "nokogiri"),
-        }
+        DIRECT_GEM_USAGE.transform_values do |config|
+          direct_usage_for(
+            constants: config.fetch("constants"),
+            require_paths: config.fetch("require_paths"),
+          )
+        end
       end
 
       def integrations
@@ -385,10 +409,15 @@ module RailsDependencyPruner
         }
       end
 
-      def direct_usage_for(constant, require_path)
-        matches = grep_ruby(/\b#{Regexp.escape(constant)}\b|require\s+["']#{Regexp.escape(require_path)}["']/)
+      def direct_usage_for(constants:, require_paths:)
+        constant_pattern = Array(constants).map { |constant| Regexp.escape(constant) }.join("|")
+        require_pattern = Array(require_paths).map { |path| Regexp.escape(path) }.join("|")
+        pattern = /\b(?:#{constant_pattern})\b|require\s+["'](?:#{require_pattern})["']/
+        matches = grep_ruby(pattern)
         {
           "present" => !matches.empty?,
+          "constants" => Array(constants).sort,
+          "require_paths" => Array(require_paths).sort,
           "matches" => matches,
         }
       end

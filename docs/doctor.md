@@ -18,7 +18,8 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.jobs`, `mailers`, `channels`
 - `capabilities.active_storage`: `has_one_attached` and `has_many_attached`
 - `capabilities.action_text`: `has_rich_text`
-- `capabilities.direct_gem_usage`: direct `Vips` and `Nokogiri` use
+- `capabilities.direct_gem_usage`: direct `Vips`, `Nokogiri`, `Sentry`,
+  `Honeybadger`, and `Rollbar` API use
 - `capabilities.integrations`: known observability/profiler gems
 - `capabilities.adapters`: known server/job/boot adapter gems
 - `risks.initializers_dynamic_require_load`

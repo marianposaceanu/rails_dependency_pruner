@@ -5660,7 +5660,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "Gemfile"), <<~RUBY)
         source "https://rubygems.org"
         gem "bootsnap"
+        gem "honeybadger"
         gem "puma"
+        gem "rollbar"
         gem "sentry-rails"
         gem "sidekiq"
       RUBY
@@ -5669,7 +5671,9 @@ class RailsDependencyPrunerTest < Minitest::Test
           specs:
             rails (8.1.3)
             bootsnap (1.18.6)
+            honeybadger (5.0.0)
             puma (7.0.4)
+            rollbar (3.6.2)
             sentry-rails (6.0.0)
             sidekiq (8.0.8)
       LOCK
@@ -5723,6 +5727,9 @@ class RailsDependencyPrunerTest < Minitest::Test
           def analyze
             Vips::Image.new_from_file("avatar.jpg")
             Nokogiri::HTML("<p>x</p>")
+            Sentry.capture_message("avatar")
+            Honeybadger.notify("avatar")
+            Rollbar.error("avatar")
             name.constantize
           end
         end
@@ -5750,13 +5757,17 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "8.1.3", payload.dig("runtime", "rails_version")
       assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
       assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
-      assert_equal ["sentry-rails"], payload.dig("capabilities", "integrations")
+      assert_equal %w[honeybadger rollbar sentry-rails], payload.dig("capabilities", "integrations")
       assert_equal %w[bootsnap puma sidekiq], payload.dig("capabilities", "adapters")
       assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
       assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")
       assert_equal 1, payload.dig("capabilities", "action_text", "declarations_count")
       assert_equal true, payload.dig("capabilities", "direct_gem_usage", "vips", "present")
       assert_equal true, payload.dig("capabilities", "direct_gem_usage", "nokogiri", "present")
+      assert_equal true, payload.dig("capabilities", "direct_gem_usage", "sentry", "present")
+      assert_equal true, payload.dig("capabilities", "direct_gem_usage", "honeybadger", "present")
+      assert_equal true, payload.dig("capabilities", "direct_gem_usage", "rollbar", "present")
+      assert_equal ["Sentry"], payload.dig("capabilities", "direct_gem_usage", "sentry", "constants")
       assert_equal ["CleanupJob"], payload.dig("capabilities", "jobs", "classes")
       assert_equal ["UserMailer"], payload.dig("capabilities", "mailers", "classes")
       assert_equal ["NotificationsChannel"], payload.dig("capabilities", "channels", "classes")

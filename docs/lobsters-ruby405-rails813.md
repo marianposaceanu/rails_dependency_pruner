@@ -96,6 +96,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
+- `tmp/lobsters-ruby405-rails805-doctor-direct-gem-smoke.json`
 - `tmp/lobsters-ruby405-rails813-coverage-template.yml`
 
 Static capability scan:
@@ -108,6 +109,7 @@ Static capability scan:
 | Action Text DSL | `0` declarations |
 | direct `Vips` use | yes, `app/models/story_image.rb` |
 | direct `Nokogiri` use | yes |
+| direct `Sentry` use | yes |
 | mounted Rack apps | `MissionControl::Jobs::Engine` |
 | jobs / mailers / channels | `10` / `8` / `0` |
 | integrations | `rack-mini-profiler`, `sentry-rails`, `sentry-ruby` |
