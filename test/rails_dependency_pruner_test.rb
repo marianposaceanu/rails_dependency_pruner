@@ -158,6 +158,85 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_cli_writes_byte_stable_deterministic_profile
+    Dir.mktmpdir("rails_dependency_pruner_deterministic") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "Gemfile.lock"), "GEM\n  specs:\n    rails (8.1.3)\n")
+
+      first_profile = File.join(dir, "first.json")
+      second_profile = File.join(dir, "second.json")
+
+      [first_profile, second_profile].each do |profile_path|
+        _stdout, stderr, status = Open3.capture3(
+          RUBY,
+          ROOT.join("exe/rails-dependency-pruner").to_s,
+          "audit",
+          "--rails-root",
+          FAKE_RAILS_ROOT.to_s,
+          "--frameworks",
+          "actionpack,activerecord",
+          "--app",
+          app_root,
+          "--write-profile",
+          profile_path,
+          "--deterministic",
+          "--json",
+          "--no-tree",
+          "--no-unused",
+          chdir: ROOT.to_s,
+        )
+
+        assert status.success?, stderr
+      end
+
+      assert_equal File.read(first_profile), File.read(second_profile)
+
+      profile = RailsDependencyPruner::Profile.load(first_profile)
+      assert_equal 2, profile.schema_version
+      assert_match(/\Asha256:/, profile.profile_id)
+      assert_equal profile.digest, profile.profile_id
+      assert_includes profile.unused_require_paths, "active_record/orphan_feature"
+
+      stdout, stderr, status = validate_profile(profile_path: first_profile, app_root: app_root)
+      assert status.success?, stderr
+      assert_includes stdout, "Profile valid"
+    end
+  end
+
+  def test_profile_validate_rejects_changed_app_source
+    Dir.mktmpdir("rails_dependency_pruner_stale_app") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      File.open(File.join(app_root, "app/controllers/application_controller.rb"), "a") do |file|
+        file.puts "# invalidate profile"
+      end
+
+      _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
+      refute status.success?
+      assert_includes stderr, "app.files_digest mismatch"
+    end
+  end
+
+  def test_profile_validate_rejects_changed_gemfile_lock
+    Dir.mktmpdir("rails_dependency_pruner_stale_lock") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "Gemfile.lock"), "GEM\n  specs:\n    rails (8.1.3)\n")
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      File.write(File.join(app_root, "Gemfile.lock"), "GEM\n  specs:\n    rails (8.1.4)\n")
+
+      _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
+      refute status.success?
+      assert_includes stderr, "bundler.gemfile_lock_digest mismatch"
+    end
+  end
+
   def test_cli_merges_runtime_evidence
     stdout, stderr, status = Open3.capture3(
       RUBY,
@@ -269,4 +348,46 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "engine guarded\n", stdout
     end
   end
+
+  private
+    def write_deterministic_profile(profile_path:, app_root:)
+      _stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "audit",
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--app",
+        app_root,
+        "--write-profile",
+        profile_path,
+        "--deterministic",
+        "--json",
+        "--no-tree",
+        "--no-unused",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+    end
+
+    def validate_profile(profile_path:, app_root:)
+      Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "validate",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        chdir: ROOT.to_s,
+      )
+    end
 end

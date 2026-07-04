@@ -36,6 +36,23 @@ bundle exec rails-dependency-pruner audit \
   --write-profile config/rails_dependency_pruner_profile.json
 ```
 
+For a reproducible schema v2 profile with source and lockfile digests:
+
+```bash
+bundle exec rails-dependency-pruner audit \
+  --app . \
+  --deterministic \
+  --write-profile config/rails_dependency_pruner_profile.json
+```
+
+Validate it before using it:
+
+```bash
+bundle exec rails-dependency-pruner profile validate \
+  --app . \
+  --profile config/rails_dependency_pruner_profile.json
+```
+
 Enable the engine in `config/environments/development.rb` or another controlled
 environment:
 
@@ -118,6 +135,8 @@ only in throwaway experiments.
 - `bundle exec rails-dependency-pruner audit --app .`
 - `bundle exec rails-dependency-pruner audit --app . --json --no-tree`
 - `bundle exec rails-dependency-pruner audit --app . --write-profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner audit --app . --deterministic --write-profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner profile validate --app . --profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`
 
 Installed Rails `8.x` gems are used by default. `--rails-root PATH` exists only
