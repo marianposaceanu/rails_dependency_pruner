@@ -16,31 +16,41 @@ module RailsDependencyPruner
     end
 
     class RequireVisitor < Prism::Visitor
-      attr_reader :references
+      attr_reader :references, :matches
 
       def initialize(relative_path:)
         @relative_path = relative_path
         @references = []
+        @matches = []
       end
 
       def visit_call_node(node)
-        record_literal_require(node)
+        record_require(node)
         super
       end
 
       private
-        def record_literal_require(node)
+        def record_require(node)
           return unless %i[require require_relative load autoload].include?(node.name)
 
           target = literal_target(node)
-          return unless target
+          if target
+            references << RequireReference.new(
+              kind: node.name,
+              target: target,
+              path: @relative_path,
+              line: node.location.start_line,
+            )
+          end
 
-          references << RequireReference.new(
-            kind: node.name,
-            target: target,
-            path: @relative_path,
-            line: node.location.start_line,
-          )
+          matches << {
+            "kind" => node.name.to_s,
+            "target" => target,
+            "confidence" => target ? 1.0 : 0.3,
+            "dynamic" => target.nil?,
+            "path" => @relative_path,
+            "line" => node.location.start_line,
+          }.compact
         end
 
         def literal_target(node)

@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require "pathname"
+
+require "prism"
+
 require_relative "dependency_graph"
 require_relative "../constant_resolver"
 require_relative "../static/require_visitor"
@@ -62,6 +66,16 @@ module RailsDependencyPruner
                 "line" => definition.line,
               },
             )
+            graph.add_edge(
+              from: graph.constant_id(definition.name),
+              to: graph.file_id(definition.path),
+              type: :defined_in,
+              source: definition.path,
+              confidence: 1.0,
+              metadata: {
+                "line" => definition.line,
+              },
+            )
           end
         end
 
@@ -87,7 +101,60 @@ module RailsDependencyPruner
                   "kind" => reference.kind.to_s,
                 },
               )
+              files_for_require(reference, from_path: relative).each do |target_file|
+                graph.add_edge(
+                  from: graph.require_path_id(reference.target),
+                  to: graph.file_id(target_file),
+                  type: :resolves_to,
+                  source: relative,
+                  confidence: 1.0,
+                  metadata: {
+                    "line" => reference.line,
+                    "kind" => reference.kind.to_s,
+                  },
+                )
+              end
             end
+          end
+        end
+
+        def files_for_require(reference, from_path:)
+          case reference.kind
+          when :require, :load
+            files_for_require_path(reference.target)
+          when :require_relative
+            relative = Pathname.new(from_path).dirname.join(reference.target.to_s).cleanpath.to_s
+            relative = "#{relative}.rb" unless relative.end_with?(".rb")
+            files_by_path.fetch(relative, [])
+          else
+            []
+          end
+        end
+
+        def files_for_require_path(path)
+          target = path.to_s.delete_suffix(".rb")
+          files = files_by_require_path.fetch(target, [])
+          files += files_by_path.fetch(path.to_s, [])
+          files += files_by_path.fetch("#{target}.rb", [])
+          files.uniq
+        end
+
+        def files_by_require_path
+          @files_by_require_path ||= index.source.ruby_files.each_with_object({}) do |path, result|
+            relative = index.source.relative_path(path)
+            require_path = relative.split("/lib/", 2).last&.delete_suffix(".rb")
+            next unless require_path
+
+            result[require_path] ||= []
+            result[require_path] << relative
+          end
+        end
+
+        def files_by_path
+          @files_by_path ||= index.source.ruby_files.each_with_object({}) do |path, result|
+            relative = index.source.relative_path(path)
+            result[relative] ||= []
+            result[relative] << relative
           end
         end
 

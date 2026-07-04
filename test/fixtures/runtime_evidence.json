@@ -17,6 +17,13 @@
       "phase": "boot",
       "caller_path": "config/application.rb",
       "caller_line": 12
+    },
+    {
+      "operation": "require",
+      "path": "action_mailer/base",
+      "phase": "workload",
+      "caller_path": "app/mailers/application_mailer.rb",
+      "caller_line": 1
     }
   ],
   "memory": {

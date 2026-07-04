@@ -32,13 +32,35 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_includes planner.used_constants, "ActiveRecord::Persistence"
     assert_includes planner.used_constants, "ActionController::Base"
     assert_includes planner.used_constants, "ActionController::Metal"
+    assert_includes planner.used_constants, "ActiveRecord::Relation"
+    assert_includes planner.used_constants, "ActiveRecord::UnusedRecordFeature"
+    assert_includes planner.used_constants, "ActiveRecord::OrphanFeature"
+    assert_includes planner.used_constants, "ActionController::UnusedControllerFeature"
 
-    assert_includes planner.unused_constants, "ActiveRecord::Relation"
-    assert_includes planner.unused_constants, "ActiveRecord::UnusedRecordFeature"
-    assert_includes planner.unused_constants, "ActionController::UnusedControllerFeature"
-    assert_includes planner.unused_features, "activerecord/lib/active_record/orphan_feature.rb"
-    assert_includes planner.unused_require_paths, "active_record/orphan_feature"
+    refute_includes planner.unused_features, "activerecord/lib/active_record/orphan_feature.rb"
+    refute_includes planner.unused_require_paths, "active_record/orphan_feature"
     refute_includes planner.unused_require_paths, "active_record/base"
+  end
+
+  def test_app_literal_require_keeps_rails_file_constants
+    Dir.mktmpdir("rails_dependency_pruner_static_require") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "config/require_mailer.rb"), "require \"action_mailer/base\"\n")
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actionmailer actionpack activerecord],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+
+      require_targets = usage.sorted_require_matches.map { |match| match.fetch("target") }
+      assert_includes require_targets, "action_mailer/base"
+      assert_includes usage.direct_rails_require_constants, "ActionMailer::Base"
+      assert_includes planner.used_constants, "ActionMailer::Base"
+      refute_includes planner.unused_require_paths, "action_mailer/base"
+    end
   end
 
   def test_index_defaults_to_installed_rails_8_gems
@@ -64,7 +86,7 @@ class RailsDependencyPrunerTest < Minitest::Test
   def test_runtime_evidence_keeps_observed_constants
     index = RailsDependencyPruner::ConstantIndex.build(
       rails_root: FAKE_RAILS_ROOT,
-      frameworks: %w[actionpack activerecord],
+      frameworks: %w[actionmailer actionpack activerecord],
     )
     usage = RailsDependencyPruner::AppUsage.scan(app_root: FAKE_APP_ROOT, index: index)
     runtime_evidence = RailsDependencyPruner::RuntimeEvidence.new(
@@ -75,14 +97,20 @@ class RailsDependencyPrunerTest < Minitest::Test
 
     assert_includes planner.runtime_constants, "ActiveRecord::Relation"
     assert_includes planner.runtime_constants, "ActiveRecord::OrphanFeature"
+    assert_includes planner.runtime_constants, "ActionMailer"
+    assert_includes planner.runtime_constants, "ActionMailer::Base"
     assert_includes planner.runtime_constants, "ActionController::UnusedControllerFeature"
     assert_includes planner.used_constants, "ActiveRecord::Relation"
     assert_includes planner.used_constants, "ActiveRecord::OrphanFeature"
+    assert_includes planner.used_constants, "ActionMailer::Base"
     assert_includes planner.used_constants, "ActionController::UnusedControllerFeature"
     refute_includes planner.unused_constants, "ActiveRecord::Relation"
     refute_includes planner.unused_constants, "ActiveRecord::OrphanFeature"
+    refute_includes planner.unused_constants, "ActionMailer"
+    refute_includes planner.unused_constants, "ActionMailer::Base"
     refute_includes planner.unused_constants, "ActionController::UnusedControllerFeature"
     refute_includes planner.unused_require_paths, "active_record/orphan_feature"
+    refute_includes planner.unused_require_paths, "action_mailer/base"
   end
 
   def test_dependency_graph_matches_current_used_constant_closure
@@ -104,7 +132,9 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert graph.nodes.key?(graph.constant_id("ActiveRecord::Base"))
     assert graph.nodes.key?(orphan_require_id)
     assert graph.edges.any? { |edge| edge.from == base_file_id && edge.to == base_constant_id && edge.type == :defines }
+    assert graph.edges.any? { |edge| edge.from == base_constant_id && edge.to == base_file_id && edge.type == :defined_in }
     assert graph.edges.any? { |edge| edge.from == base_file_id && edge.to == orphan_require_id && edge.type == :requires }
+    assert graph.edges.any? { |edge| edge.from == orphan_require_id && edge.to == graph.file_id("activerecord/lib/active_record/orphan_feature.rb") && edge.type == :resolves_to }
     assert graph.edges.any? { |edge| edge.from == graph.constant_id("ActiveRecord::Base") && edge.to == graph.constant_id("ActiveRecord::Persistence") }
 
     explanation = planner.explain_constant("ActiveRecord::Base")
@@ -113,9 +143,13 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal "activerecord", explanation.fetch("component")
     assert_equal ["constant:ActiveRecord::Base"], explanation.fetch("reachability_path").map { |entry| entry.fetch("node") }
 
-    unused = planner.explain_constant("ActiveRecord::UnusedRecordFeature")
-    assert_equal "unused", unused.fetch("decision")
-    assert_empty unused.fetch("reachability_path")
+    same_file = planner.explain_constant("ActiveRecord::UnusedRecordFeature")
+    assert_equal "used", same_file.fetch("decision")
+    assert_equal [
+      "constant:ActiveRecord::Base",
+      "file:activerecord/lib/active_record/base.rb",
+      "constant:ActiveRecord::UnusedRecordFeature",
+    ], same_file.fetch("reachability_path").map { |entry| entry.fetch("node") }
   end
 
   def test_cli_explains_constant_usage_as_json
@@ -126,20 +160,20 @@ class RailsDependencyPrunerTest < Minitest::Test
       "--rails-root",
       FAKE_RAILS_ROOT.to_s,
       "--frameworks",
-      "actionpack,activerecord",
+      "actionmailer,actionpack,activerecord",
       "--app",
       FAKE_APP_ROOT.to_s,
       "--json",
-      "ActiveRecord::UnusedRecordFeature",
+      "ActionMailer::Base",
       chdir: ROOT.to_s,
     )
 
     assert status.success?, stderr
 
       payload = JSON.parse(stdout)
-      assert_equal "ActiveRecord::UnusedRecordFeature", payload.fetch("constant")
+      assert_equal "ActionMailer::Base", payload.fetch("constant")
       assert_equal "unused", payload.fetch("decision")
-      assert_equal "activerecord", payload.fetch("component")
+      assert_equal "actionmailer", payload.fetch("component")
     assert_equal "constant", payload.dig("graph", "node", "type")
   end
 
@@ -364,7 +398,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         "--rails-root",
         FAKE_RAILS_ROOT.to_s,
         "--frameworks",
-        "actionpack,activerecord",
+        "actionmailer,actionpack,activerecord",
         "--app",
         FAKE_APP_ROOT.to_s,
         "--json",
@@ -382,26 +416,26 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal FAKE_APP_ROOT.to_s, payload.fetch("app_root")
       assert_equal FAKE_RAILS_ROOT.to_s, payload.dig("source", "label")
       assert_operator payload.fetch("unused_constants_count"), :>, 0
-      assert_includes payload.fetch("unused_constants"), "ActiveRecord::UnusedRecordFeature"
-      assert_includes payload.fetch("unused_require_paths"), "active_record/orphan_feature"
+      assert_includes payload.fetch("unused_constants"), "ActionMailer::Base"
+      assert_includes payload.fetch("unused_require_paths"), "action_mailer/base"
       assert File.exist?(profile_path)
       assert File.exist?(shim_path)
 
       profile = JSON.parse(File.read(profile_path))
-      assert_includes profile.fetch("unused_constants"), "ActiveRecord::UnusedRecordFeature"
-      assert_includes profile.fetch("unused_require_paths"), "active_record/orphan_feature"
+      assert_includes profile.fetch("unused_constants"), "ActionMailer::Base"
+      assert_includes profile.fetch("unused_require_paths"), "action_mailer/base"
 
       guard_stdout, guard_stderr, guard_status = Open3.capture3(
         RUBY,
         "-e",
         <<~RUBY,
-          module ActiveRecord; end
+          module ActionMailer; end
           require #{shim_path.dump}
 
           begin
-            ActiveRecord::UnusedRecordFeature.new
+            ActionMailer::Base.new
           rescue RailsDependencyPrunerShim::DisabledConstantError => error
-            abort unless error.message.include?("ActiveRecord::UnusedRecordFeature.new")
+            abort unless error.message.include?("ActionMailer::Base.new")
             puts "guarded"
           end
         RUBY
@@ -417,9 +451,9 @@ class RailsDependencyPrunerTest < Minitest::Test
           require #{shim_path.dump}
 
           begin
-            require "active_record/orphan_feature"
+            require "action_mailer/base"
           rescue RailsDependencyPrunerShim::DisabledConstantError => error
-            abort unless error.message.include?("active_record/orphan_feature")
+            abort unless error.message.include?("action_mailer/base")
             puts "require guarded"
           end
         RUBY
@@ -468,7 +502,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 2, profile.schema_version
       assert_match(/\Asha256:/, profile.profile_id)
       assert_equal profile.digest, profile.profile_id
-      assert_includes profile.unused_require_paths, "active_record/orphan_feature"
+      refute_includes profile.unused_require_paths, "active_record/orphan_feature"
+      assert_includes profile.payload.fetch("require_matches").map { |match| match.fetch("target") }, "active_record/railtie"
 
       stdout, stderr, status = validate_profile(profile_path: first_profile, app_root: app_root)
       assert status.success?, stderr
@@ -1028,7 +1063,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       "--rails-root",
       FAKE_RAILS_ROOT.to_s,
       "--frameworks",
-      "actionpack,activerecord",
+      "actionmailer,actionpack,activerecord",
       "--app",
       FAKE_APP_ROOT.to_s,
       "--runtime-evidence",
@@ -1041,12 +1076,16 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert status.success?, stderr
 
     payload = JSON.parse(stdout)
-    assert_equal 3, payload.fetch("runtime_rails_constants_count")
+    assert_equal 5, payload.fetch("runtime_rails_constants_count")
     assert_includes payload.fetch("runtime_rails_constants"), "ActiveRecord::Relation"
     assert_includes payload.fetch("runtime_rails_constants"), "ActiveRecord::OrphanFeature"
+    assert_includes payload.fetch("runtime_rails_constants"), "ActionMailer"
+    assert_includes payload.fetch("runtime_rails_constants"), "ActionMailer::Base"
     refute_includes payload.fetch("unused_constants"), "ActiveRecord::Relation"
     refute_includes payload.fetch("unused_constants"), "ActiveRecord::OrphanFeature"
+    refute_includes payload.fetch("unused_constants"), "ActionMailer::Base"
     refute_includes payload.fetch("unused_require_path_provenance").map { |entry| entry.fetch("require_path") }, "active_record/orphan_feature"
+    refute_includes payload.fetch("unused_require_path_provenance").map { |entry| entry.fetch("require_path") }, "action_mailer/base"
     assert_equal 1, payload.fetch("runtime_memory").length
     assert_equal 1048576, payload.dig("runtime_memory_summary", "object_sizes", "T_STRING")
     assert_equal "ActionController::UnusedControllerFeature", payload.dig("runtime_memory_summary", "rails_class_instance_sizes", 0, "name")
@@ -1762,6 +1801,22 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
       assert_equal 1, payload.dig("profile", "disabled_require_paths_count")
       assert File.exist?(report_path)
+    end
+  end
+
+  def test_measure_runner_uses_measured_app_bundle
+    Dir.mktmpdir("rails_dependency_pruner_measure_bundle") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.mkdir_p(app_root)
+      File.write(File.join(app_root, "Gemfile"), "source \"https://rubygems.org\"\n")
+
+      runner = RailsDependencyPruner::Measurement::Runner.new(
+        app_root: app_root,
+        variants: ["baseline"],
+        runs: 1,
+      )
+
+      assert_equal File.join(app_root, "Gemfile"), runner.send(:env_for, "baseline").fetch("BUNDLE_GEMFILE")
     end
   end
 

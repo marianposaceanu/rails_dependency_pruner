@@ -105,6 +105,7 @@ module RailsDependencyPruner
             "RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT" => variant,
             "RUBYLIB" => ruby_lib,
           }
+          env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))
           return env unless profile_path
 
           env["RAILS_DEPENDENCY_PRUNER_PROFILE"] = profile_path

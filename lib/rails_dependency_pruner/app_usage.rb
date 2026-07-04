@@ -10,6 +10,7 @@ require_relative "feature_catalog"
 require_relative "static/config_visitor"
 require_relative "static/dynamic_constant_visitor"
 require_relative "static/rails_dsl_visitor"
+require_relative "static/require_visitor"
 require_relative "static/route_visitor"
 require_relative "source_visitor"
 
@@ -17,7 +18,7 @@ module RailsDependencyPruner
   class AppUsage
     DEFAULT_SCAN_ROOTS = %w[app config lib].freeze
 
-    attr_reader :app_root, :index, :scan_roots, :references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :parse_errors
+    attr_reader :app_root, :index, :scan_roots, :references, :require_references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :require_matches, :parse_errors
 
     def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default)
       @app_root = Pathname.new(app_root).expand_path
@@ -25,10 +26,12 @@ module RailsDependencyPruner
       @scan_roots = scan_roots
       @feature_catalog = feature_catalog
       @references = []
+      @require_references = []
       @feature_matches = []
       @config_matches = []
       @route_matches = []
       @dynamic_matches = []
+      @require_matches = []
       @parse_errors = []
     end
 
@@ -68,6 +71,11 @@ module RailsDependencyPruner
         result.value.accept(dynamic_visitor)
         references.concat(dynamic_visitor.references)
         dynamic_matches.concat(dynamic_visitor.matches)
+
+        require_visitor = Static::RequireVisitor.new(relative_path: relative(path))
+        result.value.accept(require_visitor)
+        require_references.concat(require_visitor.references)
+        require_matches.concat(require_visitor.matches)
       end
 
       self
@@ -93,8 +101,24 @@ module RailsDependencyPruner
       rails_references.map { |reference| reference.fetch(:constant) }.to_set
     end
 
+    def direct_rails_require_constants
+      rails_require_references.flat_map do |reference|
+        constants_for_require_path(reference.target)
+      end.to_set
+    end
+
+    def rails_require_references
+      require_references.select do |reference|
+        constants_for_require_path(reference.target).any?
+      end
+    end
+
     def sorted_dynamic_matches
       dynamic_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("kind"), match["constant"].to_s] }
+    end
+
+    def sorted_require_matches
+      require_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("kind"), match["target"].to_s] }
     end
 
     def sorted_config_matches
@@ -118,10 +142,25 @@ module RailsDependencyPruner
         config_matches: sorted_config_matches,
         route_matches: sorted_route_matches,
         dynamic_matches: sorted_dynamic_matches,
+        require_matches: sorted_require_matches,
       }
     end
 
     private
+      def constants_for_require_path(path)
+        definitions_by_require_path.fetch(path.to_s.delete_suffix(".rb"), []).map(&:name)
+      end
+
+      def definitions_by_require_path
+        @definitions_by_require_path ||= index.definitions.values.each_with_object({}) do |definition, result|
+          require_path = definition.path.split("/lib/", 2).last&.delete_suffix(".rb")
+          next unless require_path
+
+          result[require_path] ||= []
+          result[require_path] << definition
+        end
+      end
+
       def ruby_files
         @ruby_files ||= scan_roots.flat_map do |root|
           full_root = app_root.join(root)

@@ -41,6 +41,7 @@ module RailsDependencyPruner
         "config_matches" => planner.usage.sorted_config_matches,
         "route_matches" => planner.usage.sorted_route_matches,
         "dynamic_matches" => planner.usage.sorted_dynamic_matches,
+        "require_matches" => planner.usage.sorted_require_matches,
         "runtime_memory" => planner.runtime_memory,
         "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
       )
@@ -72,6 +73,7 @@ module RailsDependencyPruner
         "config_matches" => planner.usage.sorted_config_matches,
         "route_matches" => planner.usage.sorted_route_matches,
         "dynamic_matches" => planner.usage.sorted_dynamic_matches,
+        "require_matches" => planner.usage.sorted_require_matches,
         "summary" => {
           "rails_constants_count" => planner.index.definitions.length,
           "direct_rails_constants_count" => planner.usage.direct_rails_constants.length,

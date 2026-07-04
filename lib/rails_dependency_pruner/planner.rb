@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
 require "set"
+require "pathname"
+
+require "prism"
 
 require_relative "constant_resolver"
 require_relative "graph/constant_graph_builder"
 require_relative "runtime_memory_summary"
+require_relative "static/require_visitor"
 
 module RailsDependencyPruner
   class Planner
@@ -33,6 +37,14 @@ module RailsDependencyPruner
           end
 
           index.definitions.fetch(constant)&.dependencies&.each do |dependency|
+            queue << dependency unless used.include?(dependency)
+          end
+
+          file_peer_constants(constant).each do |dependency|
+            queue << dependency unless used.include?(dependency)
+          end
+
+          require_dependency_constants(constant).each do |dependency|
             queue << dependency unless used.include?(dependency)
           end
         end
@@ -81,7 +93,7 @@ module RailsDependencyPruner
     end
 
     def seed_constants
-      usage.direct_rails_constants | runtime_constants
+      usage.direct_rails_constants | usage.direct_rails_require_constants | runtime_constants
     end
 
     def runtime_constants
@@ -112,6 +124,7 @@ module RailsDependencyPruner
         config_matches: usage.sorted_config_matches,
         route_matches: usage.sorted_route_matches,
         dynamic_matches: usage.sorted_dynamic_matches,
+        require_matches: usage.sorted_require_matches,
         runtime_memory: runtime_memory,
         runtime_memory_summary: runtime_memory_summary.to_h,
         top_unused_namespaces: unused_by_namespace,
@@ -134,7 +147,9 @@ module RailsDependencyPruner
     end
 
     def graph_used_constants
-      dependency_graph.reachable_from(seed_constants).map { |id| id.delete_prefix("constant:") }.to_set
+      dependency_graph.reachable_from(seed_constants).filter_map do |id|
+        id.delete_prefix("constant:") if id.start_with?("constant:")
+      end.to_set
     end
 
     def explain_constant(name)
@@ -185,6 +200,72 @@ module RailsDependencyPruner
 
       def definitions_by_path
         @definitions_by_path ||= index.definitions.values.group_by(&:path)
+      end
+
+      def file_peer_constants(constant)
+        definition = index.definitions.fetch(constant, nil)
+        return [] unless definition
+
+        definitions_by_path.fetch(definition.path, []).map(&:name)
+      end
+
+      def definitions_by_require_path
+        @definitions_by_require_path ||= index.definitions.values.each_with_object({}) do |definition, result|
+          require_path = definition.path.split("/lib/", 2).last&.delete_suffix(".rb")
+          next unless require_path
+
+          result[require_path] ||= []
+          result[require_path] << definition
+        end
+      end
+
+      def require_dependency_constants(constant)
+        definition = index.definitions.fetch(constant, nil)
+        return [] unless definition
+
+        rails_require_references_by_file.fetch(definition.path, []).flat_map do |reference|
+          next [] if reference.kind == :autoload
+
+          constants_for_require_reference(reference, from_path: definition.path)
+        end
+      end
+
+      def rails_require_references_by_file
+        @rails_require_references_by_file ||= index.source.ruby_files.each_with_object({}) do |path, result|
+          relative = index.source.relative_path(path)
+          parse_result = Prism.parse_file(path.to_s)
+          next unless parse_result.success?
+
+          visitor = Static::RequireVisitor.new(relative_path: relative)
+          parse_result.value.accept(visitor)
+          result[relative] = visitor.references
+        end
+      end
+
+      def constants_for_require_reference(reference, from_path:)
+        case reference.kind
+        when :require, :load
+          constants_for_require_path(reference.target)
+        when :require_relative
+          constants_for_relative_require(reference.target, from_path: from_path)
+        else
+          []
+        end
+      end
+
+      def constants_for_require_path(path)
+        target = path.to_s.delete_suffix(".rb")
+        definitions = definitions_by_require_path.fetch(target, [])
+        definitions += definitions_by_path.fetch(path.to_s, [])
+        definitions += definitions_by_path.fetch("#{target}.rb", [])
+        definitions.map(&:name)
+      end
+
+      def constants_for_relative_require(target, from_path:)
+        relative = Pathname.new(from_path).dirname.join(target.to_s).cleanpath.to_s
+        relative = "#{relative}.rb" unless relative.end_with?(".rb")
+
+        definitions_by_path.fetch(relative, []).map(&:name)
       end
   end
 end

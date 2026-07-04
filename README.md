@@ -119,6 +119,9 @@ bin/rails test
 This records `require`, `require_relative`, and `load` events with caller and
 phase fields. Literal Rails require/load events are merged back into the
 planner as keep evidence for the constants defined by the loaded file.
+Static literal `require`, `require_relative`, and `load` calls are also treated
+as keep evidence. If a used Rails file requires another Rails file, the required
+file is kept too.
 
 For Ruby object type and Rails class instance sizes:
 
@@ -280,11 +283,12 @@ Against a temp copy of `LOBSTERS_APP`, using RVM Ruby
 - Rails Ruby files scanned: `1409`
 - Rails constants indexed: `2331`
 - Lobsters direct Rails constants: `58`
-- Reachable Rails constants after closure: `759`
-- Unused Rails constant candidates: `1572`
-- Unused Rails feature files: `783`
-- Disabled frameworks: `actioncable`, `actiontext`
-- Disabled railties: `action_cable/engine`, `action_text/engine`
+- Reachable Rails constants after closure: `1532`
+- Static require/load matches: `44`
+- Unused Rails constant candidates: `799`
+- Unused Rails feature files: `517`
+- Disabled frameworks: `actiontext`
+- Disabled railties: `action_text/engine`
 - Rails parse errors: `0`
 - app parse errors: `0`
 
@@ -304,13 +308,15 @@ initialization. It is a smoke benchmark, not a production savings claim.
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |
-| baseline | `134400 KB` (`131.3 MiB`) | `415` | `223478` |
-| production early boot | `136592 KB` (`133.4 MiB`) | `415` | `223901` |
-| delta | `+2192 KB` (`+2.1 MiB`) | `0` | `+423` |
+| baseline | `136848 KB` (`133.6 MiB`) | `415` | `234490` |
+| production early boot | `140224 KB` (`136.9 MiB`) | `415` | `234813` |
+| delta | `+3376 KB` (`+3.3 MiB`) | `0` | `+323` |
 
-The pruned Lobsters railties are already commented out in `config/application.rb`,
-so the loaded Rails feature count does not move in this benchmark. The early
-boot hooks add overhead here instead of saving memory.
+The pruned Lobsters railtie is already commented out in `config/application.rb`,
+so the loaded Rails feature count does not move in this benchmark. Static
+require/load closure keeps Action Cable because the app still has static
+evidence for it. The early boot hooks add overhead here instead of saving
+memory.
 
 Local outputs are ignored under `tmp/`.
 
