@@ -10,7 +10,7 @@ module RailsDependencyPruner
     class Runner
       BOOT_SCRIPT = <<~'RUBY'
         require "json"
-        boot_modes = %w[shadow boot_prune production]
+        boot_modes = %w[shadow boot_prune canary production]
         if boot_modes.include?(ENV["RAILS_DEPENDENCY_PRUNER_MODE"]) ||
             boot_modes.include?(ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_VARIANT"])
           require "rails_dependency_pruner/early_boot"
@@ -261,8 +261,11 @@ module RailsDependencyPruner
           return env unless selected_profile_path
 
           env["RAILS_DEPENDENCY_PRUNER_PROFILE"] = selected_profile_path
-          if %w[shadow boot_prune production].include?(variant)
+          if %w[shadow boot_prune canary production].include?(variant)
             env["RAILS_DEPENDENCY_PRUNER_MODE"] = variant
+            if %w[canary production].include?(variant)
+              env["RAILS_DEPENDENCY_PRUNER_PROFILE_ID"] = Profile.load(selected_profile_path).profile_id
+            end
           elsif variant_profile_path
             env["RAILS_DEPENDENCY_PRUNER_MODE"] = "boot_prune"
           end

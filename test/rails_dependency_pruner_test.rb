@@ -2256,6 +2256,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         {
           "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
           "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => approved.fetch("profile_id"),
         },
         RUBY,
         "-I#{ROOT.join("lib")}",
@@ -3638,6 +3639,75 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_production_mode_requires_profile_id_environment
+    Dir.mktmpdir("rails_dependency_pruner_early_profile_id_env") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      payload = approved_early_boot_profile(
+        "mode" => "production",
+        "pruning" => {
+          "disabled_require_paths" => [],
+        },
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "production mode requires RAILS_DEPENDENCY_PRUNER_PROFILE_ID=#{payload.fetch("profile_id")}"
+    end
+  end
+
+  def test_early_boot_canary_mode_blocks_with_approved_profile
+    Dir.mktmpdir("rails_dependency_pruner_early_canary") do |dir|
+      File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")
+      output_path = File.join(dir, "events.json")
+      profile_path = File.join(dir, "profile.json")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_feature"],
+        },
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-I#{dir}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "blocked_feature is disabled by rails_dependency_pruner early boot"
+
+      events = JSON.parse(File.read(output_path))
+      assert_equal "canary", events.fetch("mode")
+      assert_equal "blocked", events.dig("events", 0, "action")
+      assert_equal "blocked_feature", events.dig("events", 0, "path")
+    end
+  end
+
   def test_apply_early_boot_shim_writes_review_patch
     Dir.mktmpdir("rails_dependency_pruner_early_boot_patch") do |dir|
       app_root = File.join(dir, "app")
@@ -4297,6 +4367,19 @@ class RailsDependencyPrunerTest < Minitest::Test
           },
         },
       ))
+    end
+
+    def approved_early_boot_profile(payload)
+      payload = {
+        "schema_version" => 3,
+        "profile_id" => nil,
+        "fingerprints" => { "profile_id" => nil },
+        "safety" => {
+          "production_allowed" => true,
+        },
+      }.merge(payload)
+      RailsDependencyPruner::ProfileSchema.set_profile_id(payload, RailsDependencyPruner::Profile.new(payload).digest)
+      payload
     end
 
     def build_profile(profile_path:, app_root:, coverage_path:, frameworks: "actionpack,activerecord", runtime_evidence_path: nil)

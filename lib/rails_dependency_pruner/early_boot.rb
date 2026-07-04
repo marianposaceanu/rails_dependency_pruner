@@ -80,6 +80,9 @@ module RailsDependencyPruner
     SUPPORTED_LAZY_GEMS = (
       %w[commonmarker flamegraph memory_profiler parslet stackprof] + LAZY_GEM_CONSTANTS.keys + LAZY_GEM_STUBS.keys
     ).sort.freeze
+    MODES = %w[shadow boot_prune canary production].freeze
+    SAFETY_MODES = %w[canary production].freeze
+    BLOCKING_MODES = %w[boot_prune canary production].freeze
     DisabledRequireError = Class.new(StandardError)
     UnsafeProfileError = Class.new(StandardError)
 
@@ -89,6 +92,7 @@ module RailsDependencyPruner
       profile_path: ENV["RAILS_DEPENDENCY_PRUNER_PROFILE"] || DEFAULT_PROFILE_PATH,
       output_path: ENV["RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT"],
       mode: ENV["RAILS_DEPENDENCY_PRUNER_MODE"],
+      expected_profile_id: ENV["RAILS_DEPENDENCY_PRUNER_PROFILE_ID"],
       disabled: ENV["RAILS_DEPENDENCY_PRUNER_DISABLE"] == "1"
     )
       return false if disabled || @installed
@@ -96,8 +100,8 @@ module RailsDependencyPruner
 
       payload = JSON.parse(File.read(profile_path))
       @mode = (mode || payload["mode"] || "shadow").to_s
-      return false unless %w[shadow boot_prune production].include?(@mode)
-      validate_profile_safety!(payload)
+      return false unless MODES.include?(@mode)
+      validate_profile_safety!(payload, expected_profile_id: expected_profile_id)
 
       @disabled_require_paths = disabled_require_paths(payload)
       @skipped_require_paths = skipped_require_paths(payload)
@@ -224,7 +228,7 @@ module RailsDependencyPruner
     end
 
     def blocking?
-      %w[boot_prune production].include?(@mode)
+      BLOCKING_MODES.include?(@mode)
     end
 
     def write!
@@ -335,16 +339,22 @@ module RailsDependencyPruner
       path.start_with?("./", "../")
     end
 
-    def validate_profile_safety!(payload)
-      return unless @mode == "production"
+    def validate_profile_safety!(payload, expected_profile_id:)
+      return unless SAFETY_MODES.include?(@mode)
+
       unless payload.dig("safety", "production_allowed") == true
-        raise UnsafeProfileError, "rails_dependency_pruner production mode requires safety.production_allowed=true"
+        raise UnsafeProfileError, "rails_dependency_pruner #{@mode} mode requires safety.production_allowed=true"
       end
 
       expected = profile_digest(payload)
-      return if profile_id(payload) == expected
+      unless profile_id(payload) == expected
+        raise UnsafeProfileError, "rails_dependency_pruner #{@mode} mode requires matching profile_id"
+      end
+      unless expected_profile_id.to_s == expected
+        raise UnsafeProfileError, "rails_dependency_pruner #{@mode} mode requires RAILS_DEPENDENCY_PRUNER_PROFILE_ID=#{expected}"
+      end
 
-      raise UnsafeProfileError, "rails_dependency_pruner production mode requires matching profile_id"
+      true
     end
 
     def after_require(path)

@@ -661,7 +661,7 @@ module RailsDependencyPruner
           Useful options:
             --profile PATH
             --coverage PATH
-            --variants baseline,boot_prune,no_eager_load,no_eager_load_skip_railties
+            --variants baseline,boot_prune,canary,production,no_eager_load,no_eager_load_skip_railties
             --runs N
             --target application|environment|requests
             --skip-railties PATHS

@@ -115,6 +115,14 @@ Memory policy approval smoke:
 - approved policy profile id:
   `sha256:6fec6cca5c99ca981badba5ad6e54859ba2c3fefa39155ecf1fde0c24b60a777`
 
+Early boot strict-mode smoke:
+
+- `production` accepted the policy profile only with matching
+  `RAILS_DEPENDENCY_PRUNER_PROFILE_ID`
+- `canary` accepted the same policy profile with matching profile id
+- `production` without `RAILS_DEPENDENCY_PRUNER_PROFILE_ID` failed closed before
+  app boot
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,
