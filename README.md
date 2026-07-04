@@ -160,6 +160,7 @@ to skip it.
 - `bundle exec rails-dependency-pruner audit --app . --deterministic --write-profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner profile validate --app . --profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner apply boot-plan --app . --profile config/rails_dependency_pruner_profile.json --write-patch tmp/pruner-boot-plan.patch`
+- `bundle exec rails-dependency-pruner measure boot --app . --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner audit --app . --write-shim tmp/rails_dependency_pruner_shim.rb`
 

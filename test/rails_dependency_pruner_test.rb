@@ -652,6 +652,37 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_measure_boot_reports_process_memory
+    Dir.mktmpdir("rails_dependency_pruner_measure") do |dir|
+      report_path = File.join(dir, "measurement.json")
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "measure",
+        "boot",
+        "--app",
+        FAKE_APP_ROOT.to_s,
+        "--variants",
+        "baseline,boot_prune",
+        "--runs",
+        "1",
+        "--output",
+        report_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "ok", payload.dig("variants", "baseline", "status")
+      assert_equal "ok", payload.dig("variants", "boot_prune", "status")
+      assert_operator payload.dig("variants", "baseline", "rss_kb_median"), :>, 0
+      assert payload.dig("deltas", "boot_prune").key?("rss_kb")
+      assert File.exist?(report_path)
+    end
+  end
+
   private
     def write_deterministic_profile(profile_path:, app_root:)
       _stdout, stderr, status = Open3.capture3(

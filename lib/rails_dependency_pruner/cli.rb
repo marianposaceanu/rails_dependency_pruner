@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "fileutils"
 require "optparse"
 require "pathname"
 
@@ -12,6 +13,7 @@ require_relative "planner"
 require_relative "profile"
 require_relative "profile_context"
 require_relative "profile_validator"
+require_relative "measurement/runner"
 require_relative "runtime_evidence"
 require_relative "shim_writer"
 
@@ -33,6 +35,8 @@ module RailsDependencyPruner
         run_index
       when "explain"
         run_explain
+      when "measure"
+        run_measure
       when "profile"
         run_profile
       when "help", "-h", "--help"
@@ -58,6 +62,44 @@ module RailsDependencyPruner
           puts JSON.pretty_generate(payload)
         else
           print_index(index)
+        end
+
+        0
+      end
+
+      def run_measure
+        subcommand = @argv.shift || "help"
+
+        case subcommand
+        when "boot"
+          run_measure_boot
+        when "help", "-h", "--help"
+          puts measure_help
+          0
+        else
+          warn "Unknown measure command: #{subcommand}"
+          warn measure_help
+          1
+        end
+      end
+
+      def run_measure_boot
+        options = parse_measure_boot_options
+        report = Measurement::Runner.new(
+          app_root: options.fetch(:app_root),
+          variants: options.fetch(:variants),
+          runs: options.fetch(:runs),
+        ).run
+
+        if options[:output_path]
+          FileUtils.mkdir_p(File.dirname(options[:output_path]))
+          File.write(options[:output_path], JSON.pretty_generate(report))
+        end
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          print_measurement(report, output_path: options[:output_path])
         end
 
         0
@@ -316,6 +358,37 @@ module RailsDependencyPruner
         options
       end
 
+      def parse_measure_boot_options
+        options = {
+          app_root: nil,
+          variants: %w[baseline],
+          runs: 5,
+          output_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner measure boot [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--variants NAMES", "Comma-separated variant names") { |names| options[:variants] = split_csv(names) }
+          parser.on("--runs N", Integer, "Runs per variant") { |runs| options[:runs] = runs }
+          parser.on("--output PATH", "Write measurement JSON") { |path| options[:output_path] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(@argv)
+
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "--runs must be positive" unless options.fetch(:runs).positive?
+        raise ArgumentError, "--variants must not be empty" if options.fetch(:variants).empty?
+
+        options
+      end
+
       def print_index(index)
         payload = index.to_h(include_tree: false)
 
@@ -376,6 +449,7 @@ module RailsDependencyPruner
             audit  Scan an app and find unused Rails constants
             apply boot-plan  Write a reviewed patch replacing rails/all
             explain CONSTANT  Explain why a Rails constant is used or unused
+            measure boot  Measure boot memory in fresh processes
             profile validate  Validate a deterministic profile against current inputs
 
           Required:
@@ -426,6 +500,21 @@ module RailsDependencyPruner
             --scan ROOTS
             --frameworks NAMES
             --runtime-evidence PATHS
+            --json
+        HELP
+      end
+
+      def measure_help
+        <<~HELP
+          Usage: rails-dependency-pruner measure boot [options]
+
+          Required:
+            --app PATH
+
+          Useful options:
+            --variants baseline,boot_prune
+            --runs N
+            --output PATH
             --json
         HELP
       end
@@ -495,6 +584,28 @@ module RailsDependencyPruner
         boot_plan.pruned_frameworks.each { |framework| puts "  #{framework}" }
         puts
         puts "Patch written to: #{patch_path}" if patch_path
+      end
+
+      def print_measurement(report, output_path:)
+        report.fetch("variants").each do |variant, summary|
+          puts "#{variant}: #{summary.fetch("status")}"
+          next unless summary.fetch("status") == "ok"
+
+          puts "  RSS median: #{summary.fetch("rss_kb_median")} KB"
+          puts "  Rails loaded features median: #{summary.fetch("rails_loaded_features_median")}"
+          puts "  GC live slots median: #{summary.fetch("gc_heap_live_slots_median")}"
+        end
+
+        unless report.fetch("deltas").empty?
+          puts
+          puts "Deltas vs baseline:"
+          report.fetch("deltas").each do |variant, delta|
+            puts "  #{variant}: #{delta}"
+          end
+        end
+
+        puts
+        puts "Report written to: #{output_path}" if output_path
       end
   end
 end
