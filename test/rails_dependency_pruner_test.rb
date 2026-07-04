@@ -431,6 +431,102 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_accepts_current_deterministic_profile
+    Dir.mktmpdir("rails_dependency_pruner_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_equal true, payload.fetch("production_allowed")
+      assert_empty payload.fetch("errors")
+    end
+  end
+
+  def test_verify_rejects_v1_profile_for_production_gate
+    Dir.mktmpdir("rails_dependency_pruner_verify_v1") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "schema_version" => 1,
+        "unused_constants" => [],
+      ))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        FAKE_APP_ROOT.to_s,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert payload.fetch("errors").any? { |error| error.include?("schema 1") }
+    end
+  end
+
+  def test_verify_production_requires_coverage_manifest
+    Dir.mktmpdir("rails_dependency_pruner_verify_production") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert_includes payload.fetch("errors"), "production verify requires a coverage manifest digest"
+    end
+  end
+
   def test_cli_merges_runtime_evidence
     stdout, stderr, status = Open3.capture3(
       RUBY,

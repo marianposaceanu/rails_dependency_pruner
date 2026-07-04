@@ -13,6 +13,7 @@ require_relative "planner"
 require_relative "profile"
 require_relative "profile_context"
 require_relative "profile_diff"
+require_relative "profile_verifier"
 require_relative "profile_validator"
 require_relative "measurement/runner"
 require_relative "runtime_evidence"
@@ -40,6 +41,8 @@ module RailsDependencyPruner
         run_measure
       when "profile"
         run_profile
+      when "verify"
+        run_verify
       when "help", "-h", "--help"
         puts help
         0
@@ -66,6 +69,36 @@ module RailsDependencyPruner
         end
 
         0
+      end
+
+      def run_verify
+        options = parse_verify_options
+        profile = Profile.load(options.fetch(:profile_path))
+        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
+        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        context = ProfileContext.build(
+          app_root: options.fetch(:app_root),
+          rails_root: options.fetch(:rails_root),
+          scan_roots: options.fetch(:scan_roots),
+          frameworks: options.fetch(:frameworks),
+          runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
+          coverage_path: options[:coverage_path],
+        )
+        report = ProfileVerifier.new(
+          profile: profile,
+          context: context,
+          index: index,
+          usage: usage,
+          production: options.fetch(:production),
+        ).verify
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          print_verify_report(report)
+        end
+
+        report.fetch("verified") ? 0 : 1
       end
 
       def run_measure
@@ -366,6 +399,45 @@ module RailsDependencyPruner
         options
       end
 
+      def parse_verify_options
+        options = {
+          app_root: nil,
+          rails_root: nil,
+          scan_roots: AppUsage::DEFAULT_SCAN_ROOTS,
+          frameworks: ConstantIndex::DEFAULT_FRAMEWORKS,
+          profile_path: nil,
+          coverage_path: nil,
+          runtime_evidence_paths: [],
+          production: false,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner verify [options]"
+          parser.on("--profile PATH", "Profile to verify") { |path| options[:profile_path] = path }
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
+          parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
+          parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
+          parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
+          parser.on("--production", "Require production verification gates") { options[:production] = true }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(@argv)
+
+        options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
+        raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+
+        options
+      end
+
       def parse_apply_boot_plan_options
         options = {
           app_root: nil,
@@ -496,6 +568,7 @@ module RailsDependencyPruner
             explain CONSTANT  Explain why a Rails constant is used or unused
             measure boot  Measure boot memory in fresh processes
             profile validate  Validate a deterministic profile against current inputs
+            verify  Validate profile and app safety gates
 
           Required:
             --app PATH                 Required for audit
@@ -693,6 +766,23 @@ module RailsDependencyPruner
         else
           value.inspect
         end
+      end
+
+      def print_verify_report(report)
+        puts "Verified: #{report.fetch("verified")}"
+        puts "Production allowed: #{report.fetch("production_allowed")}"
+
+        unless report.fetch("errors").empty?
+          puts
+          puts "Errors:"
+          report.fetch("errors").each { |error| puts "  #{error}" }
+        end
+
+        rails_errors = report.dig("parse_errors", "rails").length
+        app_errors = report.dig("parse_errors", "app").length
+        puts
+        puts "Rails parse errors: #{rails_errors}"
+        puts "App parse errors: #{app_errors}"
       end
   end
 end
