@@ -10,13 +10,14 @@ require_relative "feature_catalog"
 require_relative "static/config_visitor"
 require_relative "static/dynamic_constant_visitor"
 require_relative "static/rails_dsl_visitor"
+require_relative "static/route_visitor"
 require_relative "source_visitor"
 
 module RailsDependencyPruner
   class AppUsage
     DEFAULT_SCAN_ROOTS = %w[app config lib].freeze
 
-    attr_reader :app_root, :index, :scan_roots, :references, :feature_matches, :config_matches, :dynamic_matches, :parse_errors
+    attr_reader :app_root, :index, :scan_roots, :references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :parse_errors
 
     def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default)
       @app_root = Pathname.new(app_root).expand_path
@@ -26,6 +27,7 @@ module RailsDependencyPruner
       @references = []
       @feature_matches = []
       @config_matches = []
+      @route_matches = []
       @dynamic_matches = []
       @parse_errors = []
     end
@@ -56,6 +58,11 @@ module RailsDependencyPruner
         result.value.accept(config_visitor)
         references.concat(config_visitor.references)
         config_matches.concat(config_visitor.matches)
+
+        route_visitor = Static::RouteVisitor.new(relative_path: relative(path), catalog: @feature_catalog)
+        result.value.accept(route_visitor)
+        references.concat(route_visitor.references)
+        route_matches.concat(route_visitor.matches)
 
         dynamic_visitor = Static::DynamicConstantVisitor.new(relative_path: relative(path))
         result.value.accept(dynamic_visitor)
@@ -94,6 +101,10 @@ module RailsDependencyPruner
       config_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("feature"), match.fetch("config_path")] }
     end
 
+    def sorted_route_matches
+      route_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("feature"), match.fetch("route_signature")] }
+    end
+
     def to_h
       {
         app_root: app_root.to_s,
@@ -105,6 +116,7 @@ module RailsDependencyPruner
         references: rails_references,
         feature_matches: feature_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("feature")] },
         config_matches: sorted_config_matches,
+        route_matches: sorted_route_matches,
         dynamic_matches: sorted_dynamic_matches,
       }
     end

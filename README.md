@@ -237,6 +237,10 @@ Rails config usage is boot-critical evidence. Settings such as
 `Rails.application.config.active_record.query_log_tags` become keep evidence and
 are reported in `config_matches`.
 
+Routes are scanned as framework evidence too. Route DSL calls keep Action Pack,
+and route-specific hooks such as `mount ActionCable.server` or
+`direct :rails_blob` are reported in `route_matches`.
+
 ## lobsters run
 
 Against the local Rails `8.1.3` gems and

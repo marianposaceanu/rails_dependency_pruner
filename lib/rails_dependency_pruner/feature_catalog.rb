@@ -51,6 +51,23 @@ module RailsDependencyPruner
       end
     end
 
+    def matches_for_route_signature(signature)
+      entries.filter_map do |feature, config|
+        pattern = Array(config["route_patterns"]).map(&:to_s).find do |candidate|
+          pattern_matches?(candidate, signature.to_s)
+        end
+        next unless pattern
+
+        {
+          "feature" => feature,
+          "framework" => config["framework"],
+          "pattern" => pattern,
+          "route_signature" => signature.to_s,
+          "constants" => Array(config["constants"]).map(&:to_s).sort,
+        }
+      end
+    end
+
     def to_h
       entries
     end

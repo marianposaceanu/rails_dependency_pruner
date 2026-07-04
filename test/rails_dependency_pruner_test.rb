@@ -307,6 +307,48 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_route_patterns_keep_framework_constants
+    Dir.mktmpdir("rails_dependency_pruner_route_patterns") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(
+        File.join(app_root, "config/routes.rb"),
+        <<~RUBY,
+          Rails.application.routes.draw do
+            root to: "home#index"
+            get "/posts" => "posts#index"
+            resources :stories
+            mount ActionCable.server => "/cable"
+            direct :rails_blob do |blob|
+              "/rails/active_storage/blobs/\#{blob.id}"
+            end
+          end
+        RUBY
+      )
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actioncable actionpack activestorage],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index, scan_roots: %w[config])
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+
+      assert_includes usage.direct_rails_constants, "ActionController::Base"
+      assert_includes usage.direct_rails_constants, "ActionCable::Channel::Base"
+      assert_includes usage.direct_rails_constants, "ActiveStorage::Blob"
+
+      refute_includes planner.unused_constants, "ActionController::Base"
+      refute_includes planner.unused_constants, "ActionCable::Channel::Base"
+      refute_includes planner.unused_constants, "ActiveStorage::Blob"
+
+      route_signatures = usage.sorted_route_matches.map { |match| match.fetch("route_signature") }
+      assert_includes route_signatures, "route:get"
+      assert_includes route_signatures, "route:resources"
+      assert_includes route_signatures, "mount:ActionCable.server"
+      assert_includes route_signatures, "direct:rails_blob"
+    end
+  end
+
   def test_cli_outputs_json_and_writes_shim
     Dir.mktmpdir("rails_dependency_pruner") do |dir|
       shim_path = File.join(dir, "shim.rb")

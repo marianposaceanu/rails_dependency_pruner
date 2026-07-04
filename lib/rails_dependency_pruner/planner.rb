@@ -110,6 +110,7 @@ module RailsDependencyPruner
         runtime_rails_constants: runtime_constants.to_a.sort,
         feature_matches: usage.feature_matches,
         config_matches: usage.sorted_config_matches,
+        route_matches: usage.sorted_route_matches,
         dynamic_matches: usage.sorted_dynamic_matches,
         runtime_memory: runtime_memory,
         runtime_memory_summary: runtime_memory_summary.to_h,
