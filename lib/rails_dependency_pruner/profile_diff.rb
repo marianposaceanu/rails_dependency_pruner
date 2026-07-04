@@ -22,20 +22,27 @@ module RailsDependencyPruner
       app
       analysis
       evidence
+      tool
+      environment
+      fingerprints
+      transforms
+      expected_events
       safety
       summary
     ].freeze
 
-    attr_reader :old_profile, :new_profile
+    attr_reader :old_profile, :new_profile, :semantic
 
-    def initialize(old_profile:, new_profile:)
+    def initialize(old_profile:, new_profile:, semantic: false)
       @old_profile = old_profile
       @new_profile = new_profile
+      @semantic = semantic
     end
 
     def to_h
       {
         "changed" => changed?,
+        "semantic" => semantic,
         "context_changes" => context_changes,
         "pruning_changes" => pruning_changes,
       }
@@ -96,9 +103,22 @@ module RailsDependencyPruner
       end
 
       def context_for(payload)
-        CONTEXT_KEYS.to_h do |key|
+        context = CONTEXT_KEYS.to_h do |key|
           [key, payload[key]]
         end
+        return context unless semantic
+
+        semantic_context(context)
+      end
+
+      def semantic_context(context)
+        context = deep_dup(context)
+        context["profile_id"] = nil
+        context.dig("fingerprints")&.delete("profile_id")
+        context.dig("safety")&.delete("production_allowed")
+        context.dig("safety")&.delete("approved_at")
+        context.dig("safety")&.delete("approved_by")
+        context
       end
 
       def pruning_for(payload)
@@ -112,6 +132,17 @@ module RailsDependencyPruner
           "autoload_ignores" => pruning["autoload_ignores"],
           "eager_load_ignores" => pruning["eager_load_ignores"],
         }
+      end
+
+      def deep_dup(value)
+        case value
+        when Hash
+          value.transform_values { |nested| deep_dup(nested) }
+        when Array
+          value.map { |nested| deep_dup(nested) }
+        else
+          value
+        end
       end
   end
 end

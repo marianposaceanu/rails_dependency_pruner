@@ -453,6 +453,7 @@ module RailsDependencyPruner
         diff = ProfileDiff.new(
           old_profile: Profile.load(options.fetch(:old_profile_path)),
           new_profile: Profile.load(options.fetch(:new_profile_path)),
+          semantic: options.fetch(:semantic),
         ).to_h
 
         if options.fetch(:json)

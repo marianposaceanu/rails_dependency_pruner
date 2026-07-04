@@ -342,7 +342,7 @@ module RailsDependencyPruner
       end
 
       expected = profile_digest(payload)
-      return if payload["profile_id"] == expected
+      return if profile_id(payload) == expected
 
       raise UnsafeProfileError, "rails_dependency_pruner production mode requires matching profile_id"
     end
@@ -610,8 +610,19 @@ module RailsDependencyPruner
     end
 
     def profile_digest(payload)
-      digest_payload = payload.merge("profile_id" => nil)
+      digest_payload = if payload["schema_version"] == 2 && !payload.key?("fingerprints")
+        payload.merge("profile_id" => nil)
+      else
+        payload.merge(
+          "profile_id" => nil,
+          "fingerprints" => (payload["fingerprints"] || {}).merge("profile_id" => nil),
+        )
+      end
       "sha256:#{Digest::SHA256.hexdigest(CanonicalJson.digestible(digest_payload))}"
+    end
+
+    def profile_id(payload)
+      payload.dig("fingerprints", "profile_id") || payload["profile_id"]
     end
 
     def install_shadow_hooks!

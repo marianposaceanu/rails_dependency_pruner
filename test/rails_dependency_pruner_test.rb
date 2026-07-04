@@ -548,9 +548,13 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal File.read(first_profile), File.read(second_profile)
 
       profile = RailsDependencyPruner::Profile.load(first_profile)
-      assert_equal 2, profile.schema_version
+      assert_equal 3, profile.schema_version
       assert_match(/\Asha256:/, profile.profile_id)
       assert_equal profile.digest, profile.profile_id
+      assert_equal profile.profile_id, profile.payload.dig("fingerprints", "profile_id")
+      assert_equal "rails_dependency_pruner", profile.payload.dig("tool", "name")
+      assert profile.payload.fetch("environment").key?("rails_version")
+      assert_match(/\Asha256:/, profile.payload.dig("fingerprints", "source_manifest_sha256"))
       refute_includes profile.unused_require_paths, "active_record/orphan_feature"
       assert_includes profile.payload.fetch("require_matches").map { |match| match.fetch("target") }, "active_record/railtie"
 
@@ -590,7 +594,123 @@ class RailsDependencyPrunerTest < Minitest::Test
       _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
       refute status.success?
       assert_includes stderr, "bundler.gemfile_lock_digest mismatch"
+      assert_includes stderr, "fingerprints.gemfile_lock_sha256 mismatch"
     end
+  end
+
+  def test_profile_validate_rejects_changed_routes
+    Dir.mktmpdir("rails_dependency_pruner_stale_routes") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      File.write(File.join(app_root, "config/routes.rb"), "Rails.application.routes.draw do\nend\n")
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      File.open(File.join(app_root, "config/routes.rb"), "a") do |file|
+        file.puts "get \"/health\" => \"application#show\""
+      end
+
+      _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
+      refute status.success?
+      assert_includes stderr, "fingerprints.routes_sha256 mismatch"
+    end
+  end
+
+  def test_profile_validate_rejects_changed_initializer
+    Dir.mktmpdir("rails_dependency_pruner_stale_initializer") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config/initializers"))
+      File.write(File.join(app_root, "config/initializers/current.rb"), "Rails.application.config.x.current = true\n")
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      File.open(File.join(app_root, "config/initializers/current.rb"), "a") do |file|
+        file.puts "Rails.application.config.x.changed = true"
+      end
+
+      _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
+      refute status.success?
+      assert_includes stderr, "fingerprints.initializers_sha256 mismatch"
+    end
+  end
+
+  def test_profile_validate_ignores_unrelated_tmp_files
+    Dir.mktmpdir("rails_dependency_pruner_tmp_files") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      FileUtils.mkdir_p(File.join(app_root, "tmp/cache"))
+      File.write(File.join(app_root, "tmp/cache/noise.rb"), "raise 'ignored'\n")
+
+      _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
+      assert status.success?, stderr
+    end
+  end
+
+  def test_profile_schema_migrates_v2_payload_shape
+    migrated = RailsDependencyPruner::ProfileSchema.migrate_v2(
+      "schema_version" => 2,
+      "profile_id" => "sha256:old",
+      "ruby" => {
+        "version" => "4.0.5",
+        "platform" => "arm64-darwin",
+      },
+      "rails" => {
+        "version" => "8.1.3",
+      },
+      "bundler" => {
+        "gemfile_lock_digest" => "sha256:lock",
+      },
+      "app" => {
+        "files_digest" => "sha256:files",
+        "rails_env" => "production",
+      },
+      "evidence" => {
+        "coverage_manifest_digest" => "sha256:coverage",
+      },
+      "analysis" => {
+        "scanner_version" => "0.1.0",
+      },
+    )
+
+    assert_equal 3, migrated.fetch("schema_version")
+    assert_equal "rails_dependency_pruner", migrated.dig("tool", "name")
+    assert_equal "4.0.5", migrated.dig("environment", "ruby_version")
+    assert_equal "sha256:old", migrated.dig("fingerprints", "profile_id")
+    assert_equal "sha256:lock", migrated.dig("fingerprints", "gemfile_lock_sha256")
+    assert_equal "sha256:files", migrated.dig("fingerprints", "source_manifest_sha256")
+    assert_equal "sha256:coverage", migrated.dig("fingerprints", "coverage_manifest_sha256")
+    assert_equal [], migrated.fetch("expected_events")
+  end
+
+  def test_profile_digest_preserves_legacy_v2_shape
+    payload = {
+      "schema_version" => 2,
+      "profile_id" => nil,
+      "mode" => "boot_prune",
+      "ruby" => {},
+      "rails" => {},
+      "bundler" => {},
+      "app" => {},
+      "analysis" => {},
+      "evidence" => {},
+      "summary" => {},
+      "pruning" => {
+        "disabled_constants" => [],
+        "disabled_require_paths" => [],
+      },
+      "safety" => {
+        "production_allowed" => true,
+      },
+    }
+    digest = RailsDependencyPruner::Profile.new(payload).digest
+    payload["profile_id"] = digest
+
+    assert_equal digest, RailsDependencyPruner::Profile.new(payload).digest
   end
 
   def test_profile_diff_reports_pruning_changes
@@ -660,6 +780,55 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       assert status.success?, stderr
       assert_includes stdout, "Profiles are equivalent"
+    end
+  end
+
+  def test_profile_diff_semantic_ignores_approval_only_changes
+    Dir.mktmpdir("rails_dependency_pruner_profile_semantic_diff") do |dir|
+      old_profile = File.join(dir, "old.json")
+      new_profile = File.join(dir, "new.json")
+      payload = {
+        "schema_version" => 3,
+        "profile_id" => "sha256:old",
+        "fingerprints" => {
+          "profile_id" => "sha256:old",
+          "source_manifest_sha256" => "sha256:source",
+        },
+        "safety" => {
+          "production_allowed" => false,
+        },
+        "pruning" => {
+          "disabled_constants" => ["ActiveRecord::Thing"],
+          "disabled_require_paths" => ["active_record/thing"],
+        },
+      }
+      approved = Marshal.load(Marshal.dump(payload))
+      approved["profile_id"] = "sha256:new"
+      approved["fingerprints"]["profile_id"] = "sha256:new"
+      approved["safety"]["production_allowed"] = true
+
+      File.write(old_profile, JSON.pretty_generate(payload))
+      File.write(new_profile, JSON.pretty_generate(approved))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "diff",
+        "--old",
+        old_profile,
+        "--new",
+        new_profile,
+        "--semantic",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      diff = JSON.parse(stdout)
+      assert_equal true, diff.fetch("semantic")
+      assert_equal false, diff.fetch("changed")
+      assert_empty diff.fetch("context_changes")
     end
   end
 
@@ -1722,11 +1891,14 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert status.success?, stderr
 
       payload = JSON.parse(stdout)
-      assert_equal 2, payload.fetch("schema_version")
+      assert_equal 3, payload.fetch("schema_version")
       assert_match(/\Asha256:/, payload.fetch("profile_id"))
+      assert_equal payload.fetch("profile_id"), payload.dig("fingerprints", "profile_id")
       assert_equal "production", payload.dig("app", "rails_env")
+      assert_equal "production", payload.dig("environment", "rails_env")
       assert_equal true, payload.dig("app", "eager_load")
       assert_match(/\Asha256:/, payload.dig("evidence", "coverage_manifest_digest"))
+      assert_equal payload.dig("evidence", "coverage_manifest_digest"), payload.dig("fingerprints", "coverage_manifest_sha256")
       assert_equal %w[boot jobs mailers rake_tasks routes], payload.dig("evidence", "workloads")
 
       file_payload = JSON.parse(File.read(profile_path))
@@ -1919,9 +2091,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert File.exist?(patch_path)
 
       profile = JSON.parse(File.read(profile_path))
-      assert_equal 2, profile.fetch("schema_version")
+      assert_equal 3, profile.fetch("schema_version")
       assert_equal "boot_prune", profile.fetch("mode")
       assert_equal payload.fetch("profile_id"), profile.fetch("profile_id")
+      assert_equal profile.fetch("profile_id"), profile.dig("fingerprints", "profile_id")
       assert_equal ["activejob"], profile.dig("pruning", "disabled_frameworks")
       assert_equal ["active_job/railtie"], profile.dig("pruning", "disabled_railties")
 

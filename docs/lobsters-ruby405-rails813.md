@@ -29,7 +29,7 @@ Production approval:
 - `verified`: `true`
 - `production_allowed`: `true`
 - verifier errors: `0`
-- profile id: `sha256:38b32261d9e4f00de55ac39d0f67b94b7e70827c4001732cd8537ab30c61e404`
+- profile id: `sha256:0ffece1883f3f4b20d8e041bb19edc2604115f4aae1116c938c32b8ef6742187`
 
 Registered transforms:
 
@@ -45,13 +45,13 @@ Registered transforms:
 
 | target | baseline RSS | pruned RSS | saved RSS | Rails features | GC live slots |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| requests | `208432 KB` | `125952 KB` | `82480 KB` (`80.5 MiB`, `39.6%`) | `-201` | `-273750` |
-| environment | `231632 KB` | `110912 KB` | `120720 KB` (`117.9 MiB`, `52.1%`) | `-434` | `-303782` |
+| requests | `216768 KB` | `127680 KB` | `89088 KB` (`87.0 MiB`, `41.1%`) | `-201` | `-273725` |
+| environment | `220128 KB` | `109264 KB` | `110864 KB` (`108.3 MiB`, `50.4%`) | `-434` | `-303781` |
 
 The request run hit `/privacy` and `/login` with `200`, and `/404` with `404`.
 The earlier reference run for the same runtime behavior measured
 `228576 KB -> 127904 KB`, saving `100672 KB` (`98.3 MiB`, `44.0%`). The
-loaded-feature deltas are unchanged in the current run, but macOS RSS moved.
+loaded-feature deltas are unchanged in the current run, while macOS RSS moved.
 
 Artifacts:
 

@@ -196,7 +196,7 @@ module RailsDependencyPruner
 
       def profile_diff(diff)
         unless diff.fetch("changed")
-          puts "Profiles are equivalent"
+          puts diff.fetch("semantic") ? "Profiles are semantically equivalent" : "Profiles are equivalent"
           return
         end
 

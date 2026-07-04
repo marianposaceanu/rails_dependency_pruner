@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "profile_schema"
+
 module RailsDependencyPruner
   class ProfileValidator
     ValidationError = Class.new(StandardError)
@@ -21,8 +23,8 @@ module RailsDependencyPruner
     def validation_errors
       errors = []
 
-      unless profile.schema_version == 2
-        errors << "profile schema #{profile.schema_version || "(missing)"} is not deterministic schema 2"
+      unless ProfileSchema.deterministic_schema?(profile.schema_version)
+        errors << "profile schema #{profile.schema_version || "(missing)"} is not deterministic schema 2 or 3"
         return errors
       end
 
@@ -42,11 +44,30 @@ module RailsDependencyPruner
       compare(errors, "evidence.runtime_evidence_digests", profile.payload.dig("evidence", "runtime_evidence_digests"), context.evidence_context.fetch("runtime_evidence_digests"))
       compare(errors, "evidence.coverage_manifest_digest", profile.payload.dig("evidence", "coverage_manifest_digest"), context.evidence_context.fetch("coverage_manifest_digest"))
       compare(errors, "evidence.workloads", profile.payload.dig("evidence", "workloads"), context.evidence_context.fetch("workloads"))
+      validate_v3!(errors) if profile.schema_version == 3
 
       errors
     end
 
     private
+      def validate_v3!(errors)
+        compare(errors, "tool.name", profile.payload.dig("tool", "name"), context.tool_context.fetch("name"))
+        compare(errors, "tool.version", profile.payload.dig("tool", "version"), context.tool_context.fetch("version"))
+        compare(errors, "tool.git_sha", profile.payload.dig("tool", "git_sha"), context.tool_context.fetch("git_sha"))
+        compare(errors, "environment.ruby_version", profile.payload.dig("environment", "ruby_version"), context.environment_context.fetch("ruby_version"))
+        compare(errors, "environment.rails_version", profile.payload.dig("environment", "rails_version"), context.environment_context.fetch("rails_version"))
+        compare(errors, "environment.bundler_version", profile.payload.dig("environment", "bundler_version"), context.environment_context.fetch("bundler_version"))
+        compare(errors, "environment.platform", profile.payload.dig("environment", "platform"), context.environment_context.fetch("platform"))
+        compare(errors, "environment.rails_env", profile.payload.dig("environment", "rails_env"), context.environment_context.fetch("rails_env"))
+        compare(errors, "environment.bundle_without", profile.payload.dig("environment", "bundle_without"), context.environment_context.fetch("bundle_without"))
+        compare(errors, "environment.bundle_with", profile.payload.dig("environment", "bundle_with"), context.environment_context.fetch("bundle_with"))
+        context.fingerprints_context.each do |key, value|
+          next if key == "profile_id"
+
+          compare(errors, "fingerprints.#{key}", profile.payload.dig("fingerprints", key), value)
+        end
+      end
+
       def compare(errors, key, expected, actual)
         return if expected == actual
 

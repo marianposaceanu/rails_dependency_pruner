@@ -6,6 +6,7 @@ require "digest"
 require "time"
 
 require_relative "canonical_json"
+require_relative "profile_schema"
 require_relative "profile_context"
 require_relative "profile_validator"
 require_relative "transform_registry"
@@ -13,7 +14,8 @@ require_relative "transform_registry"
 module RailsDependencyPruner
   class Profile
     SCHEMA_VERSION = 1
-    DETERMINISTIC_SCHEMA_VERSION = 2
+    LEGACY_DETERMINISTIC_SCHEMA_VERSION = 2
+    DETERMINISTIC_SCHEMA_VERSION = 3
     EXTREME_CONFIG_NAMESPACES = {
       "action_mailbox/engine" => "action_mailbox",
       "action_mailer/railtie" => "action_mailer",
@@ -68,6 +70,9 @@ module RailsDependencyPruner
       payload = {
         "schema_version" => DETERMINISTIC_SCHEMA_VERSION,
         "profile_id" => nil,
+        "tool" => context.tool_context,
+        "environment" => context.environment_context,
+        "fingerprints" => context.fingerprints_context,
         "mode" => mode,
         "ruby" => context.ruby_context,
         "rails" => context.rails_context,
@@ -119,9 +124,10 @@ module RailsDependencyPruner
         "explanations" => explanations || {},
       }
       payload["transforms"] = TransformRegistry.transforms_for_payload(payload)
+      payload["expected_events"] = payload.fetch("transforms").flat_map { |transform| Array(transform["expected_events"]) }
 
       new(payload).tap do |profile|
-        profile.payload["profile_id"] = profile.digest
+        ProfileSchema.set_profile_id(profile.payload, profile.digest)
       end
     end
 
@@ -169,11 +175,11 @@ module RailsDependencyPruner
     end
 
     def profile_id
-      payload["profile_id"]
+      ProfileSchema.profile_id(payload)
     end
 
     def deterministic?
-      schema_version == DETERMINISTIC_SCHEMA_VERSION
+      ProfileSchema.deterministic_schema?(schema_version)
     end
 
     def canonical_json
@@ -183,12 +189,17 @@ module RailsDependencyPruner
     def approve_production!
       payload["safety"] ||= {}
       payload["safety"]["production_allowed"] = true
-      payload["profile_id"] = digest
+      payload["safety"]["verifier_version"] ||= RailsDependencyPruner::VERSION
+      ProfileSchema.set_profile_id(payload, digest)
       self
     end
 
     def digest
-      digest_payload = payload.merge("profile_id" => nil)
+      digest_payload = if schema_version == LEGACY_DETERMINISTIC_SCHEMA_VERSION && !payload.key?("fingerprints")
+        payload.merge("profile_id" => nil)
+      else
+        ProfileSchema.digest_payload(payload)
+      end
       "sha256:#{Digest::SHA256.hexdigest(CanonicalJson.digestible(digest_payload))}"
     end
 

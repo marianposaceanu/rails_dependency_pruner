@@ -225,6 +225,7 @@ module RailsDependencyPruner
         options = {
           old_profile_path: nil,
           new_profile_path: nil,
+          semantic: false,
           json: false,
         }
 
@@ -232,6 +233,7 @@ module RailsDependencyPruner
           parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--old PATH", "Previous profile") { |path| options[:old_profile_path] = path }
           parser.on("--new PATH", "New profile") { |path| options[:new_profile_path] = path }
+          parser.on("--semantic", "Ignore derived profile id and approval-only changes") { options[:semantic] = true }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
             puts parser

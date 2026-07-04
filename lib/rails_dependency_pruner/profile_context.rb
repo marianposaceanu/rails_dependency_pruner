@@ -9,6 +9,7 @@ require_relative "rails_source"
 require_relative "source_digest"
 require_relative "version"
 require_relative "coverage_manifest"
+require_relative "fingerprint"
 
 module RailsDependencyPruner
   class ProfileContext
@@ -52,6 +53,8 @@ module RailsDependencyPruner
         "rails" => rails_context,
         "bundler" => bundler_context,
         "app" => app_context,
+        "environment" => environment_context,
+        "fingerprints" => fingerprints_context,
         "analysis" => analysis_context,
         "evidence" => evidence_context,
       }
@@ -78,6 +81,9 @@ module RailsDependencyPruner
     def bundler_context
       {
         "gemfile_lock_digest" => SourceDigest.file(app_root.join("Gemfile.lock")),
+        "version" => bundler_version,
+        "with" => ENV["BUNDLE_WITH"],
+        "without" => ENV["BUNDLE_WITHOUT"],
         "specs" => bundled_specs,
       }
     end
@@ -97,6 +103,34 @@ module RailsDependencyPruner
         "scanner_version" => RailsDependencyPruner::VERSION,
         "scan_roots" => scan_roots,
       }
+    end
+
+    def tool_context
+      {
+        "name" => "rails_dependency_pruner",
+        "version" => RailsDependencyPruner::VERSION,
+        "git_sha" => tool_git_sha,
+      }
+    end
+
+    def environment_context
+      {
+        "ruby_version" => ruby_context.fetch("version"),
+        "rails_version" => rails_context.fetch("version"),
+        "bundler_version" => bundler_version,
+        "platform" => ruby_context.fetch("platform"),
+        "rails_env" => rails_env,
+        "bundle_without" => ENV["BUNDLE_WITHOUT"],
+        "bundle_with" => ENV["BUNDLE_WITH"],
+      }
+    end
+
+    def fingerprints_context
+      @fingerprints_context ||= Fingerprint.new(
+        app_root: app_root,
+        coverage_manifest: coverage_manifest,
+        runtime_evidence_paths: runtime_evidence_paths,
+      ).to_h
     end
 
     def evidence_context
@@ -138,6 +172,14 @@ module RailsDependencyPruner
         spec = Gem.loaded_specs[name] || Gem::Specification.find_all_by_name(name).max_by(&:version)
         specs[name] = spec.version.to_s if spec
       end.sort.to_h
+    end
+
+    def bundler_version
+      defined?(Bundler::VERSION) ? Bundler::VERSION : nil
+    end
+
+    def tool_git_sha
+      ENV["RAILS_DEPENDENCY_PRUNER_TOOL_GIT_SHA"]
     end
 
     def eager_load?
