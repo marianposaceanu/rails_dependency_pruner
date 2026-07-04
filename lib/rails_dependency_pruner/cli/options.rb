@@ -129,6 +129,49 @@ module RailsDependencyPruner
         options
       end
 
+      def plan
+        options = {
+          app_root: Dir.pwd,
+          rails_root: nil,
+          scan_roots: AppUsage::DEFAULT_SCAN_ROOTS,
+          frameworks: ConstantIndex::DEFAULT_FRAMEWORKS,
+          runtime_evidence_paths: [],
+          coverage_path: nil,
+          profile_path: nil,
+          patch_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner plan [options]"
+          parser.on("--app PATH", "Rails app root; defaults to current directory") { |path| options[:app_root] = path }
+          parser.on("--profile PATH", "Write deterministic profile; defaults to config/rails_dependency_pruner_profile.json") { |path| options[:profile_path] = path }
+          parser.on("--write PATH", "Alias for --profile") { |path| options[:profile_path] = path }
+          parser.on("--patch PATH", "Write a reviewed boot-plan patch") { |path| options[:patch_path] = path }
+          parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
+          parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
+          parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
+          parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
+        options[:app_root] = File.expand_path(options.fetch(:app_root))
+        options[:profile_path] = app_relative_path(
+          options.fetch(:app_root),
+          options[:profile_path] || "config/rails_dependency_pruner_profile.json",
+        )
+        options[:patch_path] = app_relative_path(options.fetch(:app_root), options[:patch_path]) if options[:patch_path]
+
+        options
+      end
+
       def profile_diff
         options = {
           old_profile_path: nil,
@@ -307,6 +350,10 @@ module RailsDependencyPruner
       private
         def split_csv(value)
           value.split(",").map(&:strip).reject(&:empty?)
+        end
+
+        def app_relative_path(app_root, path)
+          File.absolute_path(path, app_root)
         end
 
         def blank?(value)

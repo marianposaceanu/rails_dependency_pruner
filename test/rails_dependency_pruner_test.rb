@@ -772,6 +772,58 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_plan_command_uses_simple_defaults_and_writes_optional_patch
+    Dir.mktmpdir("rails_dependency_pruner_plan") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.open(File.join(app_root, "config/application.rb"), "a") do |file|
+        file.puts "require \"active_job/railtie\""
+      end
+      profile_path = File.join(app_root, "config/rails_dependency_pruner_profile.json")
+      patch_path = File.join(dir, "boot_plan.patch")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,actionview,activejob,activemodel,activerecord",
+        "--patch",
+        patch_path,
+        "--json",
+        chdir: app_root,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal File.realpath(profile_path), File.realpath(payload.fetch("profile_path"))
+      assert_equal File.realpath(patch_path), File.realpath(payload.fetch("patch_path"))
+      assert_equal "boot_prune", payload.fetch("mode")
+      assert_match(/\Asha256:/, payload.fetch("profile_id"))
+      assert File.exist?(profile_path)
+      assert File.exist?(patch_path)
+
+      profile = JSON.parse(File.read(profile_path))
+      assert_equal 2, profile.fetch("schema_version")
+      assert_equal "boot_prune", profile.fetch("mode")
+      assert_equal payload.fetch("profile_id"), profile.fetch("profile_id")
+
+      boot_plan = payload.fetch("boot_plan")
+      assert_includes boot_plan.fetch("required_frameworks"), "activerecord"
+      assert_includes boot_plan.fetch("required_frameworks"), "activemodel"
+      assert_includes boot_plan.fetch("required_frameworks"), "actionpack"
+      assert_includes boot_plan.fetch("required_frameworks"), "actionview"
+      assert_includes boot_plan.fetch("pruned_frameworks"), "activejob"
+
+      patch = File.read(patch_path)
+      assert_includes patch, "-require \"active_job/railtie\""
+      assert_includes patch, "+# require \"active_job/railtie\""
+    end
+  end
+
   def test_cli_merges_runtime_evidence
     stdout, stderr, status = Open3.capture3(
       RUBY,

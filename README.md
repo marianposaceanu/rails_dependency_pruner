@@ -28,22 +28,19 @@ bundle install
 
 ## quick start
 
-Generate a profile from the installed Rails `8.x` gems and the app source:
+Build the default boot-pruning profile from the app root:
 
 ```bash
-bundle exec rails-dependency-pruner audit \
-  --app . \
-  --write-profile config/rails_dependency_pruner_profile.json
+bundle exec rails-dependency-pruner plan
 ```
 
-For a reproducible schema v2 profile with source, lockfile, and optional
-coverage digests:
+Add a coverage manifest and write a reviewed patch when you are ready to replace
+`rails/all` or comment unused railtie requires:
 
 ```bash
-bundle exec rails-dependency-pruner profile build \
-  --app . \
+bundle exec rails-dependency-pruner plan \
   --coverage config/pruner_coverage.yml \
-  --write config/rails_dependency_pruner_profile.json
+  --patch tmp/pruner-boot-plan.patch
 ```
 
 Validate it before using it:
@@ -201,6 +198,8 @@ Shadow mode records would-block require events and does not change boot behavior
 
 ## cli
 
+- `bundle exec rails-dependency-pruner plan`
+- `bundle exec rails-dependency-pruner plan --coverage config/pruner_coverage.yml --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner index`
 - `bundle exec rails-dependency-pruner audit --app .`
 - `bundle exec rails-dependency-pruner audit --app . --json --no-tree`

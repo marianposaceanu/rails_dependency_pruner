@@ -107,6 +107,22 @@ module RailsDependencyPruner
         puts "Patch written to: #{patch_path}" if patch_path
       end
 
+      def plan(report)
+        boot_plan = report.fetch("boot_plan")
+
+        puts "Profile written to: #{report.fetch("profile_path")}"
+        puts "Profile id: #{report.fetch("profile_id")}"
+        puts "Mode: #{report.fetch("mode")}"
+        puts
+        puts "Required frameworks:"
+        boot_plan.fetch("required_frameworks").each { |framework| puts "  #{framework}" }
+        puts
+        puts "Pruned frameworks:"
+        boot_plan.fetch("pruned_frameworks").each { |framework| puts "  #{framework}" }
+        puts
+        puts "Patch written to: #{report.fetch("patch_path")}" if report["patch_path"]
+      end
+
       def early_boot_patch(report)
         puts "Early boot shim: #{report.fetch("status")}"
         puts "Target: #{report.fetch("target")}"

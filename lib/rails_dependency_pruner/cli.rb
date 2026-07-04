@@ -44,6 +44,8 @@ module RailsDependencyPruner
         run_explain
       when "measure"
         run_measure
+      when "plan"
+        run_plan
       when "profile"
         run_profile
       when "verify"
@@ -157,6 +159,39 @@ module RailsDependencyPruner
         0
       end
 
+      def run_plan
+        options = options_parser.plan
+        planner = build_planner(options)
+        profile = Profile.deterministic_from_planner(
+          planner,
+          runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
+          coverage_path: options[:coverage_path],
+          mode: "boot_prune",
+        )
+        profile.write(options.fetch(:profile_path))
+
+        boot_plan = BootPrunePlanner.new(planner).plan
+        if options[:patch_path]
+          Apply::BootPlanPatch.new(app_root: options.fetch(:app_root), boot_plan: boot_plan).write(options[:patch_path])
+        end
+
+        report = {
+          "profile_path" => options.fetch(:profile_path),
+          "profile_id" => profile.profile_id,
+          "mode" => profile.payload.fetch("mode"),
+          "patch_path" => options[:patch_path],
+          "boot_plan" => boot_plan.to_h,
+        }.compact
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(report)
+        else
+          printer.plan(report)
+        end
+
+        0
+      end
+
       def run_apply
         subcommand = @argv.shift || "help"
 
@@ -179,10 +214,7 @@ module RailsDependencyPruner
         options = options_parser.apply_boot_plan
         Profile.load(options.fetch(:profile_path))
 
-        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
-        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
-        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
-        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        planner = build_planner(options)
         boot_plan = BootPrunePlanner.new(planner).plan
 
         if options[:write_patch]
@@ -223,10 +255,7 @@ module RailsDependencyPruner
         target = @argv.shift
         raise ArgumentError, "CONSTANT is required" if blank?(target)
 
-        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
-        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
-        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
-        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        planner = build_planner(options)
         explanation = planner.explain_constant(target)
 
         if options.fetch(:json)
@@ -240,10 +269,7 @@ module RailsDependencyPruner
 
       def run_audit
         options = options_parser.audit(require_app: true)
-        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
-        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
-        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
-        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        planner = build_planner(options)
 
         if options[:write_profile]
           profile = if options.fetch(:deterministic)
@@ -300,10 +326,7 @@ module RailsDependencyPruner
 
       def run_profile_build
         options = options_parser.profile_build
-        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
-        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
-        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
-        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        planner = build_planner(options)
         profile = Profile.deterministic_from_planner(
           planner,
           runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
@@ -372,9 +395,11 @@ module RailsDependencyPruner
 
       def help
         <<~HELP
-          Usage: rails-dependency-pruner [index|audit] [options]
+          Usage: rails-dependency-pruner plan [options]
+                 rails-dependency-pruner COMMAND [options]
 
           Commands:
+            plan  Build a deterministic profile and optional boot-plan patch
             index  Build a Rails constant dependency tree
             audit  Scan an app and find unused Rails constants
             apply boot-plan  Write a reviewed patch replacing rails/all
@@ -386,20 +411,17 @@ module RailsDependencyPruner
             profile validate  Validate a deterministic profile against current inputs
             verify  Validate profile and app safety gates
 
-          Required:
-            --app PATH                 Required for audit
+          Common path:
+            rails-dependency-pruner plan
+            rails-dependency-pruner plan --coverage config/pruner_coverage.yml --patch tmp/pruner-boot-plan.patch
 
-          Useful options:
-            --json
-            --no-tree
-            --no-unused
-            --rails-root PATH          Optional checkout override; installed Rails 8.x gems are used by default
-            --runtime-evidence PATHS
+          Plan options:
+            --app PATH                 Defaults to current directory
+            --profile PATH             Defaults to config/rails_dependency_pruner_profile.json
+            --patch PATH
             --coverage PATH
-            --write-profile PATH
-            --deterministic
-            --mode MODE
-            --write-shim PATH
+            --runtime-evidence PATHS
+            --json
         HELP
       end
 
@@ -473,6 +495,13 @@ module RailsDependencyPruner
         return if paths.empty?
 
         RuntimeEvidence.new(paths: paths, index: index)
+      end
+
+      def build_planner(options)
+        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
+        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
+        Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
       end
   end
 end
