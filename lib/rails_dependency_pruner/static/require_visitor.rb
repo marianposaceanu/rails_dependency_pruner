@@ -31,7 +31,7 @@ module RailsDependencyPruner
 
       private
         def record_require(node)
-          return unless %i[require require_relative load autoload].include?(node.name)
+          return unless require_call?(node)
 
           target = literal_target(node)
           if target
@@ -57,9 +57,56 @@ module RailsDependencyPruner
           arguments = node.arguments&.arguments || []
           argument = node.name == :autoload ? arguments[1] : arguments[0]
 
-          return unless argument.is_a?(Prism::StringNode)
+          literal_require_target(argument)
+        end
 
-          argument.unescaped
+        def require_call?(node)
+          return false unless %i[require require_relative load autoload].include?(node.name)
+
+          case node.name
+          when :autoload
+            node.receiver.nil?
+          else
+            node.receiver.nil? || kernel_receiver?(node.receiver)
+          end
+        end
+
+        def literal_require_target(node)
+          case node
+          when Prism::StringNode
+            node.unescaped
+          when Prism::CallNode
+            literal_call_target(node)
+          end
+        end
+
+        def literal_call_target(node)
+          if node.name == :to_s && empty_arguments?(node)
+            return literal_require_target(node.receiver)
+          end
+
+          return unless node.name == :join && rails_root_receiver?(node.receiver)
+
+          parts = node.arguments&.arguments&.map { |argument| literal_require_target(argument) }
+          return unless parts&.all?
+
+          File.join(parts)
+        end
+
+        def kernel_receiver?(node)
+          node.is_a?(Prism::ConstantReadNode) && node.name == :Kernel
+        end
+
+        def rails_root_receiver?(node)
+          node.is_a?(Prism::CallNode) &&
+            node.name == :root &&
+            empty_arguments?(node) &&
+            node.receiver.is_a?(Prism::ConstantReadNode) &&
+            node.receiver.name == :Rails
+        end
+
+        def empty_arguments?(node)
+          node.arguments.nil? || node.arguments.arguments.empty?
         end
     end
   end

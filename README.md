@@ -65,6 +65,10 @@ bundle exec rails-dependency-pruner approve \
   --coverage config/pruner_coverage.yml
 ```
 
+Production approval rejects unclassified dynamic require/load edges in
+boot-critical `config/*.rb` files and dynamic constantization that could resolve
+to pruned Rails namespaces.
+
 Ask why a framework or require path was kept or pruned:
 
 ```bash
@@ -121,7 +125,8 @@ phase fields. Literal Rails require/load events are merged back into the
 planner as keep evidence for the constants defined by the loaded file.
 Static literal `require`, `require_relative`, and `load` calls are also treated
 as keep evidence. If a used Rails file requires another Rails file, the required
-file is kept too.
+file is kept too. Receiver calls such as `params.require(:id)` and
+`relation.load` are ignored because they are not Ruby load edges.
 
 For Ruby object type and Rails class instance sizes:
 
@@ -284,7 +289,7 @@ Against a temp copy of `LOBSTERS_APP`, using RVM Ruby
 - Rails constants indexed: `2331`
 - Lobsters direct Rails constants: `58`
 - Reachable Rails constants after closure: `1532`
-- Static require/load matches: `44`
+- Static require/load matches: `24`
 - Unused Rails constant candidates: `799`
 - Unused Rails feature files: `517`
 - Disabled frameworks: `actiontext`

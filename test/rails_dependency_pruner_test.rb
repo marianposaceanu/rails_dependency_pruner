@@ -293,6 +293,40 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_require_scanner_tracks_only_ruby_load_edges
+    Dir.mktmpdir("rails_dependency_pruner_require_scanner") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(
+        File.join(app_root, "app/controllers/require_scanner_controller.rb"),
+        <<~RUBY,
+          class RequireScannerController < ApplicationController
+            def show
+              params.require(:id)
+              Message.all.load
+              Kernel.require "active_record/base"
+              require Rails.root.join("lib/time_series.rb").to_s
+            end
+          end
+        RUBY
+      )
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actionpack activerecord],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+
+      matches = usage.sorted_require_matches.select do |match|
+        match.fetch("path") == "app/controllers/require_scanner_controller.rb"
+      end
+      assert_equal [
+        ["active_record/base", false, "require"],
+        ["lib/time_series.rb", false, "require"],
+      ], matches.map { |match| [match["target"], match.fetch("dynamic"), match.fetch("kind")] }
+    end
+  end
+
   def test_config_patterns_keep_framework_constants
     Dir.mktmpdir("rails_dependency_pruner_config_patterns") do |dir|
       app_root = File.join(dir, "app")
@@ -707,6 +741,96 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal false, payload.fetch("verified")
       assert_includes payload.fetch("errors"), "production verify requires a coverage manifest digest"
+    end
+  end
+
+  def test_verify_production_rejects_dynamic_boot_requires
+    Dir.mktmpdir("rails_dependency_pruner_dynamic_require_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "config/dynamic_require.rb"), <<~RUBY)
+        feature = ENV.fetch("BOOT_FEATURE")
+        require feature
+      RUBY
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert payload.fetch("errors").any? { |error| error.include?("dynamic require/load risk: config/dynamic_require.rb:2:require") }
+      assert_equal "config/dynamic_require.rb", payload.dig("production_risks", "dynamic_boot_require_matches", 0, "path")
+    end
+  end
+
+  def test_verify_production_rejects_dynamic_constantization_for_pruned_namespaces
+    Dir.mktmpdir("rails_dependency_pruner_dynamic_constant_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/dynamic_constant_risk.rb"), <<~RUBY)
+        class DynamicConstantRisk
+          def resolve(name)
+            name.constantize
+          end
+        end
+      RUBY
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        frameworks: "actionmailer,actionpack,activerecord",
+      )
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionmailer,actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert payload.fetch("errors").any? { |error| error.include?("dynamic constantization risk for pruned constants") }
+      assert_equal "app/models/dynamic_constant_risk.rb", payload.dig("production_risks", "dynamic_constantization_matches", 0, "path")
     end
   end
 
@@ -1854,6 +1978,41 @@ class RailsDependencyPrunerTest < Minitest::Test
   end
 
   private
+    def write_coverage_manifest(app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+      YAML
+      coverage_path
+    end
+
+    def build_profile(profile_path:, app_root:, coverage_path:, frameworks: "actionpack,activerecord")
+      _stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        frameworks,
+        "--app",
+        app_root,
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+    end
+
     def write_deterministic_profile(profile_path:, app_root:)
       _stdout, stderr, status = Open3.capture3(
         RUBY,
