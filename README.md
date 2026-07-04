@@ -313,9 +313,9 @@ initialization. It is a smoke benchmark, not a production savings claim.
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |
-| baseline | `136848 KB` (`133.6 MiB`) | `415` | `234490` |
-| production early boot | `140224 KB` (`136.9 MiB`) | `415` | `234813` |
-| delta | `+3376 KB` (`+3.3 MiB`) | `0` | `+323` |
+| baseline | `136080 KB` (`132.9 MiB`) | `415` | `234489` |
+| production early boot | `137744 KB` (`134.5 MiB`) | `415` | `234817` |
+| delta | `+1664 KB` (`+1.6 MiB`) | `0` | `+328` |
 
 The pruned Lobsters railtie is already commented out in `config/application.rb`,
 so the loaded Rails feature count does not move in this benchmark. Static
