@@ -13,6 +13,7 @@ require_relative "boot_plan_explainer"
 require_relative "constant_index"
 require_relative "coverage_template"
 require_relative "doctor"
+require_relative "feature_catalog"
 require_relative "planner"
 require_relative "profile"
 require_relative "profile_context"
@@ -162,7 +163,12 @@ module RailsDependencyPruner
         )
         profile = Profile.load(options.fetch(:profile_path))
         index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
-        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        usage = AppUsage.scan(
+          app_root: options.fetch(:app_root),
+          index: index,
+          scan_roots: options.fetch(:scan_roots),
+          feature_catalog: feature_catalog_for(index),
+        )
         context = ProfileContext.build(
           app_root: options.fetch(:app_root),
           rails_root: options.fetch(:rails_root),
@@ -792,9 +798,18 @@ module RailsDependencyPruner
 
       def build_planner(options)
         index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
-        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        usage = AppUsage.scan(
+          app_root: options.fetch(:app_root),
+          index: index,
+          scan_roots: options.fetch(:scan_roots),
+          feature_catalog: feature_catalog_for(index),
+        )
         runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
         Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+      end
+
+      def feature_catalog_for(index)
+        FeatureCatalog.for_rails_version(index.source.version)
       end
 
       def boot_plan_for_profile(mode, planner)

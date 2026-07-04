@@ -1,0 +1,131 @@
+active_record:
+  framework: activerecord
+  constants:
+    - ActiveRecord
+    - ActiveRecord::Base
+  app_patterns:
+    - belongs_to
+    - has_many
+    - has_one
+    - validates
+    - transaction
+  config_patterns:
+    - active_record.*
+
+active_job:
+  framework: activejob
+  constants:
+    - ActiveJob
+    - ActiveJob::Base
+  app_patterns:
+    - perform_later
+    - queue_as
+  config_patterns:
+    - active_job.*
+
+action_mailer:
+  framework: actionmailer
+  constants:
+    - ActionMailer
+    - ActionMailer::Base
+  app_patterns:
+    - mail
+    - deliver_later
+  config_patterns:
+    - action_mailer.*
+
+action_controller:
+  framework: actionpack
+  constants:
+    - ActionController
+    - ActionController::Base
+  config_patterns:
+    - action_controller.*
+  route_patterns:
+    - route:delete
+    - route:get
+    - route:match
+    - route:patch
+    - route:post
+    - route:put
+    - route:resources
+    - route:resource
+    - route:root
+
+action_dispatch:
+  framework: actionpack
+  constants:
+    - ActionController::Base
+    - ActionDispatch
+  config_patterns:
+    - action_dispatch.*
+  route_patterns:
+    - route:constraints
+    - route:direct
+    - route:mount
+    - route:redirect
+    - route:resolve
+
+action_view:
+  framework: actionview
+  constants:
+    - ActionView
+    - ActionView::Base
+  config_patterns:
+    - action_view.*
+
+active_storage:
+  framework: activestorage
+  constants:
+    - ActiveStorage
+    - ActiveStorage::Attachment
+    - ActiveStorage::Blob
+  app_patterns:
+    - has_many_attached
+    - has_one_attached
+  config_patterns:
+    - active_storage.*
+  route_patterns:
+    - direct:rails_blob
+    - direct:rails_representation
+    - resolve:ActiveStorage::Blob
+
+action_text:
+  framework: actiontext
+  constants:
+    - ActionText
+    - ActionText::RichText
+  app_patterns:
+    - has_rich_text
+  config_patterns:
+    - action_text.*
+
+action_cable:
+  framework: actioncable
+  constants:
+    - ActionCable
+    - ActionCable::Channel::Base
+  app_patterns:
+    - stream_from
+    - stream_for
+  route_patterns:
+    - mount ActionCable.server
+    - mount:ActionCable.server
+  config_patterns:
+    - action_cable.*
+
+action_mailbox:
+  framework: actionmailbox
+  constants:
+    - ActionMailbox
+    - ActionMailbox::Base
+  config_patterns:
+    - action_mailbox.*
+
+active_support:
+  framework: activesupport
+  constants:
+    - ActiveSupport
+    - ActiveSupport::Dependencies
+  config_patterns:
+    - active_support.*

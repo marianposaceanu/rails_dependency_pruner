@@ -252,6 +252,14 @@ The runtime can now express this as a `lazy_constants` phase policy: a gem such
 as `svg-graph` should not be approved as lazy for Lobsters boot unless its
 configured constant phase matches the observed `lib/time_series.rb` boot use.
 
+## catalog smoke
+
+Latest static catalog smoke used the current local Lobsters lockfile, which has
+Rails `8.0.5`. The scanner selected `rails_8_0`, scanned `157` files, and did
+not boot the app. Max RSS for the smoke process was `41713664` bytes.
+
+Artifact: `tmp/lobsters-ruby405-rails805-feature-catalog-smoke.json`.
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,

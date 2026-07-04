@@ -334,7 +334,7 @@ for fixture and development checks against a Rails checkout.
 ## feature catalog
 
 Rails DSL usage is treated as framework evidence. The catalog in
-`config/rails_dependency_pruner/features.yml` maps calls such as
+`config/rails_dependency_pruner/catalogs/rails_8_1.yml` maps calls such as
 `has_one_attached`, `has_rich_text`, `queue_as`, `mail`, and `stream_from` to
 framework constants that should stay reachable.
 
@@ -373,8 +373,8 @@ the `ruby-vips` analyzer stub. The biggest Rails-side reductions are
 ActiveRecord, Action View, and Active Storage.
 
 Small-app benchmark target: `generic_blog_app` is the
-generic blog simple app. The target is at least `40%` RSS reduction on a measured
-production request workload.
+"generic blog simple app". Acceptance target: at least `40%` RSS reduction on a
+measured production request workload.
 
 Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.

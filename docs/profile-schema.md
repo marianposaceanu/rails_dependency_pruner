@@ -14,6 +14,9 @@ readiness fields:
 - `lazy_constants`: optional phase policy for lazy top-level constants
 - `memory_policy`: optional RSS savings gates copied from the coverage manifest
 
+`analysis.feature_catalog` records the Rails feature catalog name, Rails minor
+version, and catalog digest used by the static scanner.
+
 The profile id is stored in both `profile_id` and
 `fingerprints.profile_id` while v2 compatibility remains. The digest ignores
 both id fields.

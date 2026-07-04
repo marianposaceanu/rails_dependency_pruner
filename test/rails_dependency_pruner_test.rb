@@ -340,6 +340,21 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_feature_catalog_loads_versioned_rails_catalogs
+    rails81 = RailsDependencyPruner::FeatureCatalog.for_rails_version("8.1.3")
+    rails80 = RailsDependencyPruner::FeatureCatalog.for_rails_version(Gem::Version.new("8.0.4"))
+    fallback = RailsDependencyPruner::FeatureCatalog.for_rails_version("9.0.0")
+
+    assert_equal "rails_8_1", rails81.name
+    assert_equal "8.1", rails81.rails_version
+    assert_equal "rails_8_0", rails80.name
+    assert_equal "8.0", rails80.rails_version
+    assert_equal "rails_8_1", fallback.name
+    assert_equal "8.1", fallback.rails_version
+    assert_includes rails81.to_h.keys, "active_storage"
+    assert_includes rails81.to_h.dig("active_storage", "constants"), "ActiveStorage::Blob"
+  end
+
   def test_dynamic_constant_patterns_keep_exact_literal_constants
     Dir.mktmpdir("rails_dependency_pruner_dynamic_constants") do |dir|
       app_root = File.join(dir, "app")
@@ -637,6 +652,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal profile.profile_id, profile.payload.dig("fingerprints", "profile_id")
       assert_equal "rails_dependency_pruner", profile.payload.dig("tool", "name")
       assert profile.payload.fetch("environment").key?("rails_version")
+      assert_equal "rails_8_1", profile.payload.dig("analysis", "feature_catalog", "name")
+      assert_equal "8.1", profile.payload.dig("analysis", "feature_catalog", "rails_version")
+      assert_match(/\Asha256:/, profile.payload.dig("analysis", "feature_catalog", "digest"))
       assert_match(/\Asha256:/, profile.payload.dig("fingerprints", "source_manifest_sha256"))
       refute_includes profile.unused_require_paths, "active_record/orphan_feature"
       assert_includes profile.payload.fetch("require_matches").map { |match| match.fetch("target") }, "active_record/railtie"

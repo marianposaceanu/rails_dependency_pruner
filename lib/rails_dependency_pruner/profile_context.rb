@@ -9,6 +9,7 @@ require_relative "rails_source"
 require_relative "source_digest"
 require_relative "version"
 require_relative "coverage_manifest"
+require_relative "feature_catalog"
 require_relative "fingerprint"
 
 module RailsDependencyPruner
@@ -102,6 +103,7 @@ module RailsDependencyPruner
         "prism_version" => Prism::VERSION,
         "scanner_version" => RailsDependencyPruner::VERSION,
         "scan_roots" => scan_roots,
+        "feature_catalog" => feature_catalog_context,
       }
     end
 
@@ -143,6 +145,16 @@ module RailsDependencyPruner
 
     def memory_policy_context
       coverage_manifest&.memory_policy || {}
+    end
+
+    def feature_catalog_context
+      catalog = FeatureCatalog.for_rails_version(rails_source.version)
+
+      {
+        "name" => catalog.name,
+        "rails_version" => catalog.rails_version,
+        "digest" => SourceDigest.file(catalog.path),
+      }
     end
 
     def app_files_digest
