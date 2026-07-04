@@ -55,6 +55,18 @@ bundle exec rails-dependency-pruner profile validate \
   --profile config/rails_dependency_pruner_profile.json
 ```
 
+After a production verification passes, approve the profile for production-mode
+early boot:
+
+```bash
+bundle exec rails-dependency-pruner verify \
+  --app . \
+  --profile config/rails_dependency_pruner_profile.json \
+  --coverage config/pruner_coverage.yml \
+  --production \
+  --approve-production
+```
+
 Ask why a framework or require path was kept or pruned:
 
 ```bash
@@ -223,6 +235,7 @@ Shadow mode records would-block require events and does not change boot behavior
 - `bundle exec rails-dependency-pruner profile validate --app . --profile config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner profile diff --old config/pruner.prev.json --new config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner verify --app . --profile config/rails_dependency_pruner_profile.json`
+- `bundle exec rails-dependency-pruner verify --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --production --approve-production`
 - `bundle exec rails-dependency-pruner doctor --app .`
 - `bundle exec rails-dependency-pruner apply boot-plan --app . --profile config/rails_dependency_pruner_profile.json --write-patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner apply early-boot-shim --app . --write-patch tmp/pruner-early-boot.patch`

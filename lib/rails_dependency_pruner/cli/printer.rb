@@ -211,6 +211,7 @@ module RailsDependencyPruner
       def verify(report)
         puts "Verified: #{report.fetch("verified")}"
         puts "Production allowed: #{report.fetch("production_allowed")}"
+        puts "Profile approved: #{report.fetch("profile_approved")}" if report.key?("profile_approved")
 
         unless report.fetch("errors").empty?
           puts

@@ -240,6 +240,7 @@ module RailsDependencyPruner
           coverage_path: nil,
           runtime_evidence_paths: [],
           production: false,
+          approve_production: false,
           json: false,
         }
 
@@ -253,6 +254,7 @@ module RailsDependencyPruner
           parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
           parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
           parser.on("--production", "Require production verification gates") { options[:production] = true }
+          parser.on("--approve-production", "Set safety.production_allowed=true after successful --production verify") { options[:approve_production] = true }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
             puts parser
@@ -264,6 +266,7 @@ module RailsDependencyPruner
         options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
         raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
         raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "--approve-production requires --production" if options[:approve_production] && !options[:production]
 
         options
       end

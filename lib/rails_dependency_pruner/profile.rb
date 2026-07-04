@@ -144,6 +144,13 @@ module RailsDependencyPruner
       CanonicalJson.dump(payload)
     end
 
+    def approve_production!
+      payload["safety"] ||= {}
+      payload["safety"]["production_allowed"] = true
+      payload["profile_id"] = digest
+      self
+    end
+
     def digest
       digest_payload = payload.merge("profile_id" => nil)
       "sha256:#{Digest::SHA256.hexdigest(CanonicalJson.digestible(digest_payload))}"

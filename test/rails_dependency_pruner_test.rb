@@ -772,6 +772,114 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_approve_production_rewrites_profile_after_success
+    Dir.mktmpdir("rails_dependency_pruner_approve_production") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "build",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--write",
+        profile_path,
+        chdir: ROOT.to_s,
+      )
+
+      assert build_status.success?, build_stderr
+
+      before = JSON.parse(File.read(profile_path))
+      assert_equal false, before.dig("safety", "production_allowed")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--approve-production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_equal true, payload.fetch("profile_approved")
+      assert_equal true, payload.dig("profile", "production_allowed")
+
+      approved = JSON.parse(File.read(profile_path))
+      assert_equal true, approved.dig("safety", "production_allowed")
+      refute_equal before.fetch("profile_id"), approved.fetch("profile_id")
+
+      early_stdout, early_stderr, early_status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          puts "production profile accepted"
+        RUBY
+      )
+
+      assert early_status.success?, early_stderr
+      assert_equal "production profile accepted\n", early_stdout
+    end
+  end
+
+  def test_verify_approve_production_requires_production_gate
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "verify",
+      "--profile",
+      "tmp/missing.json",
+      "--app",
+      FAKE_APP_ROOT.to_s,
+      "--approve-production",
+      "--json",
+      chdir: ROOT.to_s,
+    )
+
+    refute status.success?
+    assert_empty stdout
+    assert_includes stderr, "--approve-production requires --production"
+  end
+
   def test_plan_command_uses_simple_defaults_and_writes_optional_patch
     Dir.mktmpdir("rails_dependency_pruner_plan") do |dir|
       app_root = File.join(dir, "app")

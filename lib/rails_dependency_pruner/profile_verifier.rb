@@ -32,6 +32,7 @@ module RailsDependencyPruner
           "schema_version" => profile.schema_version,
           "profile_id" => profile.profile_id,
           "rails_version" => profile.rails_version,
+          "production_allowed" => profile.payload.dig("safety", "production_allowed"),
         },
         "parse_errors" => {
           "rails" => index.parse_errors,

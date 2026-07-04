@@ -115,6 +115,16 @@ module RailsDependencyPruner
           usage: usage,
           production: options.fetch(:production),
         ).verify
+        if options.fetch(:approve_production)
+          report["profile_approved"] = false
+          if report.fetch("verified")
+            profile.approve_production!
+            profile.write(options.fetch(:profile_path))
+            report["profile_approved"] = true
+            report["profile"]["profile_id"] = profile.profile_id
+            report["profile"]["production_allowed"] = true
+          end
+        end
 
         if options.fetch(:json)
           puts JSON.pretty_generate(report)
