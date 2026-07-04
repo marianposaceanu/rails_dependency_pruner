@@ -1,0 +1,13 @@
+{
+  "defined_constants": [
+    "ActiveRecord::Relation"
+  ],
+  "called_methods": [
+    {
+      "defined_class": "ActionController::UnusedControllerFeature",
+      "method_id": "call",
+      "path": "actionpack/lib/action_controller/base.rb",
+      "line": 1
+    }
+  ]
+}

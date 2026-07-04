@@ -7,6 +7,7 @@ require "pathname"
 require_relative "app_usage"
 require_relative "constant_index"
 require_relative "planner"
+require_relative "runtime_evidence"
 require_relative "shim_writer"
 
 module RailsDependencyPruner
@@ -55,7 +56,8 @@ module RailsDependencyPruner
         options = parse_options(require_app: true)
         index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
         usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
-        planner = Planner.new(index: index, usage: usage)
+        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
+        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
 
         if options[:write_shim]
           ShimWriter.new(planner.unused_constants).write(options[:write_shim])
@@ -85,6 +87,7 @@ module RailsDependencyPruner
           include_unused: true,
           json: false,
           write_shim: nil,
+          runtime_evidence_paths: [],
         }
 
         parser = OptionParser.new do |parser|
@@ -96,6 +99,7 @@ module RailsDependencyPruner
           parser.on("--[no-]tree", "Include dependency tree in JSON output") { |value| options[:include_tree] = value }
           parser.on("--[no-]unused", "Include full unused constants list in JSON output") { |value| options[:include_unused] = value }
           parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
           parser.on("--write-shim PATH", "Write a fail-fast shim for unused constants") { |path| options[:write_shim] = path }
           parser.on("-h", "--help", "Print help") do
             puts parser
@@ -135,6 +139,7 @@ module RailsDependencyPruner
         puts "App files scanned: #{payload.fetch(:app_files_scanned)}"
         puts "Rails constants indexed: #{payload.fetch(:rails_constants_count)}"
         puts "Direct app Rails constants: #{payload.fetch(:direct_rails_constants_count)}"
+        puts "Runtime Rails constants: #{payload.fetch(:runtime_rails_constants_count)}"
         puts "Reachable Rails constants: #{payload.fetch(:used_constants_count)}"
         puts "Unused Rails constants: #{payload.fetch(:unused_constants_count)}"
         puts "Rails parse errors: #{payload.dig(:parse_errors, :rails).length}"
@@ -173,9 +178,15 @@ module RailsDependencyPruner
             --json
             --no-tree
             --no-unused
+            --runtime-evidence PATHS
             --write-shim PATH
         HELP
       end
+
+      def runtime_evidence_for(paths, index)
+        return if paths.empty?
+
+        RuntimeEvidence.new(paths: paths, index: index)
+      end
   end
 end
-

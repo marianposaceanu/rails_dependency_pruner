@@ -6,18 +6,19 @@ require_relative "constant_resolver"
 
 module RailsDependencyPruner
   class Planner
-    attr_reader :index, :usage
+    attr_reader :index, :usage, :runtime_evidence
 
-    def initialize(index:, usage:)
+    def initialize(index:, usage:, runtime_evidence: nil)
       @index = index
       @usage = usage
+      @runtime_evidence = runtime_evidence
     end
 
     def used_constants
       @used_constants ||= begin
         resolver = ConstantResolver.new(index.names)
         used = Set.new
-        queue = usage.direct_rails_constants.to_a
+        queue = seed_constants.to_a
 
         until queue.empty?
           constant = queue.shift
@@ -46,6 +47,14 @@ module RailsDependencyPruner
       unused_constants.group_by { |name| name.split("::").first }.transform_values(&:length).sort.to_h
     end
 
+    def seed_constants
+      usage.direct_rails_constants | runtime_constants
+    end
+
+    def runtime_constants
+      runtime_evidence&.constants || Set.new
+    end
+
     def to_h(include_tree: true, include_unused: true)
       payload = {
         rails_root: index.rails_root.to_s,
@@ -58,9 +67,11 @@ module RailsDependencyPruner
           app: usage.parse_errors,
         },
         direct_rails_constants_count: usage.direct_rails_constants.length,
+        runtime_rails_constants_count: runtime_constants.length,
         used_constants_count: used_constants.length,
         unused_constants_count: unused_constants.length,
         direct_rails_constants: usage.direct_rails_constants.to_a.sort,
+        runtime_rails_constants: runtime_constants.to_a.sort,
         top_unused_namespaces: unused_by_namespace,
       }
 
@@ -71,4 +82,3 @@ module RailsDependencyPruner
     end
   end
 end
-

@@ -29,6 +29,55 @@ The generated shim installs fail-fast constants for unused Rails constants only
 when their parent namespace is already loaded. It does not remove loaded Rails
 classes unless you edit the shim to pass `force: true`.
 
+## Deterministic Runtime Workflow
+
+Prism is deterministic because it parses source, not process state. Runtime
+usage should therefore be treated as evidence captured by a controlled workload,
+then merged back into the Prism-derived dependency graph offline.
+
+The workflow is:
+
+1. Build the Rails constant index from source with Prism.
+2. Scan the app source with Prism for direct Rails constant references.
+3. Run the app test suite or a representative request workload with the runtime
+   recorder enabled.
+4. Merge the runtime evidence JSON into the Prism plan.
+5. Generate a shim for constants outside the merged dependency closure.
+6. Re-run the same workload with the shim loaded.
+
+Record runtime evidence:
+
+```bash
+RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
+RAILS_DEPENDENCY_PRUNER_RAILS_ROOT=RAILS_ROOT \
+RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
+bin/rails test
+```
+
+For deeper but slower evidence, enable method-call tracing:
+
+```bash
+RAILS_DEPENDENCY_PRUNER_TRACE_CALLS=1 \
+RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
+RAILS_DEPENDENCY_PRUNER_RAILS_ROOT=RAILS_ROOT \
+RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
+bin/rails test
+```
+
+Merge runtime evidence into the audit:
+
+```bash
+exe/rails-dependency-pruner audit \
+  --rails-root RAILS_ROOT \
+  --app LOBSTERS_APP \
+  --runtime-evidence tmp/rails_dependency_pruner_runtime.json \
+  --write-shim tmp/rails_dependency_pruner_shim.rb
+```
+
+The runtime JSON can include `defined_constants`, `called_constants`,
+`called_methods`, and `loaded_features`. The offline audit maps those facts back
+to Rails constants from the Prism index and keeps their dependency closure.
+
 ## Current Lobsters Smoke Result
 
 Against `RAILS_ROOT` and
