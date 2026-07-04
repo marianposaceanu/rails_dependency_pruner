@@ -8,6 +8,7 @@ require_relative "app_usage"
 require_relative "apply/boot_plan_patch"
 require_relative "apply/early_boot_patch"
 require_relative "boot_prune_planner"
+require_relative "boot_plan_explainer"
 require_relative "constant_index"
 require_relative "doctor"
 require_relative "planner"
@@ -162,15 +163,18 @@ module RailsDependencyPruner
       def run_plan
         options = options_parser.plan
         planner = build_planner(options)
+        boot_plan = BootPrunePlanner.new(planner).plan
+        explanations = BootPlanExplainer.new(planner: planner, boot_plan: boot_plan).explanations
         profile = Profile.deterministic_from_planner(
           planner,
           runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
           coverage_path: options[:coverage_path],
           mode: "boot_prune",
+          boot_plan: boot_plan,
+          explanations: explanations,
         )
         profile.write(options.fetch(:profile_path))
 
-        boot_plan = BootPrunePlanner.new(planner).plan
         if options[:patch_path]
           Apply::BootPlanPatch.new(app_root: options.fetch(:app_root), boot_plan: boot_plan).write(options[:patch_path])
         end
@@ -327,11 +331,15 @@ module RailsDependencyPruner
       def run_profile_build
         options = options_parser.profile_build
         planner = build_planner(options)
+        boot_plan = boot_plan_for_profile(options.fetch(:mode), planner)
+        explanations = boot_plan && BootPlanExplainer.new(planner: planner, boot_plan: boot_plan).explanations
         profile = Profile.deterministic_from_planner(
           planner,
           runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
           coverage_path: options[:coverage_path],
           mode: options.fetch(:mode),
+          boot_plan: boot_plan,
+          explanations: explanations,
         )
         profile.write(options.fetch(:write_path))
 
@@ -502,6 +510,12 @@ module RailsDependencyPruner
         usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
         runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
         Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+      end
+
+      def boot_plan_for_profile(mode, planner)
+        return unless mode == "boot_prune"
+
+        BootPrunePlanner.new(planner).plan
       end
   end
 end

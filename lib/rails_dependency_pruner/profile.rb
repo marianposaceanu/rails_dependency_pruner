@@ -46,12 +46,13 @@ module RailsDependencyPruner
       )
     end
 
-    def self.deterministic_from_planner(planner, runtime_evidence_paths: [], coverage_path: nil, mode: "guard")
+    def self.deterministic_from_planner(planner, runtime_evidence_paths: [], coverage_path: nil, mode: "guard", boot_plan: nil, explanations: nil)
       context = ProfileContext.from_planner(
         planner,
         runtime_evidence_paths: runtime_evidence_paths,
         coverage_path: coverage_path,
       )
+      boot_plan_payload = boot_plan&.to_h || {}
       payload = {
         "schema_version" => DETERMINISTIC_SCHEMA_VERSION,
         "profile_id" => nil,
@@ -81,8 +82,8 @@ module RailsDependencyPruner
           "runtime_memory_summary" => planner.runtime_memory_summary.to_h,
         },
         "pruning" => {
-          "disabled_frameworks" => [],
-          "disabled_railties" => [],
+          "disabled_frameworks" => Array(boot_plan_payload["pruned_frameworks"]),
+          "disabled_railties" => Array(boot_plan_payload["pruned_railties"]),
           "disabled_initializers" => [],
           "disabled_require_paths" => planner.unused_require_paths,
           "disabled_require_path_provenance" => planner.unused_require_path_provenance,
@@ -90,6 +91,7 @@ module RailsDependencyPruner
           "autoload_ignores" => [],
           "eager_load_ignores" => [],
         },
+        "boot_plan" => boot_plan_payload,
         "safety" => {
           "always_keep" => [],
           "manual_keep" => [],
@@ -97,7 +99,7 @@ module RailsDependencyPruner
           "production_allowed" => false,
           "failure_mode" => "raise",
         },
-        "explanations" => {},
+        "explanations" => explanations || {},
       }
 
       new(payload).tap do |profile|

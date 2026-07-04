@@ -43,6 +43,10 @@ bundle exec rails-dependency-pruner plan \
   --patch tmp/pruner-boot-plan.patch
 ```
 
+The generated schema v2 profile stores the boot plan, disabled frameworks,
+disabled railties, and per-framework explanations. The patch is still only a
+review artifact; the command does not modify the app.
+
 Validate it before using it:
 
 ```bash

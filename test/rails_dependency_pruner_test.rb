@@ -810,6 +810,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 2, profile.fetch("schema_version")
       assert_equal "boot_prune", profile.fetch("mode")
       assert_equal payload.fetch("profile_id"), profile.fetch("profile_id")
+      assert_equal ["activejob"], profile.dig("pruning", "disabled_frameworks")
+      assert_equal ["active_job/railtie"], profile.dig("pruning", "disabled_railties")
 
       boot_plan = payload.fetch("boot_plan")
       assert_includes boot_plan.fetch("required_frameworks"), "activerecord"
@@ -821,6 +823,15 @@ class RailsDependencyPrunerTest < Minitest::Test
       patch = File.read(patch_path)
       assert_includes patch, "-require \"active_job/railtie\""
       assert_includes patch, "+# require \"active_job/railtie\""
+
+      assert_equal boot_plan.fetch("required_frameworks"), profile.dig("boot_plan", "required_frameworks")
+      assert_equal boot_plan.fetch("pruned_frameworks"), profile.dig("boot_plan", "pruned_frameworks")
+      assert_equal boot_plan.fetch("pruned_railties"), profile.dig("boot_plan", "pruned_railties")
+      assert_equal "disable_framework", profile.dig("explanations", "activejob", "decision")
+      assert_equal "active_job/railtie", profile.dig("explanations", "activejob", "railtie")
+      assert_includes profile.dig("explanations", "activejob", "negative_evidence"), "no static framework evidence in scanned app files"
+      assert_equal "keep_framework", profile.dig("explanations", "activerecord", "decision")
+      assert profile.dig("explanations", "activerecord", "positive_evidence").any? { |evidence| evidence.include?("ActiveRecord::Base") }
     end
   end
 
