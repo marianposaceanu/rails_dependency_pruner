@@ -87,6 +87,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-latency-smoke.md`
 - `tmp/lobsters-ruby405-rails813-latency-smoke.stdout.json`
 - `tmp/lobsters-ruby405-rails813-latency-policy-smoke.json`
+- `tmp/lobsters-ruby405-rails813-high-risk-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-gem-policy-smoke.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
@@ -137,6 +138,14 @@ Latency policy smoke:
 - result: failed latency gates while still saving `100.7 MiB`
 - first request delta: `+217.1 ms`
 - warmed p95 delta: `+464.4%`
+
+High-risk verifier smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-high-risk-policy-smoke.json`
+- result: production verification fails until `disable_eager_load` has first
+  request, p95, and p99 latency gates in the copied `memory_policy`
+- Vips analyzer stub proof: accepted by static analysis because Lobsters has no
+  `has_one_attached` or `has_many_attached` declarations
 
 Request ablation smoke, one run per variant:
 

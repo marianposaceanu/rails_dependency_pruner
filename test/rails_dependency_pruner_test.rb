@@ -1171,6 +1171,171 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_latency_policy_for_disable_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_latency_policy_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires memory_policy.max_first_request_latency_regression_*, memory_policy.max_request_p95_latency_regression_* or max_warmed_p95_latency_regression_*, memory_policy.max_request_p99_latency_regression_* or max_warmed_p99_latency_regression_*"
+      assert_equal [
+        {
+          "transform_id" => "disable_eager_load",
+          "requirement" => "latency_policy",
+          "missing_requirements" => [
+            "memory_policy.max_first_request_latency_regression_*",
+            "memory_policy.max_request_p95_latency_regression_* or max_warmed_p95_latency_regression_*",
+            "memory_policy.max_request_p99_latency_regression_* or max_warmed_p99_latency_regression_*",
+          ],
+        },
+      ], payload.dig("production_risks", "high_risk_transform_gaps")
+    end
+  end
+
+  def test_verify_production_allows_disable_eager_load_with_latency_policy
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_latency_policy_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      File.write(measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      ))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "high_risk_transform_gaps")
+    end
+  end
+
   def test_verify_production_requires_inbound_email_when_storage_skip_keeps_mailboxes
     Dir.mktmpdir("rails_dependency_pruner_storage_mailbox_coverage_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -1309,6 +1474,98 @@ class RailsDependencyPrunerTest < Minitest::Test
           "missing_workloads" => %w[attachments],
         },
       ], payload.dig("production_risks", "extreme_boot_workload_gaps")
+      assert_equal [
+        {
+          "transform_id" => "stub:active_storage_vips_analyzer",
+          "requirement" => "active_storage_vips_stub",
+          "missing_requirements" => %w[
+            active_storage.upload
+            active_storage.analyze
+            active_storage.variant
+            active_storage.preview
+            active_storage.representation
+            active_storage.attachment_read
+          ],
+          "alternative" => "unexpired high_risk_overrides.stub_active_storage_vips_analyzer",
+        },
+      ], payload.dig("production_risks", "high_risk_transform_gaps")
+    end
+  end
+
+  def test_verify_production_allows_vips_lazy_gem_with_full_attachment_coverage
+    Dir.mktmpdir("rails_dependency_pruner_vips_attachment_coverage_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        active_storage:
+          review_required: false
+          declarations_expected: true
+          upload: true
+          analyze: true
+          variant: true
+          preview: true
+          representation: true
+          attachment_read: true
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "ruby-vips",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "high_risk_transform_gaps")
     end
   end
 
@@ -5204,6 +5461,43 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
       assert_includes workloads, "attachments"
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal %w[upload], manifest.active_storage_actions
+    end
+  end
+
+  def test_coverage_manifest_accepts_unexpired_high_risk_override
+    Dir.mktmpdir("rails_dependency_pruner_high_risk_override") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        high_risk_overrides:
+          stub_active_storage_vips_analyzer:
+            accepted_by: "app owner"
+            reason: "no Active Storage image analysis in production"
+            expires_at: 2099-01-01
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal(
+        "2099-01-01",
+        manifest.high_risk_override("stub:active_storage_vips_analyzer").fetch("expires_at"),
+      )
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        high_risk_overrides:
+          stub_active_storage_vips_analyzer:
+            accepted_by: "app owner"
+            reason: "expired"
+            expires_at: 2000-01-01
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_nil manifest.high_risk_override("stub:active_storage_vips_analyzer")
     end
   end
 

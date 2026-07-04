@@ -4,6 +4,7 @@ require "set"
 require "pathname"
 
 require_relative "boot_plan"
+require_relative "coverage_manifest"
 require_relative "memory_policy"
 require_relative "runtime_framework_matcher"
 require_relative "transform_registry"
@@ -110,6 +111,9 @@ module RailsDependencyPruner
         unsupported_lazy_gems.each do |name|
           errors << "production verify found unsupported lazy gem: #{name}"
         end
+        high_risk_transform_gaps.each do |gap|
+          errors << "production verify missing high-risk transform proof: #{format_high_risk_transform_gap(gap)}"
+        end
         disabled_framework_runtime_matches.each do |match|
           errors << "production verify found disabled framework runtime evidence: #{format_runtime_framework_match(match)}"
         end
@@ -134,6 +138,7 @@ module RailsDependencyPruner
           "extreme_boot_static_matches" => extreme_boot_static_matches,
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
+          "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
           "memory_policy" => memory_policy_result,
         },
@@ -245,7 +250,7 @@ module RailsDependencyPruner
         if name == "active_storage/engine" && action_mailbox_static_usage?
           required_workloads += %w[inbound_email]
         end
-        if name == "ruby-vips" && active_storage_attachment_static_usage?
+        if name == "ruby-vips" && active_storage_attachment_static_usage? && !high_risk_override?("stub:active_storage_vips_analyzer")
           required_workloads += %w[attachments]
         end
 
@@ -283,6 +288,31 @@ module RailsDependencyPruner
         end.sort
       end
 
+      def high_risk_transform_gaps
+        @high_risk_transform_gaps ||= begin
+          gaps = []
+
+          if extreme_boot["disable_eager_load"] == true
+            missing = disable_eager_load_latency_policy_gaps
+            gaps << high_risk_gap("disable_eager_load", "latency_policy", missing) unless missing.empty?
+          end
+
+          if Array(extreme_boot["lazy_gems"]).map(&:to_s).include?("ruby-vips")
+            missing = active_storage_vips_proof_gaps
+            unless missing.empty?
+              gaps << high_risk_gap(
+                "stub:active_storage_vips_analyzer",
+                "active_storage_vips_stub",
+                missing,
+                alternative: "unexpired high_risk_overrides.stub_active_storage_vips_analyzer",
+              )
+            end
+          end
+
+          gaps.sort_by { |gap| gap.fetch("transform_id") }
+        end
+      end
+
       def extreme_boot_static_matches
         @extreme_boot_static_matches ||= begin
           matches = Array(extreme_boot["skip_railties"]).flat_map do |railtie|
@@ -314,6 +344,58 @@ module RailsDependencyPruner
           match["framework"] == "activestorage" &&
             ACTIVE_STORAGE_ATTACHMENT_PATTERNS.include?(match["pattern"])
         end
+      end
+
+      def disable_eager_load_latency_policy_gaps
+        missing = []
+        unless policy_gate?("max_first_request_latency_regression_ms", "max_first_request_latency_regression_percent")
+          missing << "memory_policy.max_first_request_latency_regression_*"
+        end
+        unless policy_gate?(
+          "max_request_p95_latency_regression_ms",
+          "max_request_p95_latency_regression_percent",
+          "max_warmed_p95_latency_regression_ms",
+          "max_warmed_p95_latency_regression_percent",
+        )
+          missing << "memory_policy.max_request_p95_latency_regression_* or max_warmed_p95_latency_regression_*"
+        end
+        unless policy_gate?(
+          "max_request_p99_latency_regression_ms",
+          "max_request_p99_latency_regression_percent",
+          "max_warmed_p99_latency_regression_ms",
+          "max_warmed_p99_latency_regression_percent",
+        )
+          missing << "memory_policy.max_request_p99_latency_regression_* or max_warmed_p99_latency_regression_*"
+        end
+
+        missing
+      end
+
+      def active_storage_vips_proof_gaps
+        return [] unless active_storage_attachment_static_usage?
+        return [] if high_risk_override?("stub:active_storage_vips_analyzer")
+
+        actions = coverage_manifest&.active_storage_actions || []
+        missing_actions = CoverageManifest::ACTIVE_STORAGE_ACTIONS - actions
+        missing_actions.map { |action| "active_storage.#{action}" }
+      end
+
+      def policy_gate?(*keys)
+        policy = profile.payload["memory_policy"]
+        return false unless policy.is_a?(Hash)
+
+        keys.any? do |key|
+          value = policy[key]
+          !value.nil? && !value.to_s.empty?
+        end
+      end
+
+      def high_risk_override?(transform_id)
+        !!coverage_manifest&.high_risk_override(transform_id)
+      end
+
+      def coverage_manifest
+        context.coverage_manifest
       end
 
       def path_matches(railtie, paths)
@@ -485,6 +567,23 @@ module RailsDependencyPruner
 
       def format_coverage_workload_gap(gap)
         "#{gap.fetch("framework")} requires #{gap.fetch("missing_workloads").join(", ")}"
+      end
+
+      def high_risk_gap(transform_id, requirement, missing_requirements, alternative: nil)
+        gap = {
+          "transform_id" => transform_id,
+          "requirement" => requirement,
+          "missing_requirements" => missing_requirements,
+        }
+        gap["alternative"] = alternative if alternative
+        gap
+      end
+
+      def format_high_risk_transform_gap(gap)
+        required = gap.fetch("missing_requirements").join(", ")
+        required = "#{required}, or #{gap.fetch("alternative")}" if gap["alternative"]
+
+        "#{gap.fetch("transform_id")} requires #{required}"
       end
   end
 end

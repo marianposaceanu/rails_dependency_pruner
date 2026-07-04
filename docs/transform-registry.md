@@ -48,9 +48,18 @@ Current policy classes:
 
 `stub:active_storage_vips_analyzer` is high risk. It is allowed only when the
 app has no Active Storage attachment DSL usage or when the coverage manifest
-proves attachment analysis behavior. The stub makes the Active Storage Vips
-analyzer decline instead of loading `ruby-vips` during boot. Direct app use of
-`Vips` can still lazy-load `ruby-vips`.
+proves the storage actions that can reach analysis behavior: upload, analyze,
+variant, preview, representation, and attachment read. A reviewed
+`high_risk_overrides.stub_active_storage_vips_analyzer` entry can approve the
+stub temporarily, but it must include `accepted_by`, `reason`, and a future
+`expires_at` date. The stub makes the Active Storage Vips analyzer decline
+instead of loading `ruby-vips` during boot. Direct app use of `Vips` can still
+lazy-load `ruby-vips`.
+
+`disable_eager_load` is medium risk. Production verification requires request
+coverage and memory policy gates for first request, p95, and p99 latency. RSS
+savings alone are not enough because this transform can move work from boot to
+the first request.
 
 ## why this exists
 

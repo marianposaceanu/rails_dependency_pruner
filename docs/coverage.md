@@ -33,3 +33,16 @@ normalizes to the existing `cable` workload name, and reviewed `active_storage`
 coverage normalizes to `attachments` only when a storage action such as upload,
 analyze, variant, preview, or representation is marked covered. A declaration
 inventory by itself is not attachment coverage.
+
+High-risk overrides are explicit and temporary:
+
+```yaml
+high_risk_overrides:
+  stub_active_storage_vips_analyzer:
+    accepted_by: "app owner"
+    reason: "no Active Storage image analysis in production"
+    expires_at: "2026-09-01"
+```
+
+Use an override only when reviewed coverage cannot express the app's real
+contract. Expired or incomplete overrides do not count.

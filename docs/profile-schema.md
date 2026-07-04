@@ -68,6 +68,10 @@ Supported gates:
 - `reference_profile_id`
 - `min_transform_savings_mib`
 
+Production verification also uses these gates as proof for high-risk transforms.
+For `disable_eager_load`, the policy must include first request, p95, and p99
+latency regression limits.
+
 ## runtime events
 
 Early boot writes structured events for skipped, deferred, blocked, stubbed, and
