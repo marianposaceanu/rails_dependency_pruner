@@ -65,6 +65,7 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-policy-profile.json`
 - `tmp/lobsters-ruby405-rails813-policy-approve.json`
 - `tmp/lobsters-ruby405-rails813-doctor.json`
+- `tmp/lobsters-ruby405-rails813-coverage-template.yml`
 
 Static capability scan:
 
@@ -83,6 +84,18 @@ Static capability scan:
 | dynamic initializer require/load risks | `0` |
 | dynamic constantization risks | `0` |
 | parse errors | `0` |
+
+Coverage template smoke:
+
+- artifact: `tmp/lobsters-ruby405-rails813-coverage-template.yml`
+- `version`: `2`
+- `rails_env`: `production`
+- inferred request entries: `20`
+- inferred jobs / mailer actions / channels: `10` / `10` / `0`
+- Active Storage declarations: `false`
+- Action Text declarations: `false`
+- integrations: `rack-mini-profiler`, `sentry-rails`, `sentry-ruby`
+- inferred workload sections are marked `review_required: true`
 
 Request ablation smoke, one run per variant:
 

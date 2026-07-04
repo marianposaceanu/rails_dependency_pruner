@@ -27,3 +27,12 @@ The report keeps the existing `recommendations` list and adds:
 The output is evidence for choosing candidate transforms. It is not production
 approval by itself. Production approval still needs profile verification,
 coverage, runtime evidence where required, and measurement policy gates.
+
+To turn the scan into a starter workload contract:
+
+```bash
+bundle exec rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml
+```
+
+The generated manifest keeps inferred workload sections under review until they
+are edited.

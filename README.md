@@ -40,6 +40,9 @@ bucket notes.
 
 Run `doctor --app . --json` before planning a profile. See
 [docs/doctor.md](docs/doctor.md) for the static capability report.
+Generate a starter coverage manifest with
+`coverage template --app . --write config/pruner_coverage.yml`; see
+[docs/coverage.md](docs/coverage.md).
 
 Add a coverage manifest and write a reviewed patch when you are ready to replace
 `rails/all` or comment unused railtie requires:
@@ -206,6 +209,10 @@ rake_tasks:
   - assets:precompile
 ```
 
+Use `bundle exec rails-dependency-pruner coverage template --app . --write
+config/pruner_coverage.yml` to create a starter file. Generated sections are
+marked `review_required: true` and do not count as coverage proof until edited.
+
 The profile stores this file's digest and inferred workload names. Validation
 fails if the manifest changes.
 Production approval also rejects disabled frameworks when their required
@@ -285,6 +292,7 @@ events to an NDJSON file. Set
 - `bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json`
 - `bundle exec rails-dependency-pruner diff --old config/pruner.prev.json --new config/rails_dependency_pruner_profile.json`
 - `bundle exec rails-dependency-pruner doctor --app .`
+- `bundle exec rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml`
 - `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch`
 - `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --output tmp/pruner-memory-report.json --markdown tmp/pruner-memory-report.md`

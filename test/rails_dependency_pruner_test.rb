@@ -3,6 +3,7 @@
 require "json"
 require "open3"
 require "rbconfig"
+require "yaml"
 
 require_relative "test_helper"
 
@@ -4856,6 +4857,192 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["resources", "mount"], payload.dig("capabilities", "routes", "calls").map { |entry| entry.fetch("call") }.sort.reverse
       assert_equal "config/initializers/dynamic_require.rb", payload.dig("risks", "initializers_dynamic_require_load", 0, "path")
       assert_equal "constantize", payload.dig("risks", "dynamic_constantization", 0, "kind")
+    end
+  end
+
+  def test_coverage_template_infers_reviewable_manifest_from_app
+    Dir.mktmpdir("rails_dependency_pruner_coverage_template") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.eager_load = true
+        end
+      RUBY
+      File.write(File.join(app_root, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          root "home#index"
+          get "/settings", to: "settings#show"
+          post "/comments", to: "comments#create"
+          mount AdminApp, at: "/admin"
+        end
+      RUBY
+      File.write(File.join(app_root, "Gemfile"), <<~RUBY)
+        source "https://rubygems.org"
+        gem "rack-mini-profiler"
+        gem "sentry-rails"
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "app/jobs"))
+      File.write(File.join(app_root, "app/jobs/cleanup_job.rb"), <<~RUBY)
+        class CleanupJob < ActiveJob::Base
+          queue_as :default
+        end
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "app/mailers"))
+      File.write(File.join(app_root, "app/mailers/user_mailer.rb"), <<~RUBY)
+        class UserMailer < ActionMailer::Base
+          def welcome
+            mail(to: "test@example.org")
+          end
+        end
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "app/channels"))
+      File.write(File.join(app_root, "app/channels/notifications_channel.rb"), <<~RUBY)
+        class NotificationsChannel < ActionCable::Channel::Base
+          def subscribed
+            stream_from "notifications"
+          end
+        end
+      RUBY
+      FileUtils.mkdir_p(File.join(app_root, "app/mailboxes"))
+      File.write(File.join(app_root, "app/mailboxes/application_mailbox.rb"), <<~RUBY)
+        class ApplicationMailbox < ActionMailbox::Base
+        end
+      RUBY
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+          has_rich_text :bio
+        end
+      RUBY
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "coverage",
+        "template",
+        "--app",
+        app_root,
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = YAML.safe_load(stdout, aliases: false)
+      assert_equal 2, payload.fetch("version")
+      assert_equal "production", payload.fetch("rails_env")
+      assert_equal true, payload.dig("boot", "eager_load")
+      assert_equal true, payload.dig("boot", "assets_precompile")
+      assert_equal true, payload.dig("boot", "db_migrate")
+      assert_equal true, payload.dig("routes", "review_required")
+      assert_equal "all", payload.dig("routes", "include")
+      request_paths = payload.dig("requests", "paths").map { |entry| [entry.fetch("method"), entry.fetch("path")] }
+      assert_includes request_paths, ["GET", "/"]
+      assert_includes request_paths, ["GET", "/settings"]
+      assert_includes request_paths, ["POST", "/comments"]
+      assert_equal ["CleanupJob"], payload.dig("jobs", "classes")
+      assert_equal ["UserMailer#welcome"], payload.dig("mailers", "actions")
+      assert_equal ["NotificationsChannel"], payload.dig("channels", "classes")
+      assert_equal ["ApplicationMailbox"], payload.dig("inbound_email", "mailboxes")
+      assert_equal true, payload.dig("active_storage", "declarations_expected")
+      assert_equal "image", payload.dig("active_storage", "declarations", 0, "name")
+      assert_equal true, payload.dig("action_text", "rich_text_expected")
+      assert_equal "bio", payload.dig("action_text", "declarations", 0, "name")
+      assert_equal %w[assets:precompile db:migrate], payload.dig("rake_tasks", "tasks")
+      assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler")
+      assert_equal "review", payload.dig("external_integrations", "sentry-rails")
+    end
+  end
+
+  def test_coverage_template_write_prints_output_path
+    Dir.mktmpdir("rails_dependency_pruner_coverage_template_write") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      output_path = File.join(app_root, "config/pruner_coverage.yml")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "coverage",
+        "template",
+        "--app",
+        app_root,
+        "--write",
+        "config/pruner_coverage.yml",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+      assert_equal "#{output_path}\n", stdout
+      assert File.exist?(output_path)
+      assert_equal 2, YAML.safe_load(File.read(output_path), aliases: false).fetch("version")
+    end
+  end
+
+  def test_coverage_manifest_ignores_review_required_template_sections
+    Dir.mktmpdir("rails_dependency_pruner_coverage_template_review") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          review_required: true
+          paths:
+            - method: GET
+              path: /
+              expected_status: 200
+        jobs:
+          review_required: false
+          classes:
+            - CleanupJob
+        channels:
+          review_required: false
+          classes:
+            - NotificationsChannel
+        active_storage:
+          review_required: false
+          upload: true
+      YAML
+
+      workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
+      refute_includes workloads, "requests"
+      assert_includes workloads, "jobs"
+      assert_includes workloads, "cable"
+      assert_includes workloads, "attachments"
+    end
+  end
+
+  def test_coverage_manifest_requires_reviewed_storage_action_for_attachment_workload
+    Dir.mktmpdir("rails_dependency_pruner_coverage_template_storage_review") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        active_storage:
+          review_required: false
+          declarations_expected: false
+          upload: false
+          analyze: false
+          variant: false
+      YAML
+
+      workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
+      refute_includes workloads, "attachments"
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        active_storage:
+          review_required: false
+          declarations_expected: true
+          upload: true
+          analyze: false
+          variant: false
+      YAML
+
+      workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
+      assert_includes workloads, "attachments"
     end
   end
 

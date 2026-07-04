@@ -15,10 +15,17 @@ module RailsDependencyPruner
       inbound_email
       jobs
       mailers
+      channels
       cable
+      active_storage
+      action_text
       rake_tasks
       custom_commands
     ].freeze
+    WORKLOAD_ALIASES = {
+      "active_storage" => "attachments",
+      "channels" => "cable",
+    }.freeze
 
     attr_reader :path, :payload
 
@@ -54,9 +61,9 @@ module RailsDependencyPruner
 
     def workloads
       explicit = Array(payload["workloads"]).map(&:to_s)
-      detected = WORKLOAD_KEYS.select { |key| present?(payload[key]) }
+      detected = WORKLOAD_KEYS.select { |key| workload_present?(key) }
 
-      (explicit + detected).uniq.sort
+      (explicit + detected).map { |key| normalize_workload_key(key) }.uniq.sort
     end
 
     def to_h
@@ -84,10 +91,32 @@ module RailsDependencyPruner
         when String
           !value.empty?
         when Array, Hash
+          return false if value.is_a?(Hash) && value["review_required"] == true
+
           !value.empty?
         else
           true
         end
+      end
+
+      def workload_present?(key)
+        case key
+        when "active_storage"
+          active_storage_present?(payload[key])
+        else
+          present?(payload[key])
+        end
+      end
+
+      def active_storage_present?(value)
+        return false unless value.is_a?(Hash)
+        return false if value["review_required"] == true
+
+        %w[upload analyze variant preview representation attachment_read].any? { |key| value[key] == true }
+      end
+
+      def normalize_workload_key(key)
+        WORKLOAD_ALIASES.fetch(key.to_s, key.to_s)
       end
 
       def deep_stringify(value)

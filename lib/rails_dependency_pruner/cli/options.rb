@@ -314,6 +314,35 @@ module RailsDependencyPruner
         options
       end
 
+      def coverage_template(usage: "coverage template")
+        options = {
+          app_root: nil,
+          rails_env: "production",
+          write_path: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--rails-env NAME", "Rails environment to template; defaults to production") { |env| options[:rails_env] = env }
+          parser.on("--write PATH", "Write the YAML template") { |path| options[:write_path] = path }
+          parser.on("--output PATH", "Alias for --write") { |path| options[:write_path] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(argv)
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+
+        options[:app_root] = File.expand_path(options.fetch(:app_root))
+        options[:write_path] = app_relative_path(options.fetch(:app_root), options[:write_path]) if options[:write_path]
+        options
+      end
+
       def apply_boot_plan(usage: "apply boot-plan")
         options = {
           app_root: nil,

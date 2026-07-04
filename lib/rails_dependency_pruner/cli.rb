@@ -10,6 +10,7 @@ require_relative "apply/early_boot_patch"
 require_relative "boot_prune_planner"
 require_relative "boot_plan_explainer"
 require_relative "constant_index"
+require_relative "coverage_template"
 require_relative "doctor"
 require_relative "planner"
 require_relative "profile"
@@ -45,6 +46,8 @@ module RailsDependencyPruner
         run_audit
       when "check"
         run_verify(usage: "check")
+      when "coverage"
+        run_coverage
       when "diff"
         run_profile_diff(usage: "diff")
       when "apply"
@@ -107,6 +110,42 @@ module RailsDependencyPruner
           puts JSON.pretty_generate(report)
         else
           printer.doctor(report)
+        end
+
+        0
+      end
+
+      def run_coverage
+        subcommand = @argv.shift || "help"
+
+        case subcommand
+        when "template"
+          run_coverage_template
+        when "help", "-h", "--help"
+          puts coverage_help
+          0
+        else
+          warn "Unknown coverage command: #{subcommand}"
+          warn coverage_help
+          1
+        end
+      end
+
+      def run_coverage_template
+        options = options_parser.coverage_template
+        template = CoverageTemplate.new(
+          app_root: options.fetch(:app_root),
+          rails_env: options.fetch(:rails_env),
+        )
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(template.payload)
+        elsif options[:write_path]
+          FileUtils.mkdir_p(File.dirname(options.fetch(:write_path)))
+          File.write(options.fetch(:write_path), template.to_yaml)
+          puts options.fetch(:write_path)
+        else
+          puts template.to_yaml
         end
 
         0
@@ -546,6 +585,7 @@ module RailsDependencyPruner
             approve  Run production checks and mark the profile production-ready
             patch    Write the reviewed boot-plan patch
             shim     Write the reviewed config/boot.rb shim patch
+            coverage Write a starter coverage manifest
             measure  Measure boot memory in fresh processes
             runtime  Collect runtime evidence from a workload
 
@@ -571,6 +611,7 @@ module RailsDependencyPruner
             rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
             rails-dependency-pruner measure ablation --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --output tmp/pruner-ablation.json
             rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json
+            rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml
             rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
             rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json
 
@@ -584,6 +625,21 @@ module RailsDependencyPruner
             --disable-eager-load
             --skip-railties PATHS
             --json
+        HELP
+      end
+
+      def coverage_help
+        <<~HELP
+          Usage: rails-dependency-pruner coverage template [options]
+
+          Template options:
+            --app PATH                 Rails app root
+            --rails-env NAME           Defaults to production
+            --write PATH               Write the YAML template
+            --json
+
+          The template is a starting point. Inferred workload sections are marked
+          review_required: true and do not count as coverage proof until edited.
         HELP
       end
 
