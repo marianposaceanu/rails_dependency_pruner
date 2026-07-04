@@ -3,6 +3,8 @@
 require "json"
 require "set"
 
+require_relative "measurement/memory_probe"
+
 module RailsDependencyPruner
   module RuntimeRecorder
     DEFAULT_PREFIXES = %w[
@@ -31,7 +33,8 @@ module RailsDependencyPruner
       trace_calls: ENV["RAILS_DEPENDENCY_PRUNER_TRACE_CALLS"] == "1",
       trace_requires: ENV["RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES"] == "1",
       prefixes: DEFAULT_PREFIXES,
-      max_called_methods: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_CALLS", "20000"))
+      max_called_methods: Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_CALLS", "20000")),
+      record_snapshots: ENV["RAILS_DEPENDENCY_PRUNER_SNAPSHOTS"] == "1"
     )
       return false if output.nil? || output.empty?
       return true if @started
@@ -44,11 +47,15 @@ module RailsDependencyPruner
       @called_constants = Set.new
       @require_events = []
       @load_events = []
+      @snapshots = []
       @max_called_methods = max_called_methods
       @max_require_events = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_REQUIRE_EVENTS", "20000"))
+      @max_snapshots = Integer(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MAX_SNAPSHOTS", "200"))
       @require_events_truncated = false
       @load_events_truncated = false
+      @snapshots_truncated = false
       @record_objectspace = ENV["RAILS_DEPENDENCY_PRUNER_OBJECTSPACE"] == "1"
+      @record_snapshots = record_snapshots
 
       if trace_calls
         @trace = TracePoint.new(:call) do |event|
@@ -58,7 +65,11 @@ module RailsDependencyPruner
       end
       install_require_trace! if trace_requires
 
-      at_exit { write! }
+      snapshot!("recorder_start") if @record_snapshots
+      at_exit do
+        snapshot!("recorder_exit") if @record_snapshots
+        write!
+      end
       true
     end
 
@@ -74,12 +85,35 @@ module RailsDependencyPruner
         called_methods: @called_methods,
         require_events: @require_events,
         load_events: @load_events,
+        snapshots: @snapshots,
+        process_memory: Measurement::MemoryProbe.snapshot,
         require_events_truncated: @require_events_truncated,
         load_events_truncated: @load_events_truncated,
+        snapshots_truncated: @snapshots_truncated,
       }
       payload[:memory] = memory_snapshot if @record_objectspace
 
       File.write(@output, JSON.pretty_generate(payload))
+    end
+
+    def snapshot!(phase)
+      return false unless @started
+
+      if @snapshots.length >= @max_snapshots
+        @snapshots_truncated = true
+        return false
+      end
+
+      snapshot = {
+        "phase" => phase.to_s,
+        "time" => Process.clock_gettime(Process::CLOCK_MONOTONIC),
+        "loaded_features" => loaded_features,
+        "defined_constants" => defined_constants,
+        "process_memory" => Measurement::MemoryProbe.snapshot,
+      }
+      snapshot["memory"] = memory_snapshot if @record_objectspace
+      @snapshots << snapshot
+      true
     end
 
     def record_call(event)

@@ -37,6 +37,8 @@ module RailsDependencyPruner
         constants_count: constants.length,
         constants: constants.to_a.sort,
         memory: memory,
+        process_memory: process_memory,
+        snapshots: snapshots,
         require_events: require_events,
         load_events: load_events,
       }
@@ -44,6 +46,14 @@ module RailsDependencyPruner
 
     def memory
       payloads.filter_map { |payload| payload["memory"] }
+    end
+
+    def process_memory
+      payloads.filter_map { |payload| payload["process_memory"] }
+    end
+
+    def snapshots
+      payloads.flat_map { |payload| Array(payload["snapshots"]) }
     end
 
     def require_events

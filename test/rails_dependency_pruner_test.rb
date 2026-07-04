@@ -568,6 +568,7 @@ class RailsDependencyPrunerTest < Minitest::Test
           "RAILS_DEPENDENCY_PRUNER_TRACE_CALLS" => "1",
           "RAILS_DEPENDENCY_PRUNER_TRACE_REQUIRES" => "1",
           "RAILS_DEPENDENCY_PRUNER_OBJECTSPACE" => "1",
+          "RAILS_DEPENDENCY_PRUNER_SNAPSHOTS" => "1",
         },
         RUBY,
         "-I#{ROOT.join("lib")}",
@@ -585,7 +586,9 @@ class RailsDependencyPrunerTest < Minitest::Test
           $LOAD_PATH.unshift(#{dir.dump})
           require "runtime_feature"
           load #{runtime_feature.dump}
-          ActiveRecord::Base.new.persisted?
+          $runtime_base = ActiveRecord::Base.new
+          $runtime_base.persisted?
+          RailsDependencyPruner::RuntimeRecorder.snapshot!("after_runtime_feature")
         RUBY
       )
 
@@ -600,6 +603,12 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert payload.fetch("load_events").any? { |entry| entry.fetch("path") == runtime_feature && entry["caller_line"] }
       assert payload.dig("memory", "object_sizes", "T_STRING")
       assert payload.dig("memory", "rails_class_instance_sizes").any? { |entry| entry.fetch("name") == "ActiveRecord::Base" }
+      assert_operator payload.dig("process_memory", "rss_kb"), :>, 0
+      phases = payload.fetch("snapshots").map { |snapshot| snapshot.fetch("phase") }
+      assert_includes phases, "recorder_start"
+      assert_includes phases, "after_runtime_feature"
+      assert_includes phases, "recorder_exit"
+      assert payload.fetch("snapshots").all? { |snapshot| snapshot.dig("process_memory", "rss_kb").positive? }
     end
   end
 

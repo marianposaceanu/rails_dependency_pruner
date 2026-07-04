@@ -103,6 +103,21 @@ RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
 bin/rails test
 ```
 
+For boot/workload snapshots with process RSS and loaded features:
+
+```bash
+RAILS_DEPENDENCY_PRUNER_SNAPSHOTS=1 \
+RAILS_DEPENDENCY_PRUNER_RUNTIME_OUTPUT=tmp/rails_dependency_pruner_runtime.json \
+RUBYOPT="-rrails_dependency_pruner/runtime_recorder" \
+bin/rails test
+```
+
+Apps can add explicit markers during a workload:
+
+```ruby
+RailsDependencyPruner::RuntimeRecorder.snapshot!("after_routes_load")
+```
+
 Merge that evidence into the next profile:
 
 ```bash
