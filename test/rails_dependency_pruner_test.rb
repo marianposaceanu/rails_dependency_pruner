@@ -1298,6 +1298,58 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_only_blocks_require_paths_from_pruned_frameworks
+    Dir.mktmpdir("rails_dependency_pruner_early_framework_filter") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "kept_support_feature.rb"), "KEPT_SUPPORT_FEATURE_LOADED = true\n")
+      File.write(File.join(dir, "pruned_cable_feature.rb"), "PRUNED_CABLE_FEATURE_LOADED = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "boot_plan" => {
+          "pruned_frameworks" => ["actioncable"],
+        },
+        "pruning" => {
+          "disabled_require_paths" => ["kept_support_feature", "pruned_cable_feature"],
+          "disabled_require_path_provenance" => [
+            {
+              "require_path" => "kept_support_feature",
+              "component" => "activesupport",
+            },
+            {
+              "require_path" => "pruned_cable_feature",
+              "component" => "actioncable",
+            },
+          ],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          $LOAD_PATH.unshift(#{dir.dump})
+          require "rails_dependency_pruner/early_boot"
+          require "kept_support_feature"
+          require "pruned_cable_feature"
+        RUBY
+      )
+
+      refute status.success?
+      refute_includes stderr, "kept_support_feature is disabled"
+      assert_includes stderr, "pruned_cable_feature is disabled by rails_dependency_pruner early boot"
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal ["pruned_cable_feature"], payload.fetch("events").map { |event| event.fetch("path") }
+    end
+  end
+
   def test_early_boot_production_mode_requires_allowed_profile
     Dir.mktmpdir("rails_dependency_pruner_early_production") do |dir|
       profile_path = File.join(dir, "profile.json")

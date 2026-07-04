@@ -269,18 +269,42 @@ and route-specific hooks such as `mount ActionCable.server` or
 
 ## lobsters run
 
-Against the local Rails `8.1.3` gems and
-`LOBSTERS_APP`:
+Against a temp copy of `LOBSTERS_APP`, using RVM Ruby
+`4.0.5` on arm64 Darwin and Rails `8.1.3`:
 
 - Rails Ruby files scanned: `1409`
 - Rails constants indexed: `2331`
-- Lobsters Ruby files scanned: `157`
-- Lobsters direct Rails constants: `48`
-- Reachable Rails constants after closure: `757`
-- Unused Rails constant candidates: `1574`
-- Unused Rails feature files: `785`
+- Lobsters direct Rails constants: `58`
+- Reachable Rails constants after closure: `759`
+- Unused Rails constant candidates: `1572`
+- Unused Rails feature files: `783`
+- Disabled frameworks: `actioncable`, `actiontext`
+- Disabled railties: `action_cable/engine`, `action_text/engine`
 - Rails parse errors: `0`
 - app parse errors: `0`
+
+Benchmark command:
+
+```bash
+RAILS_ENV=production rails-dependency-pruner measure \
+  --app tmp/lobsters-ruby405-rails813 \
+  --profile tmp/lobsters-ruby405-rails813-profile.json \
+  --variants baseline,production \
+  --runs 1 \
+  --output tmp/lobsters-ruby405-rails813-measurement.json
+```
+
+This loads `config/application`, not a server and not a full Rails
+initialization. It is a smoke benchmark, not a stable savings claim.
+
+| variant | RSS | Rails loaded features | GC live slots |
+| --- | ---: | ---: | ---: |
+| baseline | `134240 KB` (`131.1 MiB`) | `415` | `223479` |
+| production early boot | `132576 KB` (`129.5 MiB`) | `415` | `223829` |
+| delta | `-1664 KB` (`-1.6 MiB`) | `0` | `+350` |
+
+The pruned Lobsters railties are already commented out in `config/application.rb`,
+so the loaded Rails feature count does not move in this benchmark.
 
 Local outputs are ignored under `tmp/`.
 
