@@ -558,6 +558,100 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_apply_boot_plan_writes_review_patch_for_rails_all
+    Dir.mktmpdir("rails_dependency_pruner_boot_plan") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      application_path = File.join(app_root, "config/application.rb")
+      File.write(application_path, <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails/all"
+      RUBY
+      profile_path = File.join(dir, "profile.json")
+      patch_path = File.join(dir, "boot_plan.patch")
+      File.write(profile_path, JSON.pretty_generate("schema_version" => 1, "unused_constants" => []))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "apply",
+        "boot-plan",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,actionview,activejob,activemodel,activerecord",
+        "--write-patch",
+        patch_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("required_frameworks"), "activerecord"
+      assert_includes payload.fetch("required_frameworks"), "activemodel"
+      assert_includes payload.fetch("required_frameworks"), "actionpack"
+      assert_includes payload.fetch("required_frameworks"), "actionview"
+      assert_includes payload.fetch("pruned_frameworks"), "activejob"
+
+      patch = File.read(patch_path)
+      assert_includes patch, "-require \"rails/all\""
+      assert_includes patch, "+require \"rails\""
+      assert_includes patch, "+require \"active_record/railtie\""
+      assert_includes patch, "+# require \"active_job/railtie\" # pruned by rails_dependency_pruner"
+      assert_includes File.read(application_path), "require \"rails/all\""
+    end
+  end
+
+  def test_apply_boot_plan_comments_explicit_pruned_framework_requires
+    Dir.mktmpdir("rails_dependency_pruner_explicit_boot_plan") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      application_path = File.join(app_root, "config/application.rb")
+      File.write(application_path, <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails"
+        require "active_record/railtie"
+        require "active_job/railtie"
+      RUBY
+      profile_path = File.join(dir, "profile.json")
+      patch_path = File.join(dir, "boot_plan.patch")
+      File.write(profile_path, JSON.pretty_generate("schema_version" => 1, "unused_constants" => []))
+
+      _stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "apply",
+        "boot-plan",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "activejob,activemodel,activerecord",
+        "--write-patch",
+        patch_path,
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      patch = File.read(patch_path)
+      assert_includes patch, "-require \"active_job/railtie\""
+      assert_includes patch, "+# require \"active_job/railtie\""
+      assert_includes File.read(application_path), "require \"active_job/railtie\""
+    end
+  end
+
   private
     def write_deterministic_profile(profile_path:, app_root:)
       _stdout, stderr, status = Open3.capture3(

@@ -5,6 +5,8 @@ require "optparse"
 require "pathname"
 
 require_relative "app_usage"
+require_relative "apply/boot_plan_patch"
+require_relative "boot_prune_planner"
 require_relative "constant_index"
 require_relative "planner"
 require_relative "profile"
@@ -25,6 +27,8 @@ module RailsDependencyPruner
       case command
       when "audit"
         run_audit
+      when "apply"
+        run_apply
       when "index"
         run_index
       when "explain"
@@ -54,6 +58,45 @@ module RailsDependencyPruner
           puts JSON.pretty_generate(payload)
         else
           print_index(index)
+        end
+
+        0
+      end
+
+      def run_apply
+        subcommand = @argv.shift || "help"
+
+        case subcommand
+        when "boot-plan"
+          run_apply_boot_plan
+        when "help", "-h", "--help"
+          puts apply_help
+          0
+        else
+          warn "Unknown apply command: #{subcommand}"
+          warn apply_help
+          1
+        end
+      end
+
+      def run_apply_boot_plan
+        options = parse_apply_boot_plan_options
+        Profile.load(options.fetch(:profile_path))
+
+        index = ConstantIndex.build(rails_root: options.fetch(:rails_root), frameworks: options.fetch(:frameworks))
+        usage = AppUsage.scan(app_root: options.fetch(:app_root), index: index, scan_roots: options.fetch(:scan_roots))
+        runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
+        planner = Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
+        boot_plan = BootPrunePlanner.new(planner).plan
+
+        if options[:write_patch]
+          Apply::BootPlanPatch.new(app_root: options.fetch(:app_root), boot_plan: boot_plan).write(options[:write_patch])
+        end
+
+        if options.fetch(:json)
+          puts JSON.pretty_generate(boot_plan.to_h)
+        else
+          print_boot_plan(boot_plan, patch_path: options[:write_patch])
         end
 
         0
@@ -236,6 +279,43 @@ module RailsDependencyPruner
         options
       end
 
+      def parse_apply_boot_plan_options
+        options = {
+          app_root: nil,
+          rails_root: nil,
+          scan_roots: AppUsage::DEFAULT_SCAN_ROOTS,
+          frameworks: ConstantIndex::DEFAULT_FRAMEWORKS,
+          profile_path: nil,
+          runtime_evidence_paths: [],
+          write_patch: nil,
+          json: false,
+        }
+
+        parser = OptionParser.new do |parser|
+          parser.banner = "Usage: rails-dependency-pruner apply boot-plan [options]"
+          parser.on("--profile PATH", "Profile used for review context") { |path| options[:profile_path] = path }
+          parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
+          parser.on("--rails-root PATH", "Rails source checkout root for fixture/dev analysis") { |path| options[:rails_root] = path }
+          parser.on("--scan ROOTS", "Comma-separated app-relative roots to scan") { |roots| options[:scan_roots] = split_csv(roots) }
+          parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
+          parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
+          parser.on("--write-patch PATH", "Write a reviewed boot-plan patch") { |path| options[:write_patch] = path }
+          parser.on("--json", "Print JSON output") { options[:json] = true }
+          parser.on("-h", "--help", "Print help") do
+            puts parser
+            exit 0
+          end
+        end
+
+        parser.parse!(@argv)
+
+        options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
+        raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
+        raise ArgumentError, "--app is required" if blank?(options[:app_root])
+
+        options
+      end
+
       def print_index(index)
         payload = index.to_h(include_tree: false)
 
@@ -294,6 +374,7 @@ module RailsDependencyPruner
           Commands:
             index  Build a Rails constant dependency tree
             audit  Scan an app and find unused Rails constants
+            apply boot-plan  Write a reviewed patch replacing rails/all
             explain CONSTANT  Explain why a Rails constant is used or unused
             profile validate  Validate a deterministic profile against current inputs
 
@@ -328,6 +409,24 @@ module RailsDependencyPruner
             --frameworks NAMES
             --runtime-evidence PATHS
             --coverage PATH
+        HELP
+      end
+
+      def apply_help
+        <<~HELP
+          Usage: rails-dependency-pruner apply boot-plan [options]
+
+          Required:
+            --profile PATH
+            --app PATH
+
+          Useful options:
+            --write-patch PATH
+            --rails-root PATH          Optional checkout override; installed Rails 8.x gems are used by default
+            --scan ROOTS
+            --frameworks NAMES
+            --runtime-evidence PATHS
+            --json
         HELP
       end
 
@@ -386,6 +485,16 @@ module RailsDependencyPruner
           via = entry["via"] ? " via #{entry["via"]}" : ""
           puts "  #{entry.fetch("node")}#{via}"
         end
+      end
+
+      def print_boot_plan(boot_plan, patch_path:)
+        puts "Required frameworks:"
+        boot_plan.required_frameworks.each { |framework| puts "  #{framework}" }
+        puts
+        puts "Pruned frameworks:"
+        boot_plan.pruned_frameworks.each { |framework| puts "  #{framework}" }
+        puts
+        puts "Patch written to: #{patch_path}" if patch_path
       end
   end
 end
