@@ -2217,7 +2217,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "ok", payload.dig("variants", "baseline", "status")
       assert_equal "ok", payload.dig("variants", "shadow", "status")
       assert_operator payload.dig("variants", "baseline", "rss_kb_median"), :>, 0
+      assert_kind_of Hash, payload.dig("variants", "baseline", "rails_loaded_features_by_framework_median")
       assert payload.dig("deltas", "shadow").key?("rss_kb")
+      assert_kind_of Hash, payload.dig("deltas", "shadow", "rails_loaded_features_by_framework")
       assert_equal "sha256:test", payload.dig("profile", "profile_id")
       assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
       assert_equal 1, payload.dig("profile", "disabled_require_paths_count")
@@ -2229,6 +2231,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "| baseline | ok |"
       assert_includes markdown, "| shadow | ok |"
       assert_includes markdown, "## Deltas Vs Baseline"
+      assert_includes markdown, "## Rails Features By Framework"
+      assert_includes markdown, "## Rails Feature Deltas By Framework"
     end
   end
 

@@ -17,7 +17,9 @@ module RailsDependencyPruner
 
         append_profile(lines)
         append_variants(lines)
+        append_framework_features(lines)
         append_deltas(lines)
+        append_framework_deltas(lines)
         lines << "RSS is reported from the measured process. Compare it with loaded-feature and GC-slot deltas before claiming a memory win."
         lines << ""
         lines.join("\n")
@@ -61,6 +63,24 @@ module RailsDependencyPruner
           lines << ""
         end
 
+        def append_framework_features(lines)
+          frameworks = payload.fetch("variants", {}).values.flat_map do |summary|
+            summary.fetch("rails_loaded_features_by_framework_median", {}).keys
+          end.uniq.sort
+          return if frameworks.empty?
+
+          lines << "## Rails Features By Framework"
+          lines << ""
+          lines << "| variant | #{frameworks.join(" | ")} |"
+          lines << "| --- | #{frameworks.map { "---:" }.join(" | ")} |"
+          payload.fetch("variants", {}).each do |variant, summary|
+            counts = summary.fetch("rails_loaded_features_by_framework_median", {})
+            row = [table_cell(variant)] + frameworks.map { |framework| value(counts[framework]) }
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
         def append_deltas(lines)
           deltas = payload.fetch("deltas", {})
           return if deltas.empty?
@@ -77,6 +97,25 @@ module RailsDependencyPruner
               signed(delta["rails_loaded_features"]),
               signed(delta["gc_heap_live_slots"]),
             ].join(" | ").then { |row| "| #{row} |" }
+          end
+          lines << ""
+        end
+
+        def append_framework_deltas(lines)
+          deltas = payload.fetch("deltas", {})
+          frameworks = deltas.values.flat_map do |delta|
+            delta.fetch("rails_loaded_features_by_framework", {}).keys
+          end.uniq.sort
+          return if frameworks.empty?
+
+          lines << "## Rails Feature Deltas By Framework"
+          lines << ""
+          lines << "| variant | #{frameworks.join(" | ")} |"
+          lines << "| --- | #{frameworks.map { "---:" }.join(" | ")} |"
+          deltas.each do |variant, delta|
+            counts = delta.fetch("rails_loaded_features_by_framework", {})
+            row = [table_cell(variant)] + frameworks.map { |framework| signed(counts[framework]) }
+            lines << "| #{row.join(" | ")} |"
           end
           lines << ""
         end

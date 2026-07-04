@@ -3,6 +3,21 @@
 module RailsDependencyPruner
   module Measurement
     module MemoryProbe
+      FRAMEWORK_GEM_MARKERS = {
+        "actioncable" => "/gems/actioncable-",
+        "actionmailbox" => "/gems/actionmailbox-",
+        "actionmailer" => "/gems/actionmailer-",
+        "actionpack" => "/gems/actionpack-",
+        "actiontext" => "/gems/actiontext-",
+        "actionview" => "/gems/actionview-",
+        "activejob" => "/gems/activejob-",
+        "activemodel" => "/gems/activemodel-",
+        "activerecord" => "/gems/activerecord-",
+        "activestorage" => "/gems/activestorage-",
+        "activesupport" => "/gems/activesupport-",
+        "railties" => "/gems/railties-",
+      }.freeze
+
       module_function
 
       def snapshot
@@ -10,6 +25,7 @@ module RailsDependencyPruner
           "rss_kb" => rss_kb,
           "loaded_features" => $LOADED_FEATURES.length,
           "rails_loaded_features" => rails_loaded_features,
+          "rails_loaded_features_by_framework" => rails_loaded_features_by_framework,
           "gc_heap_live_slots" => GC.stat[:heap_live_slots],
         }
       end
@@ -24,6 +40,13 @@ module RailsDependencyPruner
             feature.include?("/gems/active") ||
             feature.include?("/gems/railties")
         end
+      end
+
+      def rails_loaded_features_by_framework
+        FRAMEWORK_GEM_MARKERS.each_with_object({}) do |(framework, marker), counts|
+          count = $LOADED_FEATURES.count { |feature| feature.include?(marker) }
+          counts[framework] = count if count.positive?
+        end.sort.to_h
       end
     end
   end

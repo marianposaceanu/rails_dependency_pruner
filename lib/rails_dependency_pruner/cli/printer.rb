@@ -170,6 +170,13 @@ module RailsDependencyPruner
           puts "  RSS median: #{summary.fetch("rss_kb_median")} KB"
           puts "  Rails loaded features median: #{summary.fetch("rails_loaded_features_median")}"
           puts "  GC live slots median: #{summary.fetch("gc_heap_live_slots_median")}"
+          framework_features = summary.fetch("rails_loaded_features_by_framework_median", {})
+          unless framework_features.empty?
+            puts "  Rails features by framework:"
+            framework_features.each do |framework, count|
+              puts "    #{framework}: #{count}"
+            end
+          end
         end
 
         unless report.fetch("deltas").empty?

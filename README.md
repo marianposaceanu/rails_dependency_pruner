@@ -323,6 +323,9 @@ RAILS_ENV=production rails-dependency-pruner measure \
 
 This loads `config/application`, not a server and not a full Rails
 initialization. It is a smoke benchmark, not a production savings claim.
+Measurement JSON and Markdown include Rails loaded-feature counts by framework,
+so a boot-plan change can be checked against the exact railties it claims to
+remove.
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |

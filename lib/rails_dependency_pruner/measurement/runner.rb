@@ -148,6 +148,7 @@ module RailsDependencyPruner
             "rss_kb_max" => runs.map { |run| run.fetch("rss_kb") }.max,
             "loaded_features_median" => median(runs.map { |run| run.fetch("loaded_features") }),
             "rails_loaded_features_median" => median(runs.map { |run| run.fetch("rails_loaded_features") }),
+            "rails_loaded_features_by_framework_median" => summarize_framework_features(runs),
             "gc_heap_live_slots_median" => median(runs.map { |run| run.fetch("gc_heap_live_slots") }),
           }
         end
@@ -164,9 +165,28 @@ module RailsDependencyPruner
               "rss_kb" => summary.fetch("rss_kb_median") - baseline.fetch("rss_kb_median"),
               "loaded_features" => summary.fetch("loaded_features_median") - baseline.fetch("loaded_features_median"),
               "rails_loaded_features" => summary.fetch("rails_loaded_features_median") - baseline.fetch("rails_loaded_features_median"),
+              "rails_loaded_features_by_framework" => framework_feature_delta(
+                baseline.fetch("rails_loaded_features_by_framework_median", {}),
+                summary.fetch("rails_loaded_features_by_framework_median", {}),
+              ),
               "gc_heap_live_slots" => summary.fetch("gc_heap_live_slots_median") - baseline.fetch("gc_heap_live_slots_median"),
             }]
           end.compact.to_h
+        end
+
+        def summarize_framework_features(runs)
+          frameworks = runs.flat_map { |run| run.fetch("rails_loaded_features_by_framework", {}).keys }.uniq.sort
+          frameworks.to_h do |framework|
+            values = runs.map { |run| run.fetch("rails_loaded_features_by_framework", {}).fetch(framework, 0) }
+            [framework, median(values)]
+          end
+        end
+
+        def framework_feature_delta(baseline, summary)
+          frameworks = (baseline.keys + summary.keys).uniq.sort
+          frameworks.to_h do |framework|
+            [framework, summary.fetch(framework, 0) - baseline.fetch(framework, 0)]
+          end
         end
 
         def median(values)
