@@ -6,6 +6,8 @@ require "set"
 module RailsDependencyPruner
   module EarlyBoot
     DEFAULT_PROFILE_PATH = "config/rails_dependency_pruner_profile.json"
+    DisabledRequireError = Class.new(StandardError)
+    UnsafeProfileError = Class.new(StandardError)
 
     module_function
 
@@ -20,7 +22,8 @@ module RailsDependencyPruner
 
       payload = JSON.parse(File.read(profile_path))
       @mode = (mode || payload["mode"] || "shadow").to_s
-      return false unless @mode == "shadow"
+      return false unless %w[shadow boot_prune production].include?(@mode)
+      validate_profile_safety!(payload)
 
       @disabled_require_paths = disabled_require_paths(payload)
       @events = []
@@ -33,18 +36,25 @@ module RailsDependencyPruner
     def shadow_require(path, caller_location)
       return unless disabled_require_path?(path)
 
-      @events << {
+      event = {
         "path" => path.to_s,
         "caller_path" => caller_location&.path,
         "caller_line" => caller_location&.lineno,
         "caller_label" => caller_location&.label,
         "mode" => @mode,
-        "action" => "would_block",
+        "action" => blocking? ? "blocked" : "would_block",
       }.compact
+      @events << event
+
+      raise DisabledRequireError, "#{path} is disabled by rails_dependency_pruner early boot" if blocking?
     end
 
     def disabled_require_path?(path)
       @disabled_require_paths&.include?(normalize(path))
+    end
+
+    def blocking?
+      %w[boot_prune production].include?(@mode)
     end
 
     def write!
@@ -70,6 +80,13 @@ module RailsDependencyPruner
 
     def normalize(path)
       path.to_s
+    end
+
+    def validate_profile_safety!(payload)
+      return unless @mode == "production"
+      return if payload.dig("safety", "production_allowed") == true
+
+      raise UnsafeProfileError, "rails_dependency_pruner production mode requires safety.production_allowed=true"
     end
 
     module RequireShadow

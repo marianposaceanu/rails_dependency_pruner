@@ -558,6 +558,74 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_prune_mode_blocks_disabled_require
+    Dir.mktmpdir("rails_dependency_pruner_early_blocking") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      feature_path = File.join(dir, "blocked_feature.rb")
+      File.write(feature_path, "BLOCKED_FEATURE_LOADED = true\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_feature"],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY,
+          $LOAD_PATH.unshift(#{dir.dump})
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "blocked_feature is disabled by rails_dependency_pruner early boot"
+
+      payload = JSON.parse(File.read(output_path))
+      assert_equal "blocked", payload.dig("events", 0, "action")
+    end
+  end
+
+  def test_early_boot_production_mode_requires_allowed_profile
+    Dir.mktmpdir("rails_dependency_pruner_early_production") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "production",
+        "safety" => {
+          "production_allowed" => false,
+        },
+        "pruning" => {
+          "disabled_require_paths" => ["blocked_feature"],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "production mode requires safety.production_allowed=true"
+    end
+  end
+
   def test_apply_boot_plan_writes_review_patch_for_rails_all
     Dir.mktmpdir("rails_dependency_pruner_boot_plan") do |dir|
       app_root = File.join(dir, "app")
