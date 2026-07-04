@@ -800,6 +800,59 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_missing_framework_coverage_workloads
+    Dir.mktmpdir("rails_dependency_pruner_coverage_workload_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        frameworks: "actionmailer,actionpack,activerecord",
+      )
+
+      profile = JSON.parse(File.read(profile_path))
+      assert_includes profile.dig("pruning", "disabled_frameworks"), "actionmailer"
+      refute_includes profile.dig("evidence", "workloads"), "mailers"
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionmailer,actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for disabled framework: actionmailer requires mailers"
+      assert_equal(
+        {
+          "framework" => "actionmailer",
+          "required_workloads" => ["mailers"],
+          "missing_workloads" => ["mailers"],
+        },
+        payload.dig("production_risks", "coverage_workload_gaps", 0),
+      )
+    end
+  end
+
   def test_verify_production_rejects_dynamic_constantization_for_pruned_namespaces
     Dir.mktmpdir("rails_dependency_pruner_dynamic_constant_verify") do |dir|
       app_root = File.join(dir, "app")

@@ -187,6 +187,8 @@ rake_tasks:
 
 The profile stores this file's digest and inferred workload names. Validation
 fails if the manifest changes.
+Production approval also rejects disabled frameworks when their required
+workload type is missing, such as pruning Action Mailer without `mailers`.
 
 Merge that evidence into the next profile:
 
