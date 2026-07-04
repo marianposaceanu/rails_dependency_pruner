@@ -39,6 +39,7 @@ module RailsDependencyPruner
       oauth
       parslet
       pdf-reader
+      rack-mini-profiler
       rotp
       rqrcode
       ruby-vips

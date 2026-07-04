@@ -30,6 +30,10 @@ module RailsDependencyPruner
           ENV["RAILS_DEPENDENCY_PRUNER_MEASURE_TARGET"].to_s
         end
 
+        def request_paths
+          JSON.parse(ENV.fetch("RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS", "[]"))
+        end
+
         def no_eager_load_variant?
           %w[no_eager_load no_eager_load_skip_railties].include?(measure_variant)
         end
@@ -98,7 +102,9 @@ module RailsDependencyPruner
         install_skip_require!(skipped)
         install_config_namespace_stubs!(skipped)
 
-        if measure_target == "environment"
+        if measure_target == "application"
+          require File.join(app_root, "config/application")
+        else
           require File.join(app_root, "config/application")
           if no_eager_load_variant?
             Rails.application.initializer("rails_dependency_pruner.measure.no_eager_load", before: :eager_load!) do |application|
@@ -106,24 +112,46 @@ module RailsDependencyPruner
             end
           end
           Rails.application.initialize!
-        else
-          require File.join(app_root, "config/application")
         end
+
+        if measure_target == "requests"
+          require "rack/mock"
+          request = Rack::MockRequest.new(Rails.application)
+          requests = request_paths.map do |path|
+            response = request.get(path, "HTTP_HOST" => "example.org", "HTTPS" => "on")
+            {
+              "path" => path,
+              "status" => response.status,
+              "bytes" => response.body.bytesize,
+              "location" => response["Location"],
+            }.compact
+          rescue => error
+            {
+              "path" => path,
+              "error" => error.class.name,
+              "message" => error.message,
+            }
+          end
+        end
+
         GC.start
-        puts JSON.generate(RailsDependencyPruner::Measurement::MemoryProbe.snapshot)
+        snapshot = RailsDependencyPruner::Measurement::MemoryProbe.snapshot
+        snapshot["requests"] = requests if measure_target == "requests"
+        puts JSON.generate(snapshot)
       RUBY
 
-      TARGETS = %w[application environment].freeze
+      TARGETS = %w[application environment requests].freeze
 
-      attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties
+      attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties, :request_paths
 
-      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [])
+      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [])
         @app_root = File.expand_path(app_root)
         @variants = variants
         @runs = runs
         @profile_path = profile_path && File.expand_path(profile_path)
         @target = target
         @skip_railties = Array(skip_railties)
+        @request_paths = Array(request_paths)
       end
 
       def run
@@ -138,6 +166,7 @@ module RailsDependencyPruner
           "runs" => results,
           "deltas" => deltas(results),
         }
+        report["request_paths"] = request_paths if target == "requests"
         report["profile"] = profile_metadata if profile_path
         report
       end
@@ -217,6 +246,7 @@ module RailsDependencyPruner
             "RUBYLIB" => ruby_lib,
           }
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES"] = skip_railties.join(",") if skip_railties_variant?(variant)
+          env["RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS"] = JSON.generate(request_paths) if target == "requests"
           env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))
           return env unless profile_path
 

@@ -185,6 +185,7 @@ module RailsDependencyPruner
           profile_path: options[:profile_path],
           target: options.fetch(:target),
           skip_railties: options.fetch(:skip_railties),
+          request_paths: options.fetch(:request_paths),
         ).run
 
         if options[:output_path]
@@ -617,8 +618,9 @@ module RailsDependencyPruner
             --profile PATH
             --variants baseline,boot_prune,no_eager_load,no_eager_load_skip_railties
             --runs N
-            --target application|environment
+            --target application|environment|requests
             --skip-railties PATHS
+            --request-paths PATHS
             --output PATH
             --markdown PATH
             --json

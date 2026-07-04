@@ -431,19 +431,19 @@ bundle exec exe/rails-dependency-pruner measure \
 | profile boot prune | `134784 KB` (`131.6 MiB`) | `600` | `275082` |
 | profile delta | `-96304 KB` (`-94.0 MiB`, `-41.7%`) | `-473` | `-266145` |
 
-Keeping Action Mailbox and Active Storage, then deferring more boot gems, clears
-the 40% target in the local benchmark:
+Keeping Action Mailbox and Active Storage, then deferring more boot gems and
+stubbing mini-profiler, clears the 40% target for environment boot:
 
 ```bash
 LAZY_GEMS="bcrypt,builder,commonmarker,faker,flamegraph,htmlentities"
 LAZY_GEMS="$LAZY_GEMS,memory_profiler,nokogiri,oauth,parslet,pdf-reader"
-LAZY_GEMS="$LAZY_GEMS,rotp,rqrcode,ruby-vips,sentry-rails"
-LAZY_GEMS="$LAZY_GEMS,sitemap_generator,stackprof,svg-graph"
+LAZY_GEMS="$LAZY_GEMS,rack-mini-profiler,rotp,rqrcode,ruby-vips"
+LAZY_GEMS="$LAZY_GEMS,sentry-rails,sitemap_generator,stackprof,svg-graph"
 
 bundle exec exe/rails-dependency-pruner plan \
   --app "$APP" \
   --coverage "$COVERAGE" \
-  --profile tmp/lobsters-ruby405-rails813-lazy-more-keep-storage-profile.json \
+  --profile tmp/lobsters-ruby405-rails813-lazy-more-profiler-request-profile.json \
   --disable-eager-load \
   --skip-railties rails/test_unit/railtie \
   --lazy-gems "$LAZY_GEMS"
@@ -451,28 +451,45 @@ bundle exec exe/rails-dependency-pruner plan \
 
 | variant | RSS | Rails loaded features | GC live slots |
 | --- | ---: | ---: | ---: |
-| baseline | `226112 KB` (`220.8 MiB`) | `1073` | `541217` |
-| profile boot prune | `133952 KB` (`130.8 MiB`) | `640` | `245860` |
-| profile delta | `-92160 KB` (`-90.0 MiB`, `-40.8%`) | `-433` | `-295357` |
+| baseline | `230368 KB` (`224.9 MiB`) | `1073` | `541232` |
+| profile boot prune | `134720 KB` (`131.6 MiB`) | `640` | `243372` |
+| profile delta | `-95648 KB` (`-93.4 MiB`, `-41.5%`) | `-433` | `-297860` |
 
 Those lazy gems are not removed. Bundler just does not require them during boot.
 The profile can load top-level constants such as `BCrypt`, `Faker`, `OAuth`,
 `PDF`, `ROTP`, `RQRCode`, `Sentry`, `SitemapGenerator`, and `Vips` on first use,
 and app files that already call `require` still load their gems normally.
+`rack-mini-profiler` is different: this profile installs a no-op
+`Rack::MiniProfiler` shim, so moderator profiling is disabled for this profile.
 
 The `sentry-rails` win is conditional. This local boot has no Telebugs
 credentials, so the initializer never references `Sentry`. With Telebugs
 credentials present, `Sentry.init` will load the gem during boot and the RSS win
 will be closer to the keep-storage profile without Sentry deferral.
 
-Production approval for this 40.8% profile is much narrower than the earlier
-Active Storage skip. There are no static blockers and no unsupported lazy gems,
-but the current Lobsters coverage manifest still does not prove request
-workloads:
+The same approved profile was measured after a small Rack request smoke:
 
-```text
-production verify missing coverage workload for extreme boot: disable_eager_load requires requests
+```bash
+bundle exec exe/rails-dependency-pruner measure \
+  --app tmp/lobsters-ruby405-rails813 \
+  --profile tmp/lobsters-ruby405-rails813-lazy-more-profiler-request-profile.json \
+  --target requests \
+  --request-paths /privacy,/login,/404 \
+  --variants baseline,boot_prune \
+  --runs 3
 ```
+
+| variant | RSS | Rails loaded features | GC live slots |
+| --- | ---: | ---: | ---: |
+| baseline | `229168 KB` (`223.8 MiB`) | `1074` | `545150` |
+| profile boot prune | `151680 KB` (`148.1 MiB`) | `874` | `277187` |
+| profile delta | `-77488 KB` (`-75.7 MiB`, `-33.8%`) | `-200` | `-267963` |
+
+The request smoke hit `/privacy` and `/login` with `200`, and `/404` with
+`404`. Rebuilding the profile with that request coverage produces
+`production_allowed=true` with no verifier errors, but request autoloading
+narrows the RSS saving below 40%. More work is needed before claiming a 40%
+request-warmed web-process win.
 
 The more aggressive 48.8% lazy-gems profile skips Active Storage. That remains
 an experiment only. Lobsters has Action Mailbox source, and Action Mailbox stores

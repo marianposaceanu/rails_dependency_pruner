@@ -19,6 +19,9 @@ module RailsDependencyPruner
     LAZY_REQUIRE_LOADERS = {
       "action_mailbox/mail_ext" => :install_action_mailbox_mail_ext_lazy_loader!,
     }.freeze
+    LAZY_GEM_STUBS = {
+      "rack-mini-profiler" => :install_rack_mini_profiler_stub!,
+    }.freeze
     LAZY_GEM_CONSTANTS = {
       "bcrypt" => {
         "require" => "bcrypt",
@@ -74,7 +77,7 @@ module RailsDependencyPruner
       },
     }.freeze
     SUPPORTED_LAZY_GEMS = (
-      %w[commonmarker flamegraph memory_profiler parslet stackprof] + LAZY_GEM_CONSTANTS.keys
+      %w[commonmarker flamegraph memory_profiler parslet stackprof] + LAZY_GEM_CONSTANTS.keys + LAZY_GEM_STUBS.keys
     ).sort.freeze
     DisabledRequireError = Class.new(StandardError)
     UnsafeProfileError = Class.new(StandardError)
@@ -108,6 +111,7 @@ module RailsDependencyPruner
       @output_path = output_path
       install_shadow_hooks!
       install_bundler_require_filter!
+      install_lazy_gem_stubs!
       install_lazy_gem_constant_loader!
       at_exit { write! } if @output_path
       @installed = true
@@ -371,6 +375,13 @@ module RailsDependencyPruner
       public_send(loader) if loader
     end
 
+    def install_lazy_gem_stubs!
+      Array(@lazy_gems).each do |gem_name|
+        installer = LAZY_GEM_STUBS[gem_name]
+        public_send(installer) if installer
+      end
+    end
+
     def loading_lazy_require?(path)
       @loading_lazy_require_paths&.include?(path.to_s)
     end
@@ -441,6 +452,41 @@ module RailsDependencyPruner
       end
 
       @action_mailbox_mail_ext_lazy_loader_installed = true
+    end
+
+    def install_rack_mini_profiler_stub!
+      return if @rack_mini_profiler_stub_installed
+      return if defined?(::Rack::MiniProfiler)
+
+      ::Object.const_set(:Rack, Module.new) unless defined?(::Rack)
+      config_class = Class.new do
+        def method_missing(name, *)
+          return nil if name.to_s.end_with?("=")
+
+          nil
+        end
+
+        def respond_to_missing?(*)
+          true
+        end
+      end
+      stub = Module.new do
+        @config = config_class.new
+
+        class << self
+          attr_reader :config
+
+          def authorize_request
+            nil
+          end
+
+          def deauthorize_request
+            nil
+          end
+        end
+      end
+      ::Rack.const_set(:MiniProfiler, stub)
+      @rack_mini_profiler_stub_installed = true
     end
 
     def install_bundler_require_filter!

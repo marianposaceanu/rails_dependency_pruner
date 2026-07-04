@@ -2765,6 +2765,56 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_stubs_rack_mini_profiler
+    Dir.mktmpdir("rails_dependency_pruner_early_rack_mini_profiler_stub") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["rack-mini-profiler"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RUBYLIB" => ROOT.join("lib").to_s,
+        },
+        RUBY,
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+
+          Rack::MiniProfiler.config.position = "bottom-left"
+          Rack::MiniProfiler.authorize_request
+
+          puts JSON.generate(
+            "defined" => defined?(Rack::MiniProfiler),
+            "loaded" => $LOADED_FEATURES.any? { |feature| feature.include?("rack-mini-profiler") },
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "constant", payload.fetch("defined")
+      assert_equal false, payload.fetch("loaded")
+    end
+  end
+
   def test_early_boot_only_blocks_require_paths_from_pruned_frameworks
     Dir.mktmpdir("rails_dependency_pruner_early_framework_filter") do |dir|
       profile_path = File.join(dir, "profile.json")
@@ -3187,6 +3237,57 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       assert_equal ["action_mailbox/engine"], report.fetch("skip_railties")
       assert_equal "ok", report.dig("variants", "no_eager_load_skip_railties", "status")
+    end
+  end
+
+  def test_measure_requests_runs_rack_paths_before_snapshot
+    Dir.mktmpdir("rails_dependency_pruner_measure_requests") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails"
+        require "action_controller/railtie"
+        require "logger"
+
+        class HelloController < ActionController::Base
+          def index
+            render plain: "hello"
+          end
+        end
+
+        module MeasureRequestsApp
+          class Application < Rails::Application
+            config.root = #{app_root.dump}
+            config.secret_key_base = "x" * 64
+            config.logger = Logger.new(nil)
+            config.eager_load = false
+            config.hosts.clear
+            routes.append do
+              get "/hello" => "hello#index"
+            end
+          end
+        end
+      RUBY
+
+      report = RailsDependencyPruner::Measurement::Runner.new(
+        app_root: app_root,
+        variants: ["baseline"],
+        runs: 1,
+        target: "requests",
+        request_paths: ["/hello"],
+      ).run
+
+      assert_equal "requests", report.fetch("target")
+      assert_equal ["/hello"], report.fetch("request_paths")
+      assert_equal "ok", report.dig("variants", "baseline", "status")
+      assert_equal 200, report.dig("runs", "baseline", 0, "requests", 0, "status")
+      assert_equal "/hello", report.dig("runs", "baseline", 0, "requests", 0, "path")
+
+      markdown = RailsDependencyPruner::Measurement::Report.new(report).to_markdown
+      assert_includes markdown, "- Target: `requests`"
+      assert_includes markdown, "- Request paths: `/hello`"
     end
   end
 

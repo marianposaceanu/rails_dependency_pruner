@@ -34,6 +34,8 @@ module RailsDependencyPruner
           lines << "- Target: `#{target}`"
           skip_railties = Array(payload["skip_railties"])
           lines << "- Skip railties: #{list(skip_railties)}" unless skip_railties.empty?
+          request_paths = Array(payload["request_paths"])
+          lines << "- Request paths: #{list(request_paths)}" unless request_paths.empty?
           lines << ""
         end
 
