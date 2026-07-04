@@ -440,6 +440,29 @@ Storage plus Rails test-unit stays below the 40% target:
 | profile boot prune | `148496 KB` (`145.0 MiB`) | `611` | `276894` |
 | profile delta | `-81856 KB` (`-79.9 MiB`, `-35.5%`) | `-462` | `-264323` |
 
+The profile that keeps Action Mailbox and defers task/profiling/parser gems does
+clear the target:
+
+```bash
+bundle exec exe/rails-dependency-pruner plan \
+  --app "$APP" \
+  --coverage "$COVERAGE" \
+  --profile tmp/lobsters-ruby405-rails813-lazy-gems-profile.json \
+  --disable-eager-load \
+  --skip-railties active_storage/engine,rails/test_unit/railtie \
+  --lazy-gems flamegraph,memory_profiler,stackprof,commonmarker,parslet,pdf-reader,faker,ruby-vips
+```
+
+| variant | RSS | Rails loaded features | GC live slots |
+| --- | ---: | ---: | ---: |
+| baseline | `228672 KB` (`223.3 MiB`) | `1073` | `541225` |
+| profile boot prune | `116992 KB` (`114.3 MiB`) | `611` | `251577` |
+| profile delta | `-111680 KB` (`-109.1 MiB`, `-48.8%`) | `-462` | `-289648` |
+
+Those lazy gems are not removed. Bundler just does not require them during boot.
+The profile can load `Faker`, `PDF`, and `Vips` on first constant use, and app
+files that already call `require` still load their gems normally.
+
 Production approval rejects the full 41.7% profile. The current Lobsters
 coverage manifest only proves boot, routes, and assets precompile. It does not
 prove requests, attachments, or inbound email. The verifier also finds real
@@ -457,6 +480,14 @@ production verify found extreme boot static evidence: action_mailbox/engine:path
 The ActiveStorage-only subset has no static blockers after config namespace
 stubs, but it still needs request and attachment workload evidence before
 production approval.
+
+The 48.8% lazy-gems profile keeps Action Mailbox and has no static blockers.
+Approval still requires request and attachment workload evidence:
+
+```text
+production verify missing coverage workload for extreme boot: active_storage/engine requires attachments
+production verify missing coverage workload for extreme boot: disable_eager_load requires requests
+```
 
 Local outputs are ignored under `tmp/`.
 

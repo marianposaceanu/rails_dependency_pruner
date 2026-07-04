@@ -127,10 +127,14 @@ module RailsDependencyPruner
       extreme_boot ||= {}
       disable_eager_load = extreme_boot[:disable_eager_load] || extreme_boot["disable_eager_load"]
       skip_railties = Array(extreme_boot[:skip_railties] || extreme_boot["skip_railties"]).map(&:to_s).reject(&:empty?).uniq.sort
+      lazy_require_paths = Array(extreme_boot[:lazy_require_paths] || extreme_boot["lazy_require_paths"]).map(&:to_s).reject(&:empty?).uniq.sort
+      lazy_gems = Array(extreme_boot[:lazy_gems] || extreme_boot["lazy_gems"]).map(&:to_s).reject(&:empty?).uniq.sort
 
       {
         "disable_eager_load" => disable_eager_load == true,
         "skip_railties" => skip_railties,
+        "lazy_require_paths" => lazy_require_paths,
+        "lazy_gems" => lazy_gems,
         "config_namespace_stubs" => skip_railties.filter_map { |railtie| EXTREME_CONFIG_NAMESPACES[railtie] }.uniq.sort,
       }
     end

@@ -909,6 +909,168 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_missing_lazy_require_coverage
+    Dir.mktmpdir("rails_dependency_pruner_lazy_require_coverage_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-requires",
+        "action_mailbox/mail_ext",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: action_mailbox/mail_ext requires inbound_email"
+      assert_equal ["action_mailbox/mail_ext"], payload.dig("production_risks", "extreme_boot_workload_gaps").map { |gap| gap.fetch("framework") }
+    end
+  end
+
+  def test_verify_production_rejects_unsupported_lazy_require_path
+    Dir.mktmpdir("rails_dependency_pruner_lazy_require_support_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-requires",
+        "rails/unknown",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify found unsupported lazy require path: rails/unknown"
+      assert_equal ["rails/unknown"], payload.dig("production_risks", "unsupported_lazy_require_paths")
+    end
+  end
+
+  def test_verify_production_rejects_unsupported_lazy_gem
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_support_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "unknown-gem",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify found unsupported lazy gem: unknown-gem"
+      assert_equal ["unknown-gem"], payload.dig("production_risks", "unsupported_lazy_gems")
+    end
+  end
+
   def test_verify_production_rejects_extreme_boot_static_mailbox_usage
     Dir.mktmpdir("rails_dependency_pruner_extreme_static_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -1534,6 +1696,10 @@ class RailsDependencyPrunerTest < Minitest::Test
         "--disable-eager-load",
         "--skip-railties",
         "action_mailbox/engine,active_storage/engine",
+        "--lazy-requires",
+        "action_mailbox/mail_ext",
+        "--lazy-gems",
+        "faker,pdf-reader,ruby-vips",
         "--json",
         chdir: ROOT.to_s,
       )
@@ -1543,6 +1709,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal true, payload.dig("extreme_boot", "disable_eager_load")
       assert_equal %w[action_mailbox/engine active_storage/engine], payload.dig("extreme_boot", "skip_railties")
+      assert_equal ["action_mailbox/mail_ext"], payload.dig("extreme_boot", "lazy_require_paths")
+      assert_equal %w[faker pdf-reader ruby-vips], payload.dig("extreme_boot", "lazy_gems")
       assert_equal %w[action_mailbox active_storage], payload.dig("extreme_boot", "config_namespace_stubs")
 
       profile = JSON.parse(File.read(profile_path))
@@ -2330,6 +2498,131 @@ class RailsDependencyPrunerTest < Minitest::Test
       early_payload = JSON.parse(File.read(output_path))
       assert_equal "skipped", early_payload.dig("events", 0, "action")
       assert_equal "action_mailbox/engine", early_payload.dig("events", 0, "matched_path")
+    end
+  end
+
+  def test_early_boot_lazy_loads_action_mailbox_mail_ext
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_mail_ext") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => ["action_mailbox/mail_ext"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+          require "mail"
+          require "action_mailbox"
+
+          before = $LOADED_FEATURES.grep(/action_mailbox\\/mail_ext/)
+          message = Mail.from_source("To: replies@example.com\\n\\nhello")
+          recipients = message.recipients
+          after = $LOADED_FEATURES.grep(/action_mailbox\\/mail_ext/)
+
+          puts JSON.generate(
+            "before_count" => before.length,
+            "after_count" => after.length,
+            "recipients" => recipients,
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal 0, payload.fetch("before_count")
+      assert_operator payload.fetch("after_count"), :>, 0
+      assert_equal ["replies@example.com"], payload.fetch("recipients")
+
+      early_payload = JSON.parse(File.read(output_path))
+      assert early_payload.fetch("events").any? { |event| event["action"] == "deferred" && event["matched_path"] == "action_mailbox/mail_ext" }
+      assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy" && event["matched_path"] == "action_mailbox/mail_ext" }
+    end
+  end
+
+  def test_early_boot_lazy_loads_gem_constant
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_gem") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      fake_gem_path = File.join(dir, "faker.rb")
+      File.write(fake_gem_path, <<~RUBY)
+        module Faker
+          module Name
+            def self.name
+              "Deferred Gem"
+            end
+          end
+        end
+      RUBY
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["faker"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+
+          before = Object.const_defined?(:Faker, false)
+          name = Faker::Name.name
+          after = Object.const_defined?(:Faker, false)
+
+          puts JSON.generate(
+            "before" => before,
+            "after" => after,
+            "name" => name,
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("before")
+      assert_equal true, payload.fetch("after")
+      assert_equal "Deferred Gem", payload.fetch("name")
+
+      early_payload = JSON.parse(File.read(output_path))
+      assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == "faker" }
     end
   end
 

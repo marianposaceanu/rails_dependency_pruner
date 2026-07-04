@@ -102,6 +102,8 @@ module RailsDependencyPruner
           mode: "guard",
           disable_eager_load: false,
           skip_railties: [],
+          lazy_require_paths: [],
+          lazy_gems: [],
           write_path: nil,
           json: false,
         }
@@ -117,6 +119,8 @@ module RailsDependencyPruner
           parser.on("--mode MODE", "Profile mode") { |mode| options[:mode] = mode }
           parser.on("--disable-eager-load", "Add an extreme boot setting to disable eager load") { options[:disable_eager_load] = true }
           parser.on("--skip-railties PATHS", "Comma-separated railties to skip in extreme boot mode") { |paths| options[:skip_railties] = split_csv(paths) }
+          parser.on("--lazy-requires PATHS", "Comma-separated require paths to defer in extreme boot mode") { |paths| options[:lazy_require_paths] = split_csv(paths) }
+          parser.on("--lazy-gems NAMES", "Comma-separated gems to defer during Bundler.require") { |names| options[:lazy_gems] = split_csv(names) }
           parser.on("--write PATH", "Write deterministic profile") { |path| options[:write_path] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
@@ -178,6 +182,8 @@ module RailsDependencyPruner
           patch_path: nil,
           disable_eager_load: false,
           skip_railties: [],
+          lazy_require_paths: [],
+          lazy_gems: [],
           json: false,
         }
 
@@ -194,6 +200,8 @@ module RailsDependencyPruner
           parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
           parser.on("--disable-eager-load", "Add an extreme boot setting to disable eager load") { options[:disable_eager_load] = true }
           parser.on("--skip-railties PATHS", "Comma-separated railties to skip in extreme boot mode") { |paths| options[:skip_railties] = split_csv(paths) }
+          parser.on("--lazy-requires PATHS", "Comma-separated require paths to defer in extreme boot mode") { |paths| options[:lazy_require_paths] = split_csv(paths) }
+          parser.on("--lazy-gems NAMES", "Comma-separated gems to defer during Bundler.require") { |names| options[:lazy_gems] = split_csv(names) }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
             puts parser

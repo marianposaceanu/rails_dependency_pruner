@@ -59,6 +59,8 @@ module RailsDependencyPruner
 
           lines << "- Disable eager load: `#{extreme_boot["disable_eager_load"] == true}`"
           lines << "- Skip railties: #{list(extreme_boot["skip_railties"])}"
+          lines << "- Lazy require paths: #{list(extreme_boot["lazy_require_paths"])}"
+          lines << "- Lazy gems: #{list(extreme_boot["lazy_gems"])}"
           lines << "- Config namespace stubs: #{list(extreme_boot["config_namespace_stubs"])}"
         end
 

@@ -18,11 +18,25 @@ module RailsDependencyPruner
     }.freeze
     EXTREME_BOOT_WORKLOAD_REQUIREMENTS = {
       "action_mailbox/engine" => %w[inbound_email routes],
+      "action_mailbox/mail_ext" => %w[inbound_email],
       "action_mailer/railtie" => %w[mailers],
       "active_job/railtie" => %w[jobs],
       "active_storage/engine" => %w[attachments routes],
       "disable_eager_load" => %w[requests],
     }.freeze
+    SUPPORTED_LAZY_REQUIRE_PATHS = %w[
+      action_mailbox/mail_ext
+    ].freeze
+    SUPPORTED_LAZY_GEMS = %w[
+      commonmarker
+      faker
+      flamegraph
+      memory_profiler
+      parslet
+      pdf-reader
+      ruby-vips
+      stackprof
+    ].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {
         "paths" => %w[app/mailboxes],
@@ -88,6 +102,12 @@ module RailsDependencyPruner
         extreme_boot_static_matches.each do |match|
           errors << "production verify found extreme boot static evidence: #{format_extreme_boot_static_match(match)}"
         end
+        unsupported_lazy_require_paths.each do |path|
+          errors << "production verify found unsupported lazy require path: #{path}"
+        end
+        unsupported_lazy_gems.each do |name|
+          errors << "production verify found unsupported lazy gem: #{name}"
+        end
         disabled_framework_runtime_matches.each do |match|
           errors << "production verify found disabled framework runtime evidence: #{format_runtime_framework_match(match)}"
         end
@@ -105,6 +125,8 @@ module RailsDependencyPruner
           "coverage_workload_gaps" => coverage_workload_gaps,
           "extreme_boot_workload_gaps" => extreme_boot_workload_gaps,
           "extreme_boot_static_matches" => extreme_boot_static_matches,
+          "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
+          "unsupported_lazy_gems" => unsupported_lazy_gems,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
         },
         "profile" => {
@@ -197,9 +219,25 @@ module RailsDependencyPruner
             required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(railtie, [])
             gaps << workload_gap(railtie, required_workloads)
           end
+          Array(extreme_boot["lazy_require_paths"]).each do |path|
+            required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(path, [])
+            gaps << workload_gap(path, required_workloads)
+          end
 
           gaps.compact.sort_by { |gap| gap.fetch("framework") }
         end
+      end
+
+      def unsupported_lazy_require_paths
+        @unsupported_lazy_require_paths ||= Array(extreme_boot["lazy_require_paths"]).map(&:to_s).reject do |path|
+          SUPPORTED_LAZY_REQUIRE_PATHS.include?(path)
+        end.sort
+      end
+
+      def unsupported_lazy_gems
+        @unsupported_lazy_gems ||= Array(extreme_boot["lazy_gems"]).map(&:to_s).reject do |name|
+          SUPPORTED_LAZY_GEMS.include?(name)
+        end.sort
       end
 
       def extreme_boot_static_matches

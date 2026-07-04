@@ -16,6 +16,26 @@ module RailsDependencyPruner
       "active_job/railtie" => "active_job",
       "active_storage/engine" => "active_storage",
     }.freeze
+    LAZY_REQUIRE_LOADERS = {
+      "action_mailbox/mail_ext" => :install_action_mailbox_mail_ext_lazy_loader!,
+    }.freeze
+    LAZY_GEM_CONSTANTS = {
+      "faker" => {
+        "require" => "faker",
+        "constants" => %w[Faker],
+      },
+      "pdf-reader" => {
+        "require" => "pdf-reader",
+        "constants" => %w[PDF],
+      },
+      "ruby-vips" => {
+        "require" => "vips",
+        "constants" => %w[Vips],
+      },
+    }.freeze
+    SUPPORTED_LAZY_GEMS = (
+      %w[commonmarker flamegraph memory_profiler parslet stackprof] + LAZY_GEM_CONSTANTS.keys
+    ).sort.freeze
     DisabledRequireError = Class.new(StandardError)
     UnsafeProfileError = Class.new(StandardError)
 
@@ -37,16 +57,40 @@ module RailsDependencyPruner
 
       @disabled_require_paths = disabled_require_paths(payload)
       @skipped_require_paths = skipped_require_paths(payload)
+      @lazy_require_paths = lazy_require_paths(payload)
+      @lazy_gems = lazy_gems(payload)
+      @loading_lazy_require_paths = Set.new
+      @loaded_lazy_require_paths = Set.new
+      @loaded_lazy_gems = Set.new
       @disable_eager_load = payload.dig("extreme_boot", "disable_eager_load") == true
       @config_namespace_stubs = config_namespace_stubs(payload)
       @events = []
       @output_path = output_path
       install_shadow_hooks!
+      install_bundler_require_filter!
+      install_lazy_gem_constant_loader!
       at_exit { write! } if @output_path
       @installed = true
     end
 
     def skip_require(path, caller_location, operation: "require")
+      lazy_path = matched_lazy_path(path, caller_location: caller_location)
+      if lazy_path && !loading_lazy_require?(lazy_path)
+        event = {
+          "path" => path.to_s,
+          "matched_path" => lazy_path,
+          "operation" => operation,
+          "caller_path" => caller_location&.path,
+          "caller_line" => caller_location&.lineno,
+          "caller_label" => caller_location&.label,
+          "mode" => @mode,
+          "action" => blocking? ? "deferred" : "would_defer",
+        }.compact
+        @events << event
+        install_lazy_require_loader!(lazy_path) if blocking?
+        return blocking?
+      end
+
       matched_path = matched_skipped_path(path, caller_location: caller_location)
       return false unless matched_path
 
@@ -89,6 +133,10 @@ module RailsDependencyPruner
 
     def matched_skipped_path(path, caller_location: nil)
       matched_path(path, @skipped_require_paths, caller_location: caller_location)
+    end
+
+    def matched_lazy_path(path, caller_location: nil)
+      matched_path(path, @lazy_require_paths, caller_location: caller_location)
     end
 
     def matched_disabled_path(path, caller_location: nil)
@@ -138,6 +186,20 @@ module RailsDependencyPruner
       Array(payload.dig("extreme_boot", "skip_railties")).flat_map do |path|
         normalized = normalize(path)
         [normalized, normalized.delete_suffix(".rb")]
+      end.to_set
+    end
+
+    def lazy_require_paths(payload)
+      Array(payload.dig("extreme_boot", "lazy_require_paths")).filter_map do |path|
+        normalized = normalize(path).delete_suffix(".rb")
+        normalized if LAZY_REQUIRE_LOADERS.key?(normalized)
+      end.to_set
+    end
+
+    def lazy_gems(payload)
+      Array(payload.dig("extreme_boot", "lazy_gems")).filter_map do |name|
+        name = name.to_s
+        name if SUPPORTED_LAZY_GEMS.include?(name)
       end.to_set
     end
 
@@ -219,6 +281,8 @@ module RailsDependencyPruner
     end
 
     def after_require(path)
+      install_action_mailbox_mail_ext_lazy_loader! if %w[action_mailbox mail].include?(path.to_s)
+      install_bundler_require_filter! if %w[bundler bundler/setup].include?(path.to_s)
       return unless path.to_s == "rails"
 
       install_rails_extreme_hooks!
@@ -260,6 +324,153 @@ module RailsDependencyPruner
           end
         end
       end
+    end
+
+    def install_lazy_require_loader!(path)
+      loader = LAZY_REQUIRE_LOADERS[path.to_s]
+      public_send(loader) if loader
+    end
+
+    def loading_lazy_require?(path)
+      @loading_lazy_require_paths&.include?(path.to_s)
+    end
+
+    def load_lazy_require!(path)
+      normalized = normalize(path).delete_suffix(".rb")
+      return false if @loaded_lazy_require_paths&.include?(normalized)
+
+      @loading_lazy_require_paths << normalized
+      require normalized
+      @loaded_lazy_require_paths << normalized
+      @events << {
+        "path" => normalized,
+        "matched_path" => normalized,
+        "operation" => "require",
+        "mode" => @mode,
+        "action" => "loaded_lazy",
+      }
+      true
+    ensure
+      @loading_lazy_require_paths&.delete(normalized)
+    end
+
+    def install_action_mailbox_mail_ext_lazy_loader!
+      return if @action_mailbox_mail_ext_lazy_loader_installed
+      return unless @lazy_require_paths&.include?("action_mailbox/mail_ext")
+      return unless defined?(::Mail)
+
+      require_path = "action_mailbox/mail_ext"
+      singleton_loader = Module.new do
+        define_method(:from_source) do |*args, **kwargs, &block|
+          RailsDependencyPruner::EarlyBoot.load_lazy_require!(require_path)
+          super(*args, **kwargs, &block)
+        end
+      end
+      ::Mail.singleton_class.prepend(singleton_loader)
+
+      if defined?(::Mail::Message)
+        message_loader = Module.new do
+          %i[
+            bcc_addresses
+            cc_addresses
+            from_address
+            recipients
+            recipients_addresses
+            reply_to_address
+            to_addresses
+            x_forwarded_to_addresses
+            x_original_to_addresses
+          ].each do |method_name|
+            define_method(method_name) do |*args, **kwargs, &block|
+              RailsDependencyPruner::EarlyBoot.load_lazy_require!(require_path)
+              super(*args, **kwargs, &block)
+            end
+          end
+        end
+        ::Mail::Message.prepend(message_loader)
+      end
+
+      if defined?(::Mail::Address)
+        address_loader = Module.new do
+          define_method(:wrap) do |*args, **kwargs, &block|
+            RailsDependencyPruner::EarlyBoot.load_lazy_require!(require_path)
+            super(*args, **kwargs, &block)
+          end
+        end
+        ::Mail::Address.singleton_class.prepend(address_loader)
+      end
+
+      @action_mailbox_mail_ext_lazy_loader_installed = true
+    end
+
+    def install_bundler_require_filter!
+      return if @bundler_require_filter_installed
+      return if @lazy_gems.nil? || @lazy_gems.empty?
+      return unless defined?(::Bundler::Runtime)
+
+      filter = Module.new do
+        def require(*groups)
+          RailsDependencyPruner::EarlyBoot.filter_bundler_require(@definition) do
+            super(*groups)
+          end
+        end
+      end
+      ::Bundler::Runtime.prepend(filter)
+      @bundler_require_filter_installed = true
+    end
+
+    def filter_bundler_require(definition)
+      return yield unless blocking?
+      return yield if @lazy_gems.nil? || @lazy_gems.empty?
+
+      original_dependencies = definition.dependencies
+      lazy_gems = @lazy_gems
+      definition.define_singleton_method(:dependencies) do
+        original_dependencies.reject { |dependency| lazy_gems.include?(dependency.name) }
+      end
+      yield
+    ensure
+      if original_dependencies
+        definition.define_singleton_method(:dependencies) { original_dependencies }
+      end
+    end
+
+    def install_lazy_gem_constant_loader!
+      return if @lazy_gem_constant_loader_installed
+      return if @lazy_gems.nil? || @lazy_gems.empty?
+
+      loader = Module.new do
+        def const_missing(name)
+          if RailsDependencyPruner::EarlyBoot.load_lazy_gem_for_constant(name)
+            return const_get(name) if const_defined?(name, false)
+            return Object.const_get(name) if Object.const_defined?(name, false)
+          end
+
+          super(name)
+        end
+      end
+      ::Module.prepend(loader)
+      @lazy_gem_constant_loader_installed = true
+    end
+
+    def load_lazy_gem_for_constant(name)
+      gem_name, config = LAZY_GEM_CONSTANTS.find do |candidate, candidate_config|
+        @lazy_gems&.include?(candidate) && Array(candidate_config["constants"]).include?(name.to_s)
+      end
+      return false unless gem_name
+      return true if @loaded_lazy_gems.include?(gem_name)
+
+      require config.fetch("require")
+      @loaded_lazy_gems << gem_name
+      @events << {
+        "path" => config.fetch("require"),
+        "matched_path" => gem_name,
+        "operation" => "require",
+        "mode" => @mode,
+        "action" => "loaded_lazy_gem",
+        "constant" => name.to_s,
+      }
+      true
     end
 
     def install_no_eager_load_railtie!

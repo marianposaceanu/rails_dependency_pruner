@@ -664,6 +664,8 @@ module RailsDependencyPruner
         {
           disable_eager_load: options.fetch(:disable_eager_load, false),
           skip_railties: options.fetch(:skip_railties, []),
+          lazy_require_paths: options.fetch(:lazy_require_paths, []),
+          lazy_gems: options.fetch(:lazy_gems, []),
         }
       end
   end
