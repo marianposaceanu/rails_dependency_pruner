@@ -7,6 +7,7 @@ require "prism"
 
 require_relative "constant_resolver"
 require_relative "feature_catalog"
+require_relative "static/dynamic_constant_visitor"
 require_relative "static/rails_dsl_visitor"
 require_relative "source_visitor"
 
@@ -14,7 +15,7 @@ module RailsDependencyPruner
   class AppUsage
     DEFAULT_SCAN_ROOTS = %w[app config lib].freeze
 
-    attr_reader :app_root, :index, :scan_roots, :references, :feature_matches, :parse_errors
+    attr_reader :app_root, :index, :scan_roots, :references, :feature_matches, :dynamic_matches, :parse_errors
 
     def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default)
       @app_root = Pathname.new(app_root).expand_path
@@ -23,6 +24,7 @@ module RailsDependencyPruner
       @feature_catalog = feature_catalog
       @references = []
       @feature_matches = []
+      @dynamic_matches = []
       @parse_errors = []
     end
 
@@ -47,6 +49,11 @@ module RailsDependencyPruner
         result.value.accept(dsl_visitor)
         references.concat(dsl_visitor.references)
         feature_matches.concat(dsl_visitor.matches)
+
+        dynamic_visitor = Static::DynamicConstantVisitor.new(relative_path: relative(path))
+        result.value.accept(dynamic_visitor)
+        references.concat(dynamic_visitor.references)
+        dynamic_matches.concat(dynamic_visitor.matches)
       end
 
       self
@@ -72,6 +79,10 @@ module RailsDependencyPruner
       rails_references.map { |reference| reference.fetch(:constant) }.to_set
     end
 
+    def sorted_dynamic_matches
+      dynamic_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("kind"), match["constant"].to_s] }
+    end
+
     def to_h
       {
         app_root: app_root.to_s,
@@ -82,6 +93,7 @@ module RailsDependencyPruner
         direct_rails_constants: direct_rails_constants.to_a.sort,
         references: rails_references,
         feature_matches: feature_matches.sort_by { |match| [match.fetch("path"), match.fetch("line"), match.fetch("feature")] },
+        dynamic_matches: sorted_dynamic_matches,
       }
     end
 

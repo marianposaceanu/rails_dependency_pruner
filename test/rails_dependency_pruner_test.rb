@@ -204,6 +204,57 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_dynamic_constant_patterns_keep_exact_literal_constants
+    Dir.mktmpdir("rails_dependency_pruner_dynamic_constants") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(
+        File.join(app_root, "app/models/dynamic_rails_use.rb"),
+        <<~RUBY,
+          class DynamicRailsUse
+            def exact
+              "ActiveRecord::Relation".constantize
+              "ActionController::UnusedControllerFeature".safe_constantize
+              Object.const_get("ActiveRecord::UnusedRecordFeature")
+              Object.const_defined?(:ActionController)
+              ActiveSupport.const_get(:Dependencies)
+            end
+
+            def risky(name)
+              name.constantize
+              Kernel.const_get(name)
+            end
+          end
+        RUBY
+      )
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actionpack activerecord activesupport],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+
+      assert_includes usage.direct_rails_constants, "ActiveRecord::Relation"
+      assert_includes usage.direct_rails_constants, "ActiveRecord::UnusedRecordFeature"
+      assert_includes usage.direct_rails_constants, "ActionController::UnusedControllerFeature"
+      assert_includes usage.direct_rails_constants, "ActiveSupport::Dependencies"
+
+      refute_includes planner.unused_constants, "ActiveRecord::Relation"
+      refute_includes planner.unused_constants, "ActiveRecord::UnusedRecordFeature"
+      refute_includes planner.unused_constants, "ActionController::UnusedControllerFeature"
+
+      exact = usage.dynamic_matches.find { |match| match["constant"] == "ActiveRecord::Relation" }
+      assert_equal "constantize", exact.fetch("kind")
+      assert_equal 1.0, exact.fetch("confidence")
+      assert_equal false, exact.fetch("dynamic")
+
+      risky = usage.dynamic_matches.select { |match| match["dynamic"] }
+      assert risky.any? { |match| match.fetch("kind") == "constantize" && match.fetch("confidence") == 0.2 }
+      assert risky.any? { |match| match.fetch("kind") == "const_get" && match.fetch("confidence") == 0.3 }
+    end
+  end
+
   def test_cli_outputs_json_and_writes_shim
     Dir.mktmpdir("rails_dependency_pruner") do |dir|
       shim_path = File.join(dir, "shim.rb")

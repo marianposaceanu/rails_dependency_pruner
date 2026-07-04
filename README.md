@@ -227,6 +227,11 @@ Rails DSL usage is treated as framework evidence. The catalog in
 `has_one_attached`, `has_rich_text`, `queue_as`, `mail`, and `stream_from` to
 framework constants that should stay reachable.
 
+Literal dynamic constant usage is also kept. Calls such as
+`"ActionController::Base".constantize` and
+`Object.const_get("ActiveRecord::Base")` become static keep evidence. Variable
+constantization is reported in `dynamic_matches` as lower-confidence risk.
+
 ## lobsters run
 
 Against the local Rails `8.1.3` gems and
