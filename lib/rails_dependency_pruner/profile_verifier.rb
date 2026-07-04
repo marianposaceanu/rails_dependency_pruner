@@ -472,10 +472,14 @@ module RailsDependencyPruner
 
           {
             "railtie" => railtie,
-            "kind" => match.key?("route_signature") ? "route" : "feature",
+            "kind" => match["evidence_kind"] == "route" ? "route" : "feature",
             "name" => match["feature"],
+            "pattern" => match["pattern"],
             "path" => match.fetch("path"),
             "line" => match.fetch("line"),
+            "catalog_railties" => Array(match["railties"]),
+            "coverage_required" => Array(match["coverage_required"]),
+            "negative_rules" => Array(match["negative_rules"]),
           }
         end
       end

@@ -1207,6 +1207,11 @@ class RailsDependencyPrunerTest < Minitest::Test
     Dir.mktmpdir("rails_dependency_pruner_extreme_coverage_verify") do |dir|
       app_root = File.join(dir, "app")
       FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
       coverage_path = write_coverage_manifest(app_root)
       profile_path = File.join(dir, "profile.json")
 
@@ -1256,6 +1261,14 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: disable_eager_load requires requests"
       assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: active_storage/engine requires attachments"
       assert_equal %w[active_storage/engine disable_eager_load], payload.dig("production_risks", "extreme_boot_workload_gaps").map { |gap| gap.fetch("framework") }.sort
+      static_match = payload.dig("production_risks", "extreme_boot_static_matches").find do |match|
+        match.fetch("railtie") == "active_storage/engine" && match.fetch("kind") == "feature"
+      end
+      assert_equal "active_storage", static_match.fetch("name")
+      assert_equal "has_one_attached", static_match.fetch("pattern")
+      assert_equal ["active_storage/engine"], static_match.fetch("catalog_railties")
+      assert_equal ["active_storage"], static_match.fetch("coverage_required")
+      assert static_match.fetch("negative_rules").any? { |rule| rule.fetch("evidence") == "has_one_attached" }
     end
   end
 

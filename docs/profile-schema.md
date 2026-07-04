@@ -49,6 +49,10 @@ Each transform entry must carry the production contract from the registry:
 Production verification rejects registered transform entries that are missing
 any contract field.
 
+When static evidence blocks an extreme-boot transform,
+`production_risks.extreme_boot_static_matches` includes the matched catalog
+pattern, owned railties, required coverage sections, and negative rules.
+
 ## fingerprints
 
 Production validation compares the current app against the profile. These
