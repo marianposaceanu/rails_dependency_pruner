@@ -52,6 +52,7 @@ module RailsDependencyPruner
       }
       migrated["expected_events"] ||= []
       migrated["unexpected_event_policy"] ||= "fail_boot"
+      migrated["lazy_constants"] ||= {}
       migrated
     end
   end

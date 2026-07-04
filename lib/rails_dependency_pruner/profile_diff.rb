@@ -27,6 +27,9 @@ module RailsDependencyPruner
       fingerprints
       transforms
       expected_events
+      unexpected_event_policy
+      lazy_constants
+      memory_policy
       safety
       summary
     ].freeze

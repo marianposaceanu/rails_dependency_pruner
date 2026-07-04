@@ -113,8 +113,10 @@ module RailsDependencyPruner
       @loading_lazy_require_paths = Set.new
       @loaded_lazy_require_paths = Set.new
       @loaded_lazy_gems = Set.new
+      @attempted_lazy_constants = Set.new
       @disable_eager_load = payload.dig("extreme_boot", "disable_eager_load") == true
       @config_namespace_stubs = config_namespace_stubs(payload)
+      @lazy_constant_policies = lazy_constant_policies(payload)
       @expected_events = expected_events(payload)
       @unexpected_event_policy = unexpected_event_policy(payload)
       @events = []
@@ -253,7 +255,7 @@ module RailsDependencyPruner
 
     def record_event(raw_event, enforce: true)
       event = raw_event.dup
-      event["phase"] ||= "boot"
+      event["phase"] ||= current_phase
       event["mode"] ||= @mode
       event["pid"] ||= Process.pid
       event["transform_id"] ||= transform_id_for_event(event)
@@ -319,6 +321,8 @@ module RailsDependencyPruner
         event["gem"] == "ruby-vips" ? "stub:active_storage_vips_analyzer" : "stub:#{event["gem"]}"
       when "loaded_lazy_gem"
         "lazy_gem:#{event["matched_path"]}" if event["matched_path"]
+      when "disallowed_lazy_gem_constant", "unapproved_lazy_gem_constant"
+        "lazy_gem:#{event["gem"]}" if event["gem"]
       when "blocked", "would_block"
         "disabled_require:#{path}" if path
       end
@@ -371,6 +375,62 @@ module RailsDependencyPruner
     def unexpected_event_policy(payload)
       policy = payload["unexpected_event_policy"].to_s
       UNEXPECTED_EVENT_POLICIES.include?(policy) ? policy : DEFAULT_UNEXPECTED_EVENT_POLICY
+    end
+
+    def lazy_constant_policies(payload)
+      explicit = payload["lazy_constants"] || payload.dig("extreme_boot", "lazy_constants")
+      return explicit_lazy_constant_policies(explicit) if explicit.is_a?(Hash)
+
+      legacy_lazy_constant_policies
+    end
+
+    def explicit_lazy_constant_policies(source)
+      source.each_with_object({}) do |(constant_name, config), policies|
+        constant_name = constant_name.to_s
+        next if constant_name.empty? || constant_name.include?("::")
+
+        config = config.is_a?(Hash) ? config : {}
+        gem_name = config["gem"].to_s
+        builtin = LAZY_GEM_CONSTANTS[gem_name] || {}
+        policies[constant_name] = {
+          "gem" => gem_name,
+          "require" => (config["require"] || builtin["require"]).to_s,
+          "allowed_phases" => Array(config["allowed_phases"]).map(&:to_s),
+          "disallowed_phases" => Array(config["disallowed_phases"]).map(&:to_s),
+          "approved" => @lazy_gems&.include?(gem_name) && !(config["require"] || builtin["require"]).to_s.empty?,
+        }
+      end
+    end
+
+    def legacy_lazy_constant_policies
+      Array(@lazy_gems).each_with_object({}) do |gem_name, policies|
+        config = LAZY_GEM_CONSTANTS[gem_name]
+        next unless config
+
+        Array(config["constants"]).each do |constant_name|
+          policies[constant_name.to_s] = {
+            "gem" => gem_name,
+            "require" => config.fetch("require"),
+            "allowed_phases" => [],
+            "disallowed_phases" => [],
+            "approved" => true,
+          }
+        end
+      end
+    end
+
+    def current_phase
+      phase = ENV["RAILS_DEPENDENCY_PRUNER_PHASE"].to_s
+      phase.empty? ? "boot" : phase
+    end
+
+    def phase_allowed?(policy, phase)
+      allowed_phases = Array(policy["allowed_phases"])
+      disallowed_phases = Array(policy["disallowed_phases"])
+      return false if disallowed_phases.include?(phase)
+      return true if allowed_phases.empty?
+
+      allowed_phases.include?(phase)
     end
 
     def config_namespace_stubs(payload)
@@ -669,11 +729,12 @@ module RailsDependencyPruner
 
     def install_lazy_gem_constant_loader!
       return if @lazy_gem_constant_loader_installed
-      return if @lazy_gems.nil? || @lazy_gems.empty?
+      return if (@lazy_gems.nil? || @lazy_gems.empty?) && (@lazy_constant_policies.nil? || @lazy_constant_policies.empty?)
 
       loader = Module.new do
         def const_missing(name)
-          if RailsDependencyPruner::EarlyBoot.load_lazy_gem_for_constant(name)
+          caller_location = caller_locations(1, 1).first
+          if RailsDependencyPruner::EarlyBoot.load_lazy_gem_for_constant(name, owner: self, caller_location: caller_location)
             return const_get(name) if const_defined?(name, false)
             return Object.const_get(name) if Object.const_defined?(name, false)
           end
@@ -685,24 +746,71 @@ module RailsDependencyPruner
       @lazy_gem_constant_loader_installed = true
     end
 
-    def load_lazy_gem_for_constant(name)
-      gem_name, config = LAZY_GEM_CONSTANTS.find do |candidate, candidate_config|
-        @lazy_gems&.include?(candidate) && Array(candidate_config["constants"]).include?(name.to_s)
-      end
-      return false unless gem_name
-      return true if @loaded_lazy_gems.include?(gem_name)
+    def load_lazy_gem_for_constant(name, owner: nil, caller_location: nil)
+      constant_name = name.to_s
+      policy = @lazy_constant_policies&.fetch(constant_name, nil)
+      return false unless policy
 
-      require config.fetch("require")
+      gem_name = policy.fetch("gem")
+      return true if @loaded_lazy_gems.include?(gem_name)
+      return false if @attempted_lazy_constants.include?(constant_name)
+
+      phase = current_phase
+      @attempted_lazy_constants << constant_name
+      unless policy["approved"]
+        record_event(lazy_constant_event(
+          action: "unapproved_lazy_gem_constant",
+          constant: constant_name,
+          owner: owner,
+          caller_location: caller_location,
+          policy: policy,
+          phase: phase,
+        ))
+        return false
+      end
+
+      unless phase_allowed?(policy, phase)
+        record_event(lazy_constant_event(
+          action: "disallowed_lazy_gem_constant",
+          constant: constant_name,
+          owner: owner,
+          caller_location: caller_location,
+          policy: policy,
+          phase: phase,
+        ))
+        return false if SAFETY_MODES.include?(@mode)
+      end
+
+      require policy.fetch("require")
       @loaded_lazy_gems << gem_name
-      record_event({
-        "path" => config.fetch("require"),
-        "matched_path" => gem_name,
+      record_event(lazy_constant_event(
+        action: "loaded_lazy_gem",
+        constant: constant_name,
+        owner: owner,
+        caller_location: caller_location,
+        policy: policy,
+        phase: phase,
+      ))
+      true
+    end
+
+    def lazy_constant_event(action:, constant:, owner:, caller_location:, policy:, phase:)
+      {
+        "path" => policy.fetch("require"),
+        "matched_path" => policy.fetch("gem"),
         "operation" => "require",
         "mode" => @mode,
-        "action" => "loaded_lazy_gem",
-        "constant" => name.to_s,
-      })
-      true
+        "phase" => phase,
+        "action" => action,
+        "constant" => constant,
+        "owner" => owner&.name || owner&.to_s,
+        "gem" => policy.fetch("gem"),
+        "allowed_phases" => Array(policy["allowed_phases"]),
+        "disallowed_phases" => Array(policy["disallowed_phases"]),
+        "caller_path" => caller_location&.path,
+        "caller_line" => caller_location&.lineno,
+        "caller_label" => caller_location&.label,
+      }.compact
     end
 
     def install_no_eager_load_railtie!

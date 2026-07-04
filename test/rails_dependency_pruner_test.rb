@@ -725,6 +725,7 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal "sha256:coverage", migrated.dig("fingerprints", "coverage_manifest_sha256")
     assert_equal [], migrated.fetch("expected_events")
     assert_equal "fail_boot", migrated.fetch("unexpected_event_policy")
+    assert_equal({}, migrated.fetch("lazy_constants"))
   end
 
   def test_profile_digest_preserves_legacy_v2_shape
@@ -820,6 +821,57 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       assert status.success?, stderr
       assert_includes stdout, "Profiles are equivalent"
+    end
+  end
+
+  def test_profile_diff_reports_lazy_constant_policy_changes
+    Dir.mktmpdir("rails_dependency_pruner_profile_diff_lazy_constants") do |dir|
+      old_profile = File.join(dir, "old.json")
+      new_profile = File.join(dir, "new.json")
+      File.write(old_profile, JSON.pretty_generate(
+        "schema_version" => 3,
+        "lazy_constants" => {
+          "Faker" => {
+            "gem" => "faker",
+            "allowed_phases" => ["boot"],
+          },
+        },
+        "pruning" => {
+          "disabled_constants" => [],
+          "disabled_require_paths" => [],
+        },
+      ))
+      File.write(new_profile, JSON.pretty_generate(
+        "schema_version" => 3,
+        "lazy_constants" => {
+          "Faker" => {
+            "gem" => "faker",
+            "allowed_phases" => ["manual_app_use"],
+          },
+        },
+        "pruning" => {
+          "disabled_constants" => [],
+          "disabled_require_paths" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "diff",
+        "--old",
+        old_profile,
+        "--new",
+        new_profile,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("changed")
+      assert payload.fetch("context_changes").any? { |change| change.fetch("key") == "lazy_constants" }
     end
   end
 
@@ -3322,7 +3374,254 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "Deferred Gem", payload.fetch("name")
 
       early_payload = JSON.parse(File.read(output_path))
-      assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == "faker" }
+      event = early_payload.fetch("events").find { |candidate| candidate["action"] == "loaded_lazy_gem" && candidate["matched_path"] == "faker" }
+      refute_nil event
+      assert_equal "Faker", event.fetch("constant")
+      assert_equal "-e", event.fetch("caller_path")
+      assert_operator event.fetch("caller_line"), :>, 0
+    end
+  end
+
+  def test_early_boot_lazy_constant_loader_ignores_unconfigured_constants
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_exact_constant") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "faker.rb"), "module Faker; end\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["faker"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+
+          begin
+            FakerTools
+          rescue NameError
+          end
+
+          puts JSON.generate(
+            "faker_defined" => Object.const_defined?(:Faker, false),
+            "faker_loaded" => $LOADED_FEATURES.any? { |feature| feature.end_with?("/faker.rb") },
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("faker_defined")
+      assert_equal false, payload.fetch("faker_loaded")
+
+      early_payload = JSON.parse(File.read(output_path))
+      assert_equal 0, early_payload.fetch("events_count")
+    end
+  end
+
+  def test_early_boot_canary_fails_lazy_constant_in_disallowed_phase
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_phase_violation") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "faker.rb"), "module Faker; end\n")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["faker"],
+          "config_namespace_stubs" => [],
+        },
+        "lazy_constants" => {
+          "Faker" => {
+            "gem" => "faker",
+            "allowed_phases" => ["manual_app_use"],
+          },
+        },
+        "expected_events" => [],
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          Faker
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "unexpected early boot event boot:disallowed_lazy_gem_constant:faker in canary mode"
+
+      early_payload = JSON.parse(File.read(output_path))
+      event = early_payload.fetch("events").first
+      assert_equal 1, early_payload.fetch("unexpected_events_count")
+      assert_equal "disallowed_lazy_gem_constant", event.fetch("action")
+      assert_equal "boot", event.fetch("phase")
+      assert_equal "Faker", event.fetch("constant")
+      assert_equal "faker", event.fetch("gem")
+      assert_equal ["manual_app_use"], event.fetch("allowed_phases")
+      assert_equal false, event.fetch("expected")
+    end
+  end
+
+  def test_early_boot_canary_fails_lazy_constant_for_unapproved_gem
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_unapproved_gem") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "faker.rb"), "module Faker; end\n")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+        "lazy_constants" => {
+          "Faker" => {
+            "gem" => "faker",
+            "allowed_phases" => ["boot"],
+          },
+        },
+        "expected_events" => [],
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          Faker
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "unexpected early boot event boot:unapproved_lazy_gem_constant:faker in canary mode"
+
+      early_payload = JSON.parse(File.read(output_path))
+      event = early_payload.fetch("events").first
+      assert_equal 1, early_payload.fetch("unexpected_events_count")
+      assert_equal "unapproved_lazy_gem_constant", event.fetch("action")
+      assert_equal "Faker", event.fetch("constant")
+      assert_equal "faker", event.fetch("gem")
+      assert_equal false, event.fetch("expected")
+    end
+  end
+
+  def test_early_boot_canary_allows_lazy_constant_in_declared_phase
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_phase_allowed") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "faker.rb"), <<~RUBY)
+        module Faker
+          def self.ok?
+            true
+          end
+        end
+      RUBY
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["faker"],
+          "config_namespace_stubs" => [],
+        },
+        "lazy_constants" => {
+          "Faker" => {
+            "gem" => "faker",
+            "allowed_phases" => ["manual_app_use"],
+          },
+        },
+        "expected_events" => [
+          {
+            "phase" => "manual_app_use",
+            "action" => "loaded_lazy_gem",
+            "gem" => "faker",
+          },
+        ],
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RAILS_DEPENDENCY_PRUNER_PHASE" => "manual_app_use",
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+          puts JSON.generate("ok" => Faker.ok?)
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal true, JSON.parse(stdout).fetch("ok")
+
+      early_payload = JSON.parse(File.read(output_path))
+      event = early_payload.fetch("events").first
+      assert_equal 1, early_payload.fetch("expected_events_count")
+      assert_equal 0, early_payload.fetch("unexpected_events_count")
+      assert_equal "manual_app_use", event.fetch("phase")
+      assert_equal "loaded_lazy_gem", event.fetch("action")
+      assert_equal true, event.fetch("expected")
     end
   end
 

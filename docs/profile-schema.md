@@ -11,6 +11,7 @@ readiness fields:
 - `transforms`: registered boot mutations
 - `expected_events`: events expected from registered transforms
 - `unexpected_event_policy`: how safety modes handle new runtime events
+- `lazy_constants`: optional phase policy for lazy top-level constants
 - `memory_policy`: optional RSS savings gates copied from the coverage manifest
 
 The profile id is stored in both `profile_id` and
@@ -85,6 +86,27 @@ Supported `unexpected_event_policy` values:
 - `report`: record unexpected events without raising
 - `fail_in_canary_report_in_production`: fail canary, and still fail closed for
   production boot events
+
+Lazy constant policies are keyed by exact top-level constant name:
+
+```json
+{
+  "lazy_constants": {
+    "Vips": {
+      "gem": "ruby-vips",
+      "require": "vips",
+      "allowed_phases": ["manual_app_use"],
+      "disallowed_phases": ["boot"]
+    }
+  }
+}
+```
+
+When the global `const_missing` hook sees a configured constant, it records the
+owner, caller path, caller line, phase, gem, and require path. A strict canary or
+production boot fails if the constant is reached outside the declared phase or
+if the policy points at a gem that is not approved in `extreme_boot.lazy_gems`.
+Unconfigured constants are ignored by the lazy loader.
 
 ## migration
 

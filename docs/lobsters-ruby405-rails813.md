@@ -136,14 +136,20 @@ Runtime event manifest smoke:
   `sha256:46725bec00671762321dc0c575e120261d1b5341baea7099d61ed317d30815dd`
 - corrected `canary`: `2` events, `2` expected, `0` unexpected
 - corrected `production`: `2` events, `2` expected, `0` unexpected
+- lazy-constant policy follow-up canary on the corrected profile: `2` events,
+  `2` expected, `0` unexpected
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
-  `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-production-smoke.json`
+  `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-production-smoke.json`,
+  `tmp/lobsters-ruby405-rails813-lazy-constant-policy-smoke.json`
 
 The RSS tables above are still from the measured full profile. Because
 `svg-graph` is now known to load during boot, do not treat that exact profile as
 a production candidate until the no-`svg-graph` variant has been remeasured.
+The runtime can now express this as a `lazy_constants` phase policy: a gem such
+as `svg-graph` should not be approved as lazy for Lobsters boot unless its
+configured constant phase matches the observed `lib/time_series.rb` boot use.
 
 ## what eats memory
 
