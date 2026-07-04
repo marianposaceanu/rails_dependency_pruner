@@ -221,6 +221,7 @@ module RailsDependencyPruner
           mode: "boot_prune",
           boot_plan: boot_plan,
           explanations: explanations,
+          extreme_boot: extreme_boot_options(options),
         )
         profile.write(options.fetch(:profile_path))
 
@@ -234,6 +235,7 @@ module RailsDependencyPruner
           "mode" => profile.payload.fetch("mode"),
           "patch_path" => options[:patch_path],
           "boot_plan" => boot_plan.to_h,
+          "extreme_boot" => profile.payload.fetch("extreme_boot"),
         }.compact
 
         if options.fetch(:json)
@@ -429,6 +431,7 @@ module RailsDependencyPruner
           mode: options.fetch(:mode),
           boot_plan: boot_plan,
           explanations: explanations,
+          extreme_boot: extreme_boot_options(options),
         )
         profile.write(options.fetch(:write_path))
 
@@ -534,6 +537,8 @@ module RailsDependencyPruner
             --patch PATH
             --coverage PATH
             --runtime-evidence PATHS
+            --disable-eager-load
+            --skip-railties PATHS
             --json
         HELP
       end
@@ -568,6 +573,8 @@ module RailsDependencyPruner
             --frameworks NAMES
             --runtime-evidence PATHS
             --coverage PATH
+            --disable-eager-load
+            --skip-railties PATHS
             --json
         HELP
       end
@@ -651,6 +658,13 @@ module RailsDependencyPruner
         return unless mode == "boot_prune"
 
         BootPrunePlanner.new(planner).plan
+      end
+
+      def extreme_boot_options(options)
+        {
+          disable_eager_load: options.fetch(:disable_eager_load, false),
+          skip_railties: options.fetch(:skip_railties, []),
+        }
       end
   end
 end

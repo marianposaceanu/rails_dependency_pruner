@@ -10,6 +10,12 @@ require_relative "canonical_json"
 module RailsDependencyPruner
   module EarlyBoot
     DEFAULT_PROFILE_PATH = "config/rails_dependency_pruner_profile.json"
+    CONFIG_NAMESPACES = {
+      "action_mailbox/engine" => "action_mailbox",
+      "action_mailer/railtie" => "action_mailer",
+      "active_job/railtie" => "active_job",
+      "active_storage/engine" => "active_storage",
+    }.freeze
     DisabledRequireError = Class.new(StandardError)
     UnsafeProfileError = Class.new(StandardError)
 
@@ -30,11 +36,32 @@ module RailsDependencyPruner
       validate_profile_safety!(payload)
 
       @disabled_require_paths = disabled_require_paths(payload)
+      @skipped_require_paths = skipped_require_paths(payload)
+      @disable_eager_load = payload.dig("extreme_boot", "disable_eager_load") == true
+      @config_namespace_stubs = config_namespace_stubs(payload)
       @events = []
       @output_path = output_path
       install_shadow_hooks!
       at_exit { write! } if @output_path
       @installed = true
+    end
+
+    def skip_require(path, caller_location, operation: "require")
+      matched_path = matched_skipped_path(path, caller_location: caller_location)
+      return false unless matched_path
+
+      event = {
+        "path" => path.to_s,
+        "matched_path" => matched_path,
+        "operation" => operation,
+        "caller_path" => caller_location&.path,
+        "caller_line" => caller_location&.lineno,
+        "caller_label" => caller_location&.label,
+        "mode" => @mode,
+        "action" => blocking? ? "skipped" : "would_skip",
+      }.compact
+      @events << event
+      blocking?
     end
 
     def shadow_require(path, caller_location, operation: "require")
@@ -60,13 +87,21 @@ module RailsDependencyPruner
       !!matched_disabled_path(path)
     end
 
+    def matched_skipped_path(path, caller_location: nil)
+      matched_path(path, @skipped_require_paths, caller_location: caller_location)
+    end
+
     def matched_disabled_path(path, caller_location: nil)
-      return unless @disabled_require_paths
+      matched_path(path, @disabled_require_paths, caller_location: caller_location)
+    end
+
+    def matched_path(path, paths, caller_location: nil)
+      return if paths.nil? || paths.empty?
 
       path_variants(path, caller_location: caller_location).each do |candidate|
-        return candidate if @disabled_require_paths.include?(candidate)
+        return candidate if paths.include?(candidate)
 
-        absolute_match = absolute_path_match(candidate)
+        absolute_match = absolute_path_match(candidate, paths)
         return absolute_match if absolute_match
       end
 
@@ -97,6 +132,20 @@ module RailsDependencyPruner
         normalized = normalize(path)
         [normalized, normalized.delete_suffix(".rb")]
       end.to_set
+    end
+
+    def skipped_require_paths(payload)
+      Array(payload.dig("extreme_boot", "skip_railties")).flat_map do |path|
+        normalized = normalize(path)
+        [normalized, normalized.delete_suffix(".rb")]
+      end.to_set
+    end
+
+    def config_namespace_stubs(payload)
+      explicit = Array(payload.dig("extreme_boot", "config_namespace_stubs"))
+      return explicit unless explicit.empty?
+
+      Array(payload.dig("extreme_boot", "skip_railties")).filter_map { |path| CONFIG_NAMESPACES[path] }.uniq.sort
     end
 
     def early_boot_require_paths(payload)
@@ -132,10 +181,10 @@ module RailsDependencyPruner
       variants.flat_map { |variant| [variant, variant.delete_suffix(".rb"), require_path_from_absolute(variant)] }.compact.uniq
     end
 
-    def absolute_path_match(path)
+    def absolute_path_match(path, paths = @disabled_require_paths)
       return unless absolute_path?(path)
 
-      @disabled_require_paths.find do |disabled_path|
+      paths.find do |disabled_path|
         path.end_with?("/#{disabled_path}") || path.end_with?("/#{disabled_path}.rb")
       end
     end
@@ -169,6 +218,63 @@ module RailsDependencyPruner
       raise UnsafeProfileError, "rails_dependency_pruner production mode requires matching profile_id"
     end
 
+    def after_require(path)
+      return unless path.to_s == "rails"
+
+      install_rails_extreme_hooks!
+    end
+
+    def install_rails_extreme_hooks!
+      return if @rails_extreme_hooks_installed
+      return unless blocking?
+      return unless defined?(::Rails)
+
+      install_config_namespace_stubs!
+      install_no_eager_load_railtie! if @disable_eager_load
+      @rails_extreme_hooks_installed = true
+    end
+
+    def install_config_namespace_stubs!
+      namespaces = @config_namespace_stubs
+      return if namespaces.empty?
+      return unless defined?(::Rails::Application::Configuration)
+
+      require "active_support/ordered_options"
+      unless const_defined?(:ConfigOptions, false)
+        const_set(:ConfigOptions, Class.new(::ActiveSupport::OrderedOptions) do
+          def method_missing(name, *args)
+            return super if name.to_s.end_with?("=")
+
+            self[name] ||= self.class.new
+          end
+        end)
+      end
+
+      [::Rails::Application::Configuration, ::Rails::Engine::Configuration].each do |klass|
+        namespaces.each do |namespace|
+          next if klass.method_defined?(namespace)
+
+          klass.define_method(namespace) do
+            @rails_dependency_pruner_config_namespaces ||= {}
+            @rails_dependency_pruner_config_namespaces[namespace] ||= RailsDependencyPruner::EarlyBoot::ConfigOptions.new
+          end
+        end
+      end
+    end
+
+    def install_no_eager_load_railtie!
+      return if @no_eager_load_railtie_installed
+      return unless defined?(::Rails::Railtie)
+
+      railtie = Class.new(::Rails::Railtie) do
+        initializer "rails_dependency_pruner.no_eager_load", before: :eager_load! do |application|
+          application.config.eager_load = false
+        end
+      end
+      const_set(:NoEagerLoadRailtie, railtie) unless const_defined?(:NoEagerLoadRailtie, false)
+      @no_eager_load_railtie_installed = true
+    end
+
     def profile_digest(payload)
       digest_payload = payload.merge("profile_id" => nil)
       "sha256:#{Digest::SHA256.hexdigest(CanonicalJson.digestible(digest_payload))}"
@@ -182,8 +288,12 @@ module RailsDependencyPruner
           alias_method :rails_dependency_pruner_original_require, :require
 
           def require(path)
+            return false if RailsDependencyPruner::EarlyBoot.skip_require(path, caller_locations(1, 1).first)
+
             RailsDependencyPruner::EarlyBoot.shadow_require(path, caller_locations(1, 1).first)
-            rails_dependency_pruner_original_require(path)
+            result = rails_dependency_pruner_original_require(path)
+            RailsDependencyPruner::EarlyBoot.after_require(path)
+            result
           end
 
           private :require
@@ -194,12 +304,16 @@ module RailsDependencyPruner
 
           def require_relative(path)
             caller_location = caller_locations(1, 1).first
+            return false if RailsDependencyPruner::EarlyBoot.skip_require(path, caller_location, operation: "require_relative")
+
             RailsDependencyPruner::EarlyBoot.shadow_require(path, caller_location, operation: "require_relative")
-            if caller_location&.path
+            result = if caller_location&.path
               rails_dependency_pruner_original_require(File.expand_path(path.to_s, File.dirname(caller_location.path)))
             else
               rails_dependency_pruner_original_require_relative(path)
             end
+            RailsDependencyPruner::EarlyBoot.after_require(path)
+            result
           end
 
           private :require_relative
@@ -209,6 +323,8 @@ module RailsDependencyPruner
           alias_method :rails_dependency_pruner_original_load, :load
 
           def load(path, wrap = false)
+            return false if RailsDependencyPruner::EarlyBoot.skip_require(path, caller_locations(1, 1).first, operation: "load")
+
             RailsDependencyPruner::EarlyBoot.shadow_require(path, caller_locations(1, 1).first, operation: "load")
             rails_dependency_pruner_original_load(path, wrap)
           end

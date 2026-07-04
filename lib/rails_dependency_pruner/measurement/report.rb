@@ -50,7 +50,16 @@ module RailsDependencyPruner
           lines << "- Disabled railties: #{list(profile.fetch("disabled_railties", []))}"
           lines << "- Disabled require paths: `#{profile.fetch("disabled_require_paths_count", 0)}`"
           lines << "- Disabled constants: `#{profile.fetch("disabled_constants_count", 0)}`"
+          append_extreme_boot(lines, profile["extreme_boot"])
           lines << ""
+        end
+
+        def append_extreme_boot(lines, extreme_boot)
+          return if extreme_boot.nil? || extreme_boot.empty?
+
+          lines << "- Disable eager load: `#{extreme_boot["disable_eager_load"] == true}`"
+          lines << "- Skip railties: #{list(extreme_boot["skip_railties"])}"
+          lines << "- Config namespace stubs: #{list(extreme_boot["config_namespace_stubs"])}"
         end
 
         def append_variants(lines)

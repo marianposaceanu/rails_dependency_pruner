@@ -396,6 +396,45 @@ This is an experiment, not a safe production default. The next safety gate is
 to prove routes, attachments, inbound email, jobs, and request coverage before
 emitting a patch or boot shim for another app.
 
+The same extreme settings can be recorded in a profile and exercised through
+the early boot path:
+
+```bash
+bundle exec exe/rails-dependency-pruner plan \
+  --app tmp/lobsters-ruby405-rails813 \
+  --coverage tmp/lobsters-ruby405-rails813-coverage.yml \
+  --profile tmp/lobsters-ruby405-rails813-extreme-profile.json \
+  --disable-eager-load \
+  --skip-railties action_mailbox/engine,active_storage/engine,rails/test_unit/railtie
+
+RAILS_ENV=production \
+SECRET_KEY_BASE_DUMMY=1 \
+DATABASE_HOST=127.0.0.1 \
+bundle exec exe/rails-dependency-pruner measure \
+  --app tmp/lobsters-ruby405-rails813 \
+  --profile tmp/lobsters-ruby405-rails813-extreme-profile.json \
+  --target environment \
+  --variants baseline,boot_prune \
+  --runs 3 \
+  --output tmp/lobsters-ruby405-rails813-profile-extreme-measurement.json \
+  --markdown tmp/lobsters-ruby405-rails813-profile-extreme-measurement.md
+```
+
+| variant | RSS | Rails loaded features | GC live slots |
+| --- | ---: | ---: | ---: |
+| baseline | `231088 KB` (`225.7 MiB`) | `1073` | `541227` |
+| profile boot prune | `134784 KB` (`131.6 MiB`) | `600` | `275082` |
+| profile delta | `-96304 KB` (`-94.0 MiB`, `-41.7%`) | `-473` | `-266145` |
+
+Production approval rejects that profile until the coverage manifest proves the
+affected surfaces:
+
+```text
+production verify missing coverage workload for extreme boot: action_mailbox/engine requires inbound_email
+production verify missing coverage workload for extreme boot: active_storage/engine requires attachments
+production verify missing coverage workload for extreme boot: disable_eager_load requires requests
+```
+
 Local outputs are ignored under `tmp/`.
 
 ## limits

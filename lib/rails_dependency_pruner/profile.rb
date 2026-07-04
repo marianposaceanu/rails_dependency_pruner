@@ -13,6 +13,12 @@ module RailsDependencyPruner
   class Profile
     SCHEMA_VERSION = 1
     DETERMINISTIC_SCHEMA_VERSION = 2
+    EXTREME_CONFIG_NAMESPACES = {
+      "action_mailbox/engine" => "action_mailbox",
+      "action_mailer/railtie" => "action_mailer",
+      "active_job/railtie" => "active_job",
+      "active_storage/engine" => "active_storage",
+    }.freeze
 
     attr_reader :payload
 
@@ -50,13 +56,14 @@ module RailsDependencyPruner
       )
     end
 
-    def self.deterministic_from_planner(planner, runtime_evidence_paths: [], coverage_path: nil, mode: "guard", boot_plan: nil, explanations: nil)
+    def self.deterministic_from_planner(planner, runtime_evidence_paths: [], coverage_path: nil, mode: "guard", boot_plan: nil, explanations: nil, extreme_boot: nil)
       context = ProfileContext.from_planner(
         planner,
         runtime_evidence_paths: runtime_evidence_paths,
         coverage_path: coverage_path,
       )
       boot_plan_payload = boot_plan&.to_h || {}
+      extreme_boot_payload = normalize_extreme_boot(extreme_boot)
       payload = {
         "schema_version" => DETERMINISTIC_SCHEMA_VERSION,
         "profile_id" => nil,
@@ -100,6 +107,7 @@ module RailsDependencyPruner
           "eager_load_ignores" => Array(boot_plan_payload["eager_load_ignores"]),
         },
         "boot_plan" => boot_plan_payload,
+        "extreme_boot" => extreme_boot_payload,
         "safety" => {
           "always_keep" => [],
           "manual_keep" => [],
@@ -114,6 +122,20 @@ module RailsDependencyPruner
         profile.payload["profile_id"] = profile.digest
       end
     end
+
+    def self.normalize_extreme_boot(extreme_boot)
+      extreme_boot ||= {}
+      disable_eager_load = extreme_boot[:disable_eager_load] || extreme_boot["disable_eager_load"]
+      skip_railties = Array(extreme_boot[:skip_railties] || extreme_boot["skip_railties"]).map(&:to_s).reject(&:empty?).uniq.sort
+
+      {
+        "disable_eager_load" => disable_eager_load == true,
+        "skip_railties" => skip_railties,
+        "config_namespace_stubs" => skip_railties.filter_map { |railtie| EXTREME_CONFIG_NAMESPACES[railtie] }.uniq.sort,
+      }
+    end
+
+    private_class_method :normalize_extreme_boot
 
     def self.load(path)
       new(JSON.parse(File.read(path)))

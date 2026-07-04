@@ -853,6 +853,62 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_missing_extreme_boot_coverage_workloads
+    Dir.mktmpdir("rails_dependency_pruner_extreme_coverage_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        "--skip-railties",
+        "active_storage/engine",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: disable_eager_load requires requests"
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for extreme boot: active_storage/engine requires attachments"
+      assert_equal %w[active_storage/engine disable_eager_load], payload.dig("production_risks", "extreme_boot_workload_gaps").map { |gap| gap.fetch("framework") }.sort
+    end
+  end
+
   def test_verify_production_rejects_dynamic_constantization_for_pruned_namespaces
     Dir.mktmpdir("rails_dependency_pruner_dynamic_constant_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -1302,6 +1358,43 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes profile.dig("explanations", "activejob", "negative_evidence"), "no static framework evidence in scanned app files"
       assert_equal "keep_framework", profile.dig("explanations", "activerecord", "decision")
       assert profile.dig("explanations", "activerecord", "positive_evidence").any? { |evidence| evidence.include?("ActiveRecord::Base") }
+    end
+  end
+
+  def test_plan_command_records_extreme_boot_settings
+    Dir.mktmpdir("rails_dependency_pruner_extreme_plan") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        "--skip-railties",
+        "action_mailbox/engine,active_storage/engine",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.dig("extreme_boot", "disable_eager_load")
+      assert_equal %w[action_mailbox/engine active_storage/engine], payload.dig("extreme_boot", "skip_railties")
+      assert_equal %w[action_mailbox active_storage], payload.dig("extreme_boot", "config_namespace_stubs")
+
+      profile = JSON.parse(File.read(profile_path))
+      assert_equal payload.fetch("extreme_boot"), profile.fetch("extreme_boot")
     end
   end
 
@@ -2017,6 +2110,74 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(File.read(output_path))
       assert_equal "active_job/railtie", payload.dig("events", 0, "path")
       assert_equal "blocked", payload.dig("events", 0, "action")
+    end
+  end
+
+  def test_early_boot_extreme_mode_skips_railtie_and_disables_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_early_extreme") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      probe_path = File.join(dir, "eager_probe")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => true,
+          "skip_railties" => ["action_mailbox/engine"],
+          "config_namespace_stubs" => ["action_mailbox"],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "logger"
+          require "rails_dependency_pruner/early_boot"
+          require "rails"
+          skipped = require "action_mailbox/engine"
+
+          module EarlyExtremeApp
+            class EagerProbe
+              def self.eager_load!
+                File.write(#{probe_path.dump}, "called")
+              end
+            end
+
+            class Application < Rails::Application
+              config.root = #{dir.dump}
+              config.secret_key_base = "x" * 64
+              config.logger = Logger.new(nil)
+              config.eager_load = true
+              config.eager_load_namespaces << EagerProbe
+              config.action_mailbox.ingress = :relay
+            end
+          end
+
+          Rails.application.initialize!
+          puts JSON.generate("skipped" => skipped, "eager_probe" => File.exist?(#{probe_path.dump}))
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("skipped")
+      assert_equal false, payload.fetch("eager_probe")
+
+      early_payload = JSON.parse(File.read(output_path))
+      assert_equal "skipped", early_payload.dig("events", 0, "action")
+      assert_equal "action_mailbox/engine", early_payload.dig("events", 0, "matched_path")
     end
   end
 

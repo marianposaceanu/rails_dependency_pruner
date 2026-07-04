@@ -100,6 +100,8 @@ module RailsDependencyPruner
           runtime_evidence_paths: [],
           coverage_path: nil,
           mode: "guard",
+          disable_eager_load: false,
+          skip_railties: [],
           write_path: nil,
           json: false,
         }
@@ -113,6 +115,8 @@ module RailsDependencyPruner
           parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
           parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
           parser.on("--mode MODE", "Profile mode") { |mode| options[:mode] = mode }
+          parser.on("--disable-eager-load", "Add an extreme boot setting to disable eager load") { options[:disable_eager_load] = true }
+          parser.on("--skip-railties PATHS", "Comma-separated railties to skip in extreme boot mode") { |paths| options[:skip_railties] = split_csv(paths) }
           parser.on("--write PATH", "Write deterministic profile") { |path| options[:write_path] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
@@ -172,6 +176,8 @@ module RailsDependencyPruner
           coverage_path: nil,
           profile_path: nil,
           patch_path: nil,
+          disable_eager_load: false,
+          skip_railties: [],
           json: false,
         }
 
@@ -186,6 +192,8 @@ module RailsDependencyPruner
           parser.on("--frameworks NAMES", "Comma-separated Rails framework directories to scan") { |names| options[:frameworks] = split_csv(names) }
           parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
           parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
+          parser.on("--disable-eager-load", "Add an extreme boot setting to disable eager load") { options[:disable_eager_load] = true }
+          parser.on("--skip-railties PATHS", "Comma-separated railties to skip in extreme boot mode") { |paths| options[:skip_railties] = split_csv(paths) }
           parser.on("--json", "Print JSON output") { options[:json] = true }
           parser.on("-h", "--help", "Print help") do
             puts parser

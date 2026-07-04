@@ -2,6 +2,7 @@
 
 require "set"
 
+require_relative "boot_plan"
 require_relative "runtime_framework_matcher"
 
 module RailsDependencyPruner
@@ -14,6 +15,14 @@ module RailsDependencyPruner
       "activejob" => %w[jobs],
       "activestorage" => %w[routes],
     }.freeze
+    EXTREME_BOOT_WORKLOAD_REQUIREMENTS = {
+      "action_mailbox/engine" => %w[inbound_email routes],
+      "action_mailer/railtie" => %w[mailers],
+      "active_job/railtie" => %w[jobs],
+      "active_storage/engine" => %w[attachments routes],
+      "disable_eager_load" => %w[requests],
+    }.freeze
+    RAILTIE_FRAMEWORKS = BootPlan::RAILTIE_REQUIRE_PATHS.invert.freeze
 
     attr_reader :profile, :context, :index, :usage, :production
 
@@ -48,6 +57,9 @@ module RailsDependencyPruner
         coverage_workload_gaps.each do |gap|
           errors << "production verify missing coverage workload for disabled framework: #{format_coverage_workload_gap(gap)}"
         end
+        extreme_boot_workload_gaps.each do |gap|
+          errors << "production verify missing coverage workload for extreme boot: #{format_coverage_workload_gap(gap)}"
+        end
         disabled_framework_runtime_matches.each do |match|
           errors << "production verify found disabled framework runtime evidence: #{format_runtime_framework_match(match)}"
         end
@@ -63,6 +75,7 @@ module RailsDependencyPruner
           "dynamic_boot_require_matches" => dynamic_boot_require_risks,
           "dynamic_constantization_matches" => dynamic_constantization_risks,
           "coverage_workload_gaps" => coverage_workload_gaps,
+          "extreme_boot_workload_gaps" => extreme_boot_workload_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
         },
         "profile" => {
@@ -106,7 +119,7 @@ module RailsDependencyPruner
       def disabled_framework_runtime_matches
         @disabled_framework_runtime_matches ||= RuntimeFrameworkMatcher.new(
           applications: runtime_rails_applications,
-        ).matches(disabled_frameworks)
+        ).matches(disabled_frameworks + extreme_boot_disabled_frameworks)
       end
 
       def runtime_rails_applications
@@ -118,6 +131,16 @@ module RailsDependencyPruner
 
       def disabled_frameworks
         Array(profile.payload.dig("pruning", "disabled_frameworks"))
+      end
+
+      def extreme_boot
+        profile.payload["extreme_boot"] || {}
+      end
+
+      def extreme_boot_disabled_frameworks
+        @extreme_boot_disabled_frameworks ||= Array(extreme_boot["skip_railties"]).filter_map do |railtie|
+          RAILTIE_FRAMEWORKS[railtie]
+        end
       end
 
       def coverage_workload_gaps
@@ -132,6 +155,33 @@ module RailsDependencyPruner
             "missing_workloads" => missing_workloads,
           }
         end.sort_by { |gap| gap.fetch("framework") }
+      end
+
+      def extreme_boot_workload_gaps
+        @extreme_boot_workload_gaps ||= begin
+          gaps = []
+          if extreme_boot["disable_eager_load"] == true
+            gaps << workload_gap("disable_eager_load", EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch("disable_eager_load"))
+          end
+
+          Array(extreme_boot["skip_railties"]).each do |railtie|
+            required_workloads = EXTREME_BOOT_WORKLOAD_REQUIREMENTS.fetch(railtie, [])
+            gaps << workload_gap(railtie, required_workloads)
+          end
+
+          gaps.compact.sort_by { |gap| gap.fetch("framework") }
+        end
+      end
+
+      def workload_gap(name, required_workloads)
+        missing_workloads = required_workloads - coverage_workloads
+        return if missing_workloads.empty?
+
+        {
+          "framework" => name,
+          "required_workloads" => required_workloads,
+          "missing_workloads" => missing_workloads,
+        }
       end
 
       def coverage_workloads

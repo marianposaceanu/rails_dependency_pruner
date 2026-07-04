@@ -242,6 +242,7 @@ module RailsDependencyPruner
             "disabled_railties" => Array(pruning["disabled_railties"]),
             "disabled_require_paths_count" => Array(pruning["disabled_require_paths"]).length,
             "disabled_constants_count" => Array(pruning["disabled_constants"]).length,
+            "extreme_boot" => profile.payload["extreme_boot"],
           }
         end
 

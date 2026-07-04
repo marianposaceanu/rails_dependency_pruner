@@ -10,6 +10,9 @@ module RailsDependencyPruner
     WORKLOAD_KEYS = %w[
       boot
       routes
+      requests
+      attachments
+      inbound_email
       jobs
       mailers
       cable
