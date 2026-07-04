@@ -74,11 +74,15 @@ class RailsDependencyPrunerTest < Minitest::Test
     planner = RailsDependencyPruner::Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
 
     assert_includes planner.runtime_constants, "ActiveRecord::Relation"
+    assert_includes planner.runtime_constants, "ActiveRecord::OrphanFeature"
     assert_includes planner.runtime_constants, "ActionController::UnusedControllerFeature"
     assert_includes planner.used_constants, "ActiveRecord::Relation"
+    assert_includes planner.used_constants, "ActiveRecord::OrphanFeature"
     assert_includes planner.used_constants, "ActionController::UnusedControllerFeature"
     refute_includes planner.unused_constants, "ActiveRecord::Relation"
+    refute_includes planner.unused_constants, "ActiveRecord::OrphanFeature"
     refute_includes planner.unused_constants, "ActionController::UnusedControllerFeature"
+    refute_includes planner.unused_require_paths, "active_record/orphan_feature"
   end
 
   def test_dependency_graph_matches_current_used_constant_closure
@@ -1037,10 +1041,12 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert status.success?, stderr
 
     payload = JSON.parse(stdout)
-    assert_equal 2, payload.fetch("runtime_rails_constants_count")
+    assert_equal 3, payload.fetch("runtime_rails_constants_count")
     assert_includes payload.fetch("runtime_rails_constants"), "ActiveRecord::Relation"
+    assert_includes payload.fetch("runtime_rails_constants"), "ActiveRecord::OrphanFeature"
     refute_includes payload.fetch("unused_constants"), "ActiveRecord::Relation"
-    assert_includes payload.fetch("unused_require_path_provenance").map { |entry| entry.fetch("require_path") }, "active_record/orphan_feature"
+    refute_includes payload.fetch("unused_constants"), "ActiveRecord::OrphanFeature"
+    refute_includes payload.fetch("unused_require_path_provenance").map { |entry| entry.fetch("require_path") }, "active_record/orphan_feature"
     assert_equal 1, payload.fetch("runtime_memory").length
     assert_equal 1048576, payload.dig("runtime_memory_summary", "object_sizes", "T_STRING")
     assert_equal "ActionController::UnusedControllerFeature", payload.dig("runtime_memory_summary", "rails_class_instance_sizes", 0, "name")

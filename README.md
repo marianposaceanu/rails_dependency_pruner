@@ -117,7 +117,8 @@ bin/rails test
 ```
 
 This records `require`, `require_relative`, and `load` events with caller and
-phase fields.
+phase fields. Literal Rails require/load events are merged back into the
+planner as keep evidence for the constants defined by the loaded file.
 
 For Ruby object type and Rails class instance sizes:
 

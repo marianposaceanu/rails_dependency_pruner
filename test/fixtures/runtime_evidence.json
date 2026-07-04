@@ -10,6 +10,15 @@
       "line": 1
     }
   ],
+  "require_events": [
+    {
+      "operation": "require",
+      "path": "active_record/orphan_feature",
+      "phase": "boot",
+      "caller_path": "config/application.rb",
+      "caller_line": 12
+    }
+  ],
   "memory": {
     "object_counts": {
       "TOTAL": 100,

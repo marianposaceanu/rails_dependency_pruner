@@ -25,6 +25,10 @@ module RailsDependencyPruner
           loaded_feature_constants(payload).each do |constant|
             constants << constant
           end
+
+          traced_feature_constants(payload).each do |constant|
+            constants << constant
+          end
         end
 
         constants
@@ -89,15 +93,47 @@ module RailsDependencyPruner
 
       def loaded_feature_constants(payload)
         Array(payload["loaded_features"]).flat_map do |feature|
-          relative = relative_rails_path(feature)
-          next [] unless relative
+          constants_for_runtime_path(feature)
+        end
+      end
 
-          definitions_by_path.fetch(relative, []).map(&:name)
+      def traced_feature_constants(payload)
+        (Array(payload["require_events"]) + Array(payload["load_events"])).flat_map do |event|
+          constants_for_runtime_path(event["resolved_path"] || event["path"])
         end
       end
 
       def definitions_by_path
         @definitions_by_path ||= index.definitions.values.group_by(&:path)
+      end
+
+      def definitions_by_require_path
+        @definitions_by_require_path ||= definitions_by_path.each_with_object({}) do |(path, definitions), result|
+          require_path = path.split("/lib/", 2).last&.delete_suffix(".rb")
+          next unless require_path
+
+          result[require_path] ||= []
+          result[require_path].concat(definitions)
+        end
+      end
+
+      def constants_for_runtime_path(path)
+        runtime_path_candidates(path).flat_map do |candidate|
+          path_definitions = definitions_by_path.fetch(candidate, [])
+          require_definitions = definitions_by_require_path.fetch(candidate.delete_suffix(".rb"), [])
+
+          (path_definitions + require_definitions).map(&:name)
+        end.uniq
+      end
+
+      def runtime_path_candidates(path)
+        return [] if path.nil? || path.to_s.empty?
+
+        value = path.to_s
+        relative = relative_rails_path(value)
+        return [] unless relative
+
+        [relative, relative.delete_suffix(".rb")].uniq
       end
 
       def relative_rails_path(feature)
