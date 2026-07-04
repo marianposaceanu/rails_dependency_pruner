@@ -83,8 +83,11 @@ module RailsDependencyPruner
     MODES = %w[shadow boot_prune canary production].freeze
     SAFETY_MODES = %w[canary production].freeze
     BLOCKING_MODES = %w[boot_prune canary production].freeze
+    UNEXPECTED_EVENT_POLICIES = %w[report fail_boot fail_all fail_in_canary_report_in_production].freeze
+    DEFAULT_UNEXPECTED_EVENT_POLICY = "fail_boot"
     DisabledRequireError = Class.new(StandardError)
     UnsafeProfileError = Class.new(StandardError)
+    UnexpectedEventError = Class.new(StandardError)
 
     module_function
 
@@ -112,6 +115,8 @@ module RailsDependencyPruner
       @loaded_lazy_gems = Set.new
       @disable_eager_load = payload.dig("extreme_boot", "disable_eager_load") == true
       @config_namespace_stubs = config_namespace_stubs(payload)
+      @expected_events = expected_events(payload)
+      @unexpected_event_policy = unexpected_event_policy(payload)
       @events = []
       @output_path = output_path
       install_shadow_hooks!
@@ -137,7 +142,7 @@ module RailsDependencyPruner
           "mode" => @mode,
           "action" => blocking? ? "deferred" : "would_defer",
         }.compact
-        @events << event
+        record_event(event)
         install_lazy_require_loader!(lazy_path) if blocking?
         return blocking?
       end
@@ -155,7 +160,7 @@ module RailsDependencyPruner
         "mode" => @mode,
         "action" => blocking? ? "skipped" : "would_skip",
       }.compact
-      @events << event
+      record_event(event)
       blocking?
     end
 
@@ -174,7 +179,7 @@ module RailsDependencyPruner
         "action" => blocking? ? "stubbed_lazy_gem_require" : "would_stub_lazy_gem_require",
         "gem" => "ruby-vips",
       }.compact
-      @events << event
+      record_event(event)
       install_active_storage_vips_analyzer_stub! if blocking?
       blocking?
     end
@@ -193,7 +198,7 @@ module RailsDependencyPruner
         "mode" => @mode,
         "action" => blocking? ? "blocked" : "would_block",
       }.compact
-      @events << event
+      record_event(event, enforce: false)
 
       raise DisabledRequireError, "#{path} is disabled by rails_dependency_pruner early boot" if blocking?
     end
@@ -240,8 +245,83 @@ module RailsDependencyPruner
           "mode" => @mode,
           "events" => @events,
           "events_count" => @events.length,
+          "expected_events_count" => @events.count { |event| event["expected"] == true },
+          "unexpected_events_count" => @events.count { |event| event["expected"] == false },
         ),
       )
+    end
+
+    def record_event(raw_event, enforce: true)
+      event = raw_event.dup
+      event["phase"] ||= "boot"
+      event["mode"] ||= @mode
+      event["pid"] ||= Process.pid
+      event["transform_id"] ||= transform_id_for_event(event)
+      event["event_id"] ||= event_id_for_event(event)
+      event["expected"] = expected_event?(event)
+      @events << event
+      enforce_event!(event) if enforce
+      event
+    end
+
+    def expected_event?(event)
+      Array(@expected_events).any? { |expected| expected_event_matches?(expected, event) }
+    end
+
+    def expected_event_matches?(expected, event)
+      expected.all? do |key, expected_value|
+        case key
+        when "path"
+          [event["path"], event["matched_path"]].compact.map(&:to_s).include?(expected_value.to_s)
+        when "phase"
+          (event["phase"] || "boot").to_s == expected_value.to_s
+        else
+          event[key].to_s == expected_value.to_s
+        end
+      end
+    end
+
+    def enforce_event!(event)
+      return unless SAFETY_MODES.include?(@mode)
+      return if event["expected"]
+
+      policy = @unexpected_event_policy || DEFAULT_UNEXPECTED_EVENT_POLICY
+      return if policy == "report"
+
+      fail_event = case policy
+      when "fail_all"
+        true
+      when "fail_boot"
+        event["phase"] == "boot"
+      when "fail_in_canary_report_in_production"
+        @mode == "canary" || (@mode == "production" && event["phase"] == "boot")
+      else
+        event["phase"] == "boot"
+      end
+      return unless fail_event
+
+      raise UnexpectedEventError, "unexpected early boot event #{event.fetch("event_id")} in #{@mode} mode"
+    end
+
+    def event_id_for_event(event)
+      subject = event["matched_path"] || event["path"] || event["gem"] || event["constant"] || "unknown"
+      "#{event.fetch("phase", "boot")}:#{event.fetch("action", "unknown")}:#{subject}"
+    end
+
+    def transform_id_for_event(event)
+      path = event["matched_path"] || event["path"]
+      case event["action"]
+      when "skipped", "would_skip"
+        "skip_railtie:#{path}" if path
+      when "deferred", "would_defer", "loaded_lazy"
+        "lazy_require:#{path}" if path
+      when "stubbed_lazy_gem_require", "would_stub_lazy_gem_require"
+        event["gem"] == "ruby-vips" ? "stub:active_storage_vips_analyzer" : "stub:#{event["gem"]}"
+      when "loaded_lazy_gem"
+        "lazy_gem:#{event["matched_path"]}" if event["matched_path"]
+      when "blocked", "would_block"
+        "disabled_require:#{path}" if path
+      end
     end
 
     def disabled_require_paths(payload)
@@ -272,6 +352,25 @@ module RailsDependencyPruner
         name = name.to_s
         name if SUPPORTED_LAZY_GEMS.include?(name)
       end.to_set
+    end
+
+    def expected_events(payload)
+      source = payload["expected_events"]
+      source = Array(payload["transforms"]).flat_map { |transform| Array(transform["expected_events"]) } if source.nil?
+      Array(source).filter_map do |event|
+        next unless event.respond_to?(:each)
+
+        normalized = event.each_with_object({}) do |(key, value), hash|
+          hash[key.to_s] = value.to_s unless value.nil?
+        end
+        normalized["phase"] ||= "boot"
+        normalized unless normalized.empty?
+      end
+    end
+
+    def unexpected_event_policy(payload)
+      policy = payload["unexpected_event_policy"].to_s
+      UNEXPECTED_EVENT_POLICIES.include?(policy) ? policy : DEFAULT_UNEXPECTED_EVENT_POLICY
     end
 
     def config_namespace_stubs(payload)
@@ -426,13 +525,13 @@ module RailsDependencyPruner
       @loading_lazy_require_paths << normalized
       require normalized
       @loaded_lazy_require_paths << normalized
-      @events << {
+      record_event({
         "path" => normalized,
         "matched_path" => normalized,
         "operation" => "require",
         "mode" => @mode,
         "action" => "loaded_lazy",
-      }
+      })
       true
     ensure
       @loading_lazy_require_paths&.delete(normalized)
@@ -595,14 +694,14 @@ module RailsDependencyPruner
 
       require config.fetch("require")
       @loaded_lazy_gems << gem_name
-      @events << {
+      record_event({
         "path" => config.fetch("require"),
         "matched_path" => gem_name,
         "operation" => "require",
         "mode" => @mode,
         "action" => "loaded_lazy_gem",
         "constant" => name.to_s,
-      }
+      })
       true
     end
 

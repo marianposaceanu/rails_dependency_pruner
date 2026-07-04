@@ -95,9 +95,26 @@ The report records:
 - request status and response size for request-warmed runs
 
 The Rails framework table groups loaded files by gem, for example
-`activerecord`, `actionview`, `activestorage`, and `railties`. If
-`disable_eager_load_only` removes many `activerecord` and `actionview` files,
+`activerecord`, `actionview`, `activestorage`, and `railties`. This is not a
+byte ledger. It tells you which framework stopped loading code when RSS moved.
+If `disable_eager_load_only` removes many `activerecord` and `actionview` files,
 that is the Rails-side bucket to investigate first.
+
+Use the tables together:
+
+- ablation RSS says whether a transform actually saves process memory
+- Rails loaded-feature deltas say which framework code stopped loading
+- GC live slots say whether the win is visible in Ruby heap objects
+- object type deltas say whether the heap movement is mostly strings, arrays,
+  hashes, classes, `T_DATA`, or VM internals
+- request statuses say whether the smaller process still behaves like the app
+
+For the measured Lobsters profile, the Rails-side pressure is mostly boot-time
+eager loading. The largest loaded-feature reductions are ActiveRecord first,
+then Action View, Active Storage, Action Mailbox, Active Support, and railties.
+The `lazy_gems_only` win is different: it saves RSS without reducing Rails
+loaded-feature counts, so it points to app/gem boot surface rather than Rails
+framework files.
 
 The Ruby object table shows whether the heap-side movement mostly came from
 `T_STRING`, `T_ARRAY`, `T_HASH`, `T_OBJECT`, or another Ruby object type. This

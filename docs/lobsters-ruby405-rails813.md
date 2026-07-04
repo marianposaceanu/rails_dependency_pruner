@@ -123,6 +123,28 @@ Early boot strict-mode smoke:
 - `production` without `RAILS_DEPENDENCY_PRUNER_PROFILE_ID` failed closed before
   app boot
 
+Runtime event manifest smoke:
+
+- original policy profile failed strict `canary` with one unexpected event:
+  `boot:loaded_lazy_gem:svg-graph`
+- caller path: `lib/time_series.rb`, through `SVG`
+- this means `svg-graph` is not safe to treat as a strict lazy boot gem for
+  Lobsters without a narrower shim
+- temporary corrected profile:
+  `tmp/lobsters-ruby405-rails813-policy-profile-no-svg-graph.json`
+- corrected profile id:
+  `sha256:46725bec00671762321dc0c575e120261d1b5341baea7099d61ed317d30815dd`
+- corrected `canary`: `2` events, `2` expected, `0` unexpected
+- corrected `production`: `2` events, `2` expected, `0` unexpected
+- event artifacts:
+  `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
+  `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
+  `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-production-smoke.json`
+
+The RSS tables above are still from the measured full profile. Because
+`svg-graph` is now known to load during boot, do not treat that exact profile as
+a production candidate until the no-`svg-graph` variant has been remeasured.
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,
@@ -160,9 +182,17 @@ Environment boot framework deltas:
 | actionmailer | `0` |
 
 The largest Rails-side pressure in this Lobsters boot is eager-loaded
-ActiveRecord, followed by Action View and Active Model. Request warming brings
-some of that back, but ActiveRecord and Action View remain the biggest Rails
-feature reductions.
+ActiveRecord. In the request-warmed run it is still the biggest framework delta
+at `-66` loaded features, followed by Action View at `-45`, Active Storage at
+`-38`, Action Mailbox at `-24`, Active Support at `-14`, and railties at `-11`.
+The environment-only boot shows the same shape more sharply, with ActiveRecord
+at `-216`.
+
+That makes the low-hanging Rails work pretty specific: reduce eager-loaded
+ActiveRecord and Action View code first, then verify whether Active Storage
+analyzer setup is needed for the workload. The data does not point to Action
+Mailer in this app; its loaded-feature delta is `0` in both headline runs.
+Active Model moves mostly because ActiveRecord pulls it in.
 
 The request ablation narrows this further:
 

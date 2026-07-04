@@ -269,7 +269,9 @@ events and does not change boot behavior.
 `RAILS_DEPENDENCY_PRUNER_MODE=canary` applies the profile with production safety
 checks. `RAILS_DEPENDENCY_PRUNER_MODE=production` requires
 `safety.production_allowed=true`, a matching `profile_id` in the profile, and
-`RAILS_DEPENDENCY_PRUNER_PROFILE_ID=sha256:...`. Set
+`RAILS_DEPENDENCY_PRUNER_PROFILE_ID=sha256:...`. Safety modes classify early
+boot events against the profile's `expected_events`; unexpected boot events fail
+closed unless `unexpected_event_policy` is set to `report`. Set
 `RAILS_DEPENDENCY_PRUNER_DISABLE=1` to skip it.
 
 ## cli
@@ -338,10 +340,10 @@ uses `Vips` directly in `StoryImage`, but does not declare `has_one_attached` or
 attachment workload coverage before approving the `ruby-vips` analyzer stub.
 The biggest Rails-side reductions are ActiveRecord, Action View, Active Model,
 and Active Storage. The Vips analyzer stub accounts for about `23 MiB` of the
-request-warmed RSS win in the paired reference run. The latest request run kept
-the same loaded-feature delta and stayed above the 40% RSS target, but RSS still
-moves enough that the next production-readiness step should be per-transform
-ablation.
+request-warmed RSS win in the paired reference run. Strict runtime-event canary
+found that Lobsters loads `svg-graph` during boot through `lib/time_series.rb`;
+the no-`svg-graph` profile passes canary and production event checks, but needs a
+fresh RSS measurement before replacing the headline numbers above.
 
 Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.

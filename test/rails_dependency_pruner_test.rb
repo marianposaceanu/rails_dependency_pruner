@@ -724,6 +724,7 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal "sha256:files", migrated.dig("fingerprints", "source_manifest_sha256")
     assert_equal "sha256:coverage", migrated.dig("fingerprints", "coverage_manifest_sha256")
     assert_equal [], migrated.fetch("expected_events")
+    assert_equal "fail_boot", migrated.fetch("unexpected_event_policy")
   end
 
   def test_profile_digest_preserves_legacy_v2_shape
@@ -2409,6 +2410,7 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       profile = JSON.parse(File.read(profile_path))
       assert_equal payload.fetch("extreme_boot"), profile.fetch("extreme_boot")
+      assert_equal "fail_boot", profile.fetch("unexpected_event_policy")
       assert_equal transform_ids.sort, profile.fetch("transforms").map { |transform| transform.fetch("id") }.sort
       vips_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "stub:active_storage_vips_analyzer" }
       assert_equal "high", vips_transform.fetch("risk")
@@ -3705,6 +3707,166 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "canary", events.fetch("mode")
       assert_equal "blocked", events.dig("events", 0, "action")
       assert_equal "blocked_feature", events.dig("events", 0, "path")
+    end
+  end
+
+  def test_early_boot_canary_allows_expected_skip_event
+    Dir.mktmpdir("rails_dependency_pruner_early_expected_event") do |dir|
+      File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")
+      output_path = File.join(dir, "events.json")
+      profile_path = File.join(dir, "profile.json")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => ["blocked_feature"],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+        "expected_events" => [
+          {
+            "phase" => "boot",
+            "action" => "skipped",
+            "path" => "blocked_feature",
+          },
+        ],
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-I#{dir}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+          puts "ok"
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "ok\n", stdout
+
+      events = JSON.parse(File.read(output_path))
+      event = events.fetch("events").first
+      assert_equal 1, events.fetch("expected_events_count")
+      assert_equal 0, events.fetch("unexpected_events_count")
+      assert_equal true, event.fetch("expected")
+      assert_equal "boot:skipped:blocked_feature", event.fetch("event_id")
+      assert_equal "skip_railtie:blocked_feature", event.fetch("transform_id")
+      assert_operator event.fetch("pid"), :>, 0
+    end
+  end
+
+  def test_early_boot_canary_fails_unexpected_skip_event
+    Dir.mktmpdir("rails_dependency_pruner_early_unexpected_event") do |dir|
+      File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")
+      output_path = File.join(dir, "events.json")
+      profile_path = File.join(dir, "profile.json")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => ["blocked_feature"],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+        "expected_events" => [],
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-I#{dir}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "unexpected early boot event boot:skipped:blocked_feature in canary mode"
+
+      events = JSON.parse(File.read(output_path))
+      assert_equal 0, events.fetch("expected_events_count")
+      assert_equal 1, events.fetch("unexpected_events_count")
+      assert_equal false, events.dig("events", 0, "expected")
+    end
+  end
+
+  def test_early_boot_production_reports_unexpected_event_when_policy_allows_it
+    Dir.mktmpdir("rails_dependency_pruner_early_report_event") do |dir|
+      File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")
+      output_path = File.join(dir, "events.json")
+      profile_path = File.join(dir, "profile.json")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "unexpected_event_policy" => "report",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => ["blocked_feature"],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+        "expected_events" => [],
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-I#{dir}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          require "blocked_feature"
+          puts "ok"
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal "ok\n", stdout
+
+      events = JSON.parse(File.read(output_path))
+      assert_equal 0, events.fetch("expected_events_count")
+      assert_equal 1, events.fetch("unexpected_events_count")
+      assert_equal false, events.dig("events", 0, "expected")
     end
   end
 

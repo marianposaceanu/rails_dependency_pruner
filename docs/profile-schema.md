@@ -10,6 +10,7 @@ readiness fields:
 - `fingerprints`: material input digests
 - `transforms`: registered boot mutations
 - `expected_events`: events expected from registered transforms
+- `unexpected_event_policy`: how safety modes handle new runtime events
 - `memory_policy`: optional RSS savings gates copied from the coverage manifest
 
 The profile id is stored in both `profile_id` and
@@ -55,6 +56,35 @@ Supported gates:
 - `reference_savings_kb` or `reference_savings_mib`
 - `reference_profile_id`
 - `min_transform_savings_mib`
+
+## runtime events
+
+Early boot writes structured events for skipped, deferred, blocked, stubbed, and
+lazy-loaded require paths. Events include:
+
+- `event_id`
+- `phase`
+- `action`
+- `path`
+- `matched_path`
+- `gem`
+- `transform_id`
+- `caller_path`
+- `caller_line`
+- `pid`
+- `expected`
+
+Safety modes compare every event with `expected_events`. Expected event entries
+are partial matches, so a profile can match on `phase`, `action`, `path`, and
+`gem` without pinning caller lines.
+
+Supported `unexpected_event_policy` values:
+
+- `fail_boot`: fail canary and production for unexpected boot events
+- `fail_all`: fail canary and production for any unexpected event
+- `report`: record unexpected events without raising
+- `fail_in_canary_report_in_production`: fail canary, and still fail closed for
+  production boot events
 
 ## migration
 

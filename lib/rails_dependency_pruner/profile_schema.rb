@@ -51,6 +51,7 @@ module RailsDependencyPruner
         "coverage_manifest_sha256" => migrated.dig("evidence", "coverage_manifest_digest"),
       }
       migrated["expected_events"] ||= []
+      migrated["unexpected_event_policy"] ||= "fail_boot"
       migrated
     end
   end
