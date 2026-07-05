@@ -277,6 +277,8 @@ Runtime event manifest smoke:
   with `action_text.rich_text_expected: false`; max RSS `42319872` bytes
 - external-integration coverage smoke generated review placeholders for
   Rack Mini Profiler and Sentry integrations; max RSS `42418176` bytes
+- disable-eager-load coverage smoke generated declared job and mailer coverage
+  candidates for the stricter first-use proof; max RSS `42287104` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
@@ -298,7 +300,9 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-action-text-coverage-smoke.yml`,
   `tmp/lobsters-ruby405-action-text-coverage-smoke.time`,
   `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-external-integrations-smoke.yml`,
-  `tmp/lobsters-ruby405-external-integrations-smoke.time`
+  `tmp/lobsters-ruby405-external-integrations-smoke.time`,
+  `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-disable-eager-load-coverage-smoke.yml`,
+  `tmp/lobsters-ruby405-disable-eager-load-coverage-smoke.time`
 
 The current strict-profile smoke above uses the no-`svg-graph` profile. The
 older full-profile RSS rows are still useful as historical context, but do not

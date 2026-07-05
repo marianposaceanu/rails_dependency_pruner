@@ -68,6 +68,12 @@ module RailsDependencyPruner
         "framework" => "activestorage",
       },
     }.freeze
+    DISABLE_EAGER_LOAD_DECLARED_WORKLOADS = {
+      "jobs" => "app/jobs",
+      "mailers" => "app/mailers",
+      "cable" => "app/channels",
+      "inbound_email" => "app/mailboxes",
+    }.freeze
     CONFIG_NAMESPACE_BY_RAILTIE = {
       "action_mailbox/engine" => "action_mailbox",
       "active_storage/engine" => "active_storage",
@@ -467,6 +473,8 @@ module RailsDependencyPruner
           if extreme_boot["disable_eager_load"] == true
             missing = disable_eager_load_latency_policy_gaps
             gaps << high_risk_gap("disable_eager_load", "latency_policy", missing) unless missing.empty?
+            missing = disable_eager_load_declared_workload_gaps
+            gaps << high_risk_gap("disable_eager_load", "declared_workload_coverage", missing) unless missing.empty?
           end
 
           if Array(extreme_boot["lazy_gems"]).map(&:to_s).include?("ruby-vips")
@@ -629,6 +637,12 @@ module RailsDependencyPruner
         end
       end
 
+      def action_text_static_usage?
+        @action_text_static_usage ||= (usage.feature_matches + usage.config_matches).any? do |match|
+          match["framework"] == "actiontext" && static_path_relevant?(match.fetch("path"))
+        end
+      end
+
       def catalog_coverage_targets
         disabled_targets = disabled_frameworks.map do |framework|
           {
@@ -689,6 +703,16 @@ module RailsDependencyPruner
         missing
       end
 
+      def disable_eager_load_declared_workload_gaps
+        declared_workloads = DISABLE_EAGER_LOAD_DECLARED_WORKLOADS.filter_map do |workload, path|
+          workload if app_path_has_ruby_files?(path)
+        end
+        declared_workloads << "attachments" if active_storage_attachment_static_usage?
+        declared_workloads << "action_text" if action_text_static_usage?
+
+        declared_workloads.uniq.sort - coverage_workloads
+      end
+
       def active_storage_vips_proof_gaps
         return [] unless active_storage_attachment_static_usage?
         return [] if high_risk_override?("stub:active_storage_vips_analyzer")
@@ -714,6 +738,13 @@ module RailsDependencyPruner
 
       def coverage_manifest
         context.coverage_manifest
+      end
+
+      def app_path_has_ruby_files?(relative_path)
+        root = usage.app_root.join(relative_path)
+        return false unless root.directory?
+
+        Pathname.glob(root.join("**/*.rb").to_s).any?
       end
 
       def path_matches(railtie, paths)

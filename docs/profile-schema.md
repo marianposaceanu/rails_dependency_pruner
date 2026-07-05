@@ -110,7 +110,9 @@ Supported gates:
 
 Production verification also uses these gates as proof for high-risk transforms.
 For `disable_eager_load`, the policy must include first request, p95, and p99
-latency regression limits.
+latency regression limits. The coverage manifest must also cover app-declared
+jobs, mailers, channels, inbound email, attachments, and Action Text before
+this transform can be approved.
 
 ## safety policy
 
