@@ -68,6 +68,10 @@ module RailsDependencyPruner
         "require" => "sentry-rails",
         "constants" => %w[Sentry],
       },
+      "sentry-ruby" => {
+        "require" => "sentry-ruby",
+        "constants" => %w[Sentry],
+      },
       "sitemap_generator" => {
         "require" => "sitemap_generator",
         "constants" => %w[SitemapGenerator],

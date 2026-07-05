@@ -75,8 +75,8 @@ reviewed exact entries such as `rake_tasks.maintenance:sweep` because task
 constants may move from boot to first use.
 Mounted Rack apps and engines require reviewed request coverage for each mount
 path when `disable_eager_load` is enabled.
-Lazy or stubbed middleware and Railtie integration gems, such as
-`rack-mini-profiler` and `sentry-rails`, require a reviewed
+Lazy or stubbed middleware, Railtie, and SDK integration gems, such as
+`rack-mini-profiler`, `sentry-rails`, and `sentry-ruby`, require a reviewed
 `external_integrations` status. Accepted statuses are `covered`,
 `disabled`, `disabled_in_profile`, `disabled_in_production`,
 `disabled_in_test_profile`, `no_production_dsn`, and `not_used`.

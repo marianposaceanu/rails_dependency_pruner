@@ -11,7 +11,7 @@ module RailsDependencyPruner
     DEFAULT_RAKE_TASKS = %w[assets:precompile db:migrate].freeze
     DIRECT_USAGE_LAZY_GEMS = {
       "nokogiri" => "nokogiri",
-      "sentry" => "sentry-rails",
+      "sentry" => "sentry-ruby",
       "vips" => "ruby-vips",
     }.freeze
 

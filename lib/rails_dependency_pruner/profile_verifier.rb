@@ -47,6 +47,7 @@ module RailsDependencyPruner
     EXTERNAL_INTEGRATION_GEM_CLASSES = %w[
       middleware_integration
       railtie_integration
+      sdk_integration
     ].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {

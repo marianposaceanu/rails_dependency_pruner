@@ -119,13 +119,13 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert status.success?, stderr
 
     payload = JSON.parse(stdout)
-    assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails], payload.dig("capabilities", "integrations")
+    assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails sentry-ruby], payload.dig("capabilities", "integrations")
     integration_policies = payload.dig("capabilities", "integration_gem_policies")
-    assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails], integration_policies.map { |entry| entry.fetch("gem") }
-    assert_equal %w[railtie_integration middleware_integration railtie_integration railtie_integration], integration_policies.map { |entry| entry.fetch("class") }
-    assert_equal %w[high medium high high], integration_policies.map { |entry| entry.fetch("risk") }
-    assert_equal [["disabled_in_profile"], ["noop_shim"], ["disabled_in_profile"], ["disabled_in_profile"]], integration_policies.map { |entry| entry.fetch("strategies") }
-    assert_equal [true, true, true, true], integration_policies.map { |entry| entry.fetch("external_integration_required") }
+    assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails sentry-ruby], integration_policies.map { |entry| entry.fetch("gem") }
+    assert_equal %w[railtie_integration middleware_integration railtie_integration railtie_integration sdk_integration], integration_policies.map { |entry| entry.fetch("class") }
+    assert_equal %w[high medium high high high], integration_policies.map { |entry| entry.fetch("risk") }
+    assert_equal [["disabled_in_profile"], ["noop_shim"], ["disabled_in_profile"], ["disabled_in_profile"], ["lazy_constant"]], integration_policies.map { |entry| entry.fetch("strategies") }
+    assert_equal [true, true, true, true, true], integration_policies.map { |entry| entry.fetch("external_integration_required") }
     assert_empty payload.dig("capabilities", "unclassified_integrations")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "sentry", "present")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "honeybadger", "present")
@@ -4356,7 +4356,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         "--profile",
         profile_path,
         "--lazy-gems",
-        "honeybadger,rollbar,sentry-rails",
+        "honeybadger,rollbar,sentry-rails,sentry-ruby",
         chdir: ROOT.to_s,
       )
       assert build_status.success?, build_stderr
@@ -4386,6 +4386,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes payload.fetch("errors"), "production verify missing external integration proof: honeybadger requires external_integrations.honeybadger reviewed status; got missing"
       assert_includes payload.fetch("errors"), "production verify missing external integration proof: rollbar requires external_integrations.rollbar reviewed status; got missing"
       assert_includes payload.fetch("errors"), "production verify missing external integration proof: sentry-rails requires external_integrations.sentry-rails reviewed status; got missing"
+      assert_includes payload.fetch("errors"), "production verify missing external integration proof: sentry-ruby requires external_integrations.sentry-ruby reviewed status; got missing"
       assert_equal(
         [
           {
@@ -4403,6 +4404,12 @@ class RailsDependencyPrunerTest < Minitest::Test
           {
             "gem" => "sentry-rails",
             "requirement" => "external_integrations.sentry-rails",
+            "actual" => nil,
+            "accepted_statuses" => RailsDependencyPruner::CoverageManifest::EXTERNAL_INTEGRATION_REVIEW_STATUSES,
+          },
+          {
+            "gem" => "sentry-ruby",
+            "requirement" => "external_integrations.sentry-ruby",
             "actual" => nil,
             "accepted_statuses" => RailsDependencyPruner::CoverageManifest::EXTERNAL_INTEGRATION_REVIEW_STATUSES,
           },
@@ -6264,6 +6271,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal vips_lazy_transform.dig("gem_policy", "production_rule"), vips_lazy_transform.fetch("production_rule")
       assert_equal true, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("ruby-vips")
       assert_equal "vips", RailsDependencyPruner::TransformRegistry.lazy_gem_policy("ruby-vips").fetch("require")
+      assert_equal true, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("sentry-ruby")
+      assert_equal "sdk_integration", RailsDependencyPruner::TransformRegistry.lazy_gem_policy("sentry-ruby").fetch("class")
       assert_equal false, RailsDependencyPruner::TransformRegistry.lazy_gem_supported?("unknown-gem")
     end
   end
@@ -7560,65 +7569,67 @@ class RailsDependencyPrunerTest < Minitest::Test
   end
 
   def test_early_boot_lazy_loads_hyphenated_gem_constant
-    Dir.mktmpdir("rails_dependency_pruner_early_lazy_hyphen_gem") do |dir|
-      profile_path = File.join(dir, "profile.json")
-      output_path = File.join(dir, "early.json")
-      File.write(File.join(dir, "sentry-rails.rb"), <<~RUBY)
-        module Sentry
-          def self.initialized?
-            true
+    %w[sentry-rails sentry-ruby].each do |gem_name|
+      Dir.mktmpdir("rails_dependency_pruner_early_lazy_hyphen_gem") do |dir|
+        profile_path = File.join(dir, "profile.json")
+        output_path = File.join(dir, "early.json")
+        File.write(File.join(dir, "#{gem_name}.rb"), <<~RUBY)
+          module Sentry
+            def self.initialized?
+              true
+            end
           end
-        end
-      RUBY
-      File.write(profile_path, JSON.pretty_generate(
-        "mode" => "boot_prune",
-        "extreme_boot" => {
-          "disable_eager_load" => false,
-          "skip_railties" => [],
-          "lazy_require_paths" => [],
-          "lazy_gems" => ["sentry-rails"],
-          "config_namespace_stubs" => [],
-        },
-        "pruning" => {
-          "disabled_require_paths" => [],
-          "disabled_railties" => [],
-        },
-      ))
-
-      stdout, stderr, status = Open3.capture3(
-        {
-          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
-          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
-          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
-          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
-        },
-        RUBY,
-        "-e",
-        <<~RUBY,
-          require "json"
-          require "rails_dependency_pruner/early_boot"
-
-          before = Object.const_defined?(:Sentry, false)
-          initialized = Sentry.initialized?
-          after = Object.const_defined?(:Sentry, false)
-
-          puts JSON.generate(
-            "before" => before,
-            "after" => after,
-            "initialized" => initialized,
-          )
         RUBY
-      )
+        File.write(profile_path, JSON.pretty_generate(
+          "mode" => "boot_prune",
+          "extreme_boot" => {
+            "disable_eager_load" => false,
+            "skip_railties" => [],
+            "lazy_require_paths" => [],
+            "lazy_gems" => [gem_name],
+            "config_namespace_stubs" => [],
+          },
+          "pruning" => {
+            "disabled_require_paths" => [],
+            "disabled_railties" => [],
+          },
+        ))
 
-      assert status.success?, stderr
+        stdout, stderr, status = Open3.capture3(
+          {
+            "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+            "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+            "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+            "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+          },
+          RUBY,
+          "-e",
+          <<~RUBY,
+            require "json"
+            require "rails_dependency_pruner/early_boot"
 
-      payload = JSON.parse(stdout)
-      assert_equal false, payload.fetch("before")
-      assert_equal true, payload.fetch("after")
-      assert_equal true, payload.fetch("initialized")
+            before = Object.const_defined?(:Sentry, false)
+            initialized = Sentry.initialized?
+            after = Object.const_defined?(:Sentry, false)
 
-      early_payload = JSON.parse(File.read(output_path))
-      assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == "sentry-rails" }
+            puts JSON.generate(
+              "before" => before,
+              "after" => after,
+              "initialized" => initialized,
+            )
+          RUBY
+        )
+
+        assert status.success?, stderr
+
+        payload = JSON.parse(stdout)
+        assert_equal false, payload.fetch("before")
+        assert_equal true, payload.fetch("after")
+        assert_equal true, payload.fetch("initialized")
+
+        early_payload = JSON.parse(File.read(output_path))
+        assert early_payload.fetch("events").any? { |event| event["action"] == "loaded_lazy_gem" && event["matched_path"] == gem_name }
+      end
     end
   end
 
@@ -9357,6 +9368,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         gem "que"
         gem "rollbar"
         gem "sentry-rails"
+        gem "sentry-ruby"
         gem "sidekiq"
         gem "solid_queue"
       RUBY
@@ -9371,6 +9383,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             que (2.2.1)
             rollbar (3.6.2)
             sentry-rails (6.0.0)
+            sentry-ruby (6.0.0)
             sidekiq (8.0.8)
             solid_queue (1.2.1)
       LOCK
@@ -9487,12 +9500,12 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "8.1.3", payload.dig("runtime", "rails_version")
       assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
       assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
-      assert_equal %w[honeybadger rollbar sentry-rails], payload.dig("capabilities", "integrations")
+      assert_equal %w[honeybadger rollbar sentry-rails sentry-ruby], payload.dig("capabilities", "integrations")
       integration_policies = payload.dig("capabilities", "integration_gem_policies")
-      assert_equal %w[honeybadger rollbar sentry-rails], integration_policies.map { |entry| entry.fetch("gem") }
-      assert_equal %w[railtie_integration railtie_integration railtie_integration], integration_policies.map { |entry| entry.fetch("class") }
-      assert_equal %w[high high high], integration_policies.map { |entry| entry.fetch("risk") }
-      assert_equal [["disabled_in_profile"], ["disabled_in_profile"], ["disabled_in_profile"]], integration_policies.map { |entry| entry.fetch("strategies") }
+      assert_equal %w[honeybadger rollbar sentry-rails sentry-ruby], integration_policies.map { |entry| entry.fetch("gem") }
+      assert_equal %w[railtie_integration railtie_integration railtie_integration sdk_integration], integration_policies.map { |entry| entry.fetch("class") }
+      assert_equal %w[high high high high], integration_policies.map { |entry| entry.fetch("risk") }
+      assert_equal [["disabled_in_profile"], ["disabled_in_profile"], ["disabled_in_profile"], ["lazy_constant"]], integration_policies.map { |entry| entry.fetch("strategies") }
       assert_empty payload.dig("capabilities", "unclassified_integrations")
       assert_equal %w[bootsnap good_job puma que sidekiq solid_queue], payload.dig("capabilities", "adapters")
       adapter_policies = payload.dig("capabilities", "adapter_gem_policies")
@@ -9603,6 +9616,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         source "https://rubygems.org"
         gem "rack-mini-profiler"
         gem "sentry-rails"
+        gem "sentry-ruby"
         gem "solid_queue"
       RUBY
       FileUtils.mkdir_p(File.join(app_root, "app/jobs"))
@@ -9711,6 +9725,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "railtie_integration", payload.dig("external_integrations", "sentry-rails", "class")
       assert_equal "high", payload.dig("external_integrations", "sentry-rails", "risk")
       assert_equal ["disabled_in_profile"], payload.dig("external_integrations", "sentry-rails", "strategies")
+      assert_equal true, payload.dig("external_integrations", "sentry-ruby", "review_required")
+      assert_equal "review", payload.dig("external_integrations", "sentry-ruby", "status")
+      assert_equal "sdk_integration", payload.dig("external_integrations", "sentry-ruby", "class")
+      assert_equal "high", payload.dig("external_integrations", "sentry-ruby", "risk")
+      assert_equal ["lazy_constant"], payload.dig("external_integrations", "sentry-ruby", "strategies")
       assert_equal true, payload.dig("lazy_gems", "nokogiri", "review_required")
       assert_equal "review", payload.dig("lazy_gems", "nokogiri", "status")
       assert_equal ["Nokogiri"], payload.dig("lazy_gems", "nokogiri", "constants")
@@ -9718,8 +9737,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, payload.dig("lazy_gems", "ruby-vips", "review_required")
       assert_equal "review", payload.dig("lazy_gems", "ruby-vips", "status")
       assert_equal ["Vips"], payload.dig("lazy_gems", "ruby-vips", "constants")
-      assert_equal true, payload.dig("lazy_gems", "sentry-rails", "review_required")
-      assert_equal ["Sentry"], payload.dig("lazy_gems", "sentry-rails", "constants")
+      assert_equal true, payload.dig("lazy_gems", "sentry-ruby", "review_required")
+      assert_equal ["Sentry"], payload.dig("lazy_gems", "sentry-ruby", "constants")
       assert_equal true, payload.dig("canary", "review_required")
       assert_equal 0, payload.dig("canary", "duration_minutes")
       assert_equal 0, payload.dig("canary", "request_count")

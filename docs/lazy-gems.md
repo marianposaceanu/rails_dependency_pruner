@@ -39,10 +39,10 @@ The registry classes are:
 - `monkey_patch`
 - `unsafe_unknown`
 
-`railtie_integration` and `middleware_integration` gems require a reviewed
-`external_integrations` entry in the coverage manifest. Accepted statuses
-include `disabled_in_production`, `disabled_in_profile`, `covered`, `not_used`,
-and `no_production_dsn`.
+`railtie_integration`, `middleware_integration`, and `sdk_integration` gems
+require a reviewed `external_integrations` entry in the coverage manifest.
+Accepted statuses include `disabled_in_production`, `disabled_in_profile`,
+`covered`, `not_used`, and `no_production_dsn`.
 
 ## phases
 

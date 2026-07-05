@@ -196,6 +196,16 @@ Artifacts:
 - `tmp/observability-policy-coverage-mp-template.yml`
 - `tmp/observability-policy-coverage-mp-template.stdout`
 - `tmp/observability-policy-coverage-mp-template.time`
+- `tmp/sentry-sdk-policy-doctor-lobsters.json`
+- `tmp/sentry-sdk-policy-doctor-lobsters.time`
+- `tmp/sentry-sdk-policy-doctor-mp.json`
+- `tmp/sentry-sdk-policy-doctor-mp.time`
+- `tmp/sentry-sdk-policy-coverage-lobsters-template.yml`
+- `tmp/sentry-sdk-policy-coverage-lobsters-template.stdout`
+- `tmp/sentry-sdk-policy-coverage-lobsters-template.time`
+- `tmp/sentry-sdk-policy-coverage-mp-template.yml`
+- `tmp/sentry-sdk-policy-coverage-mp-template.stdout`
+- `tmp/sentry-sdk-policy-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -304,6 +314,24 @@ Coverage-template follow-up:
 
 Honeybadger and Rollbar are now classified as high-risk Railtie integrations in
 the policy registry. They did not appear in these two apps. No request RSS
+benchmark was run for generic_blog_app in this milestone.
+
+Sentry SDK policy static smoke:
+
+| app | artifact | integration policy surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/sentry-sdk-policy-doctor-lobsters.json` | `rack-mini-profiler:middleware_integration:medium`, `sentry-rails:railtie_integration:high`, `sentry-ruby:sdk_integration:high`; no unclassified integrations | `52805632` bytes |
+| generic_blog_app, generic blog simple app | `tmp/sentry-sdk-policy-doctor-mp.json` | no integration gems detected | `47562752` bytes |
+
+Coverage-template follow-up:
+
+| app | artifact | generated integration entries | generated lazy gems | max RSS |
+| --- | --- | --- | --- | ---: |
+| Lobsters | `tmp/sentry-sdk-policy-coverage-lobsters-template.yml` | `rack-mini-profiler`, `sentry-rails`, `sentry-ruby` | `nokogiri`, `ruby-vips`, `sentry-ruby` | `53329920` bytes |
+| generic_blog_app, generic blog simple app | `tmp/sentry-sdk-policy-coverage-mp-template.yml` | none | none | `47792128` bytes |
+
+Direct `Sentry` SDK use now maps to `lazy_gems.sentry-ruby`, while the Rails
+integration remains under `external_integrations.sentry-rails`. No request RSS
 benchmark was run for generic_blog_app in this milestone.
 
 Adapter policy doctor static smoke:
@@ -613,8 +641,9 @@ Direct lazy-gem proof smoke, static-only, generated a fresh Lobsters profile for
 - coverage template artifact:
   `tmp/lazy-gem-direct-use-lobsters-coverage-template.yml`; max RSS
   `42352640` bytes
-- template direct-use review entries: `nokogiri`, `sentry-rails`, and
-  `ruby-vips`
+- historical template direct-use review entries: `nokogiri`, `sentry-rails`,
+  and `ruby-vips`; current Sentry SDK templates use `sentry-ruby` as shown
+  above
 
 Small-app static smoke used `generic_blog_app`, the
 generic blog simple app. Doctor found Rails `8.1.3`, `34` route calls, no direct

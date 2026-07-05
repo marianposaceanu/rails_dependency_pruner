@@ -903,7 +903,7 @@ module RailsDependencyPruner
       def integration_policy?(policy)
         return false unless policy
 
-        %w[railtie_integration middleware_integration].include?(policy.gem_class)
+        %w[railtie_integration middleware_integration sdk_integration].include?(policy.gem_class)
       end
 
       def mount_path_for(source)

@@ -121,6 +121,13 @@ external_integrations:
     risk: high
     strategies:
       - disabled_in_profile
+  sentry-ruby:
+    review_required: false
+    status: covered
+    class: sdk_integration
+    risk: high
+    strategies:
+      - lazy_constant
 canary:
   review_required: false
   duration_minutes: 60

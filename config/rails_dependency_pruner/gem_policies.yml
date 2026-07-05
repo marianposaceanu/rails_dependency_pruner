@@ -151,6 +151,15 @@ sentry-rails:
   constants:
     - Sentry
   production_rule: require no production Sentry boot integration
+sentry-ruby:
+  class: sdk_integration
+  risk: high
+  strategies:
+    - lazy_constant
+  require: sentry-ruby
+  constants:
+    - Sentry
+  production_rule: require no production Sentry SDK boot use and reviewed first use
 sitemap_generator:
   class: pure_library
   risk: low

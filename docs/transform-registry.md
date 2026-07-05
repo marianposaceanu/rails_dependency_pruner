@@ -59,14 +59,16 @@ Current policy classes:
 - `native_heavy_library`
 - `railtie_integration`
 - `middleware_integration`
+- `sdk_integration`
 - `monkey_patch`
 - `unsafe_unknown`
 
-`railtie_integration` and `middleware_integration` lazy-gem transforms require
-a reviewed `external_integrations` entry in the coverage manifest. Generated
-templates use `review`, which is only a prompt. Production approval requires a
-specific status such as `disabled_in_production`, `disabled_in_profile`,
-`covered`, `not_used`, or `no_production_dsn`.
+`railtie_integration`, `middleware_integration`, and `sdk_integration`
+lazy-gem transforms require a reviewed `external_integrations` entry in the
+coverage manifest. Generated templates use `review`, which is only a prompt.
+Production approval requires a specific status such as
+`disabled_in_production`, `disabled_in_profile`, `covered`, `not_used`, or
+`no_production_dsn`.
 
 `stub:active_storage_vips_analyzer` is high risk. It is allowed only when the
 app has no Active Storage attachment DSL usage or when the coverage manifest
