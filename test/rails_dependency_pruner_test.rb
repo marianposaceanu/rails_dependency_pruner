@@ -6094,6 +6094,9 @@ class RailsDependencyPrunerTest < Minitest::Test
           eager_load: true
         routes:
           include: all
+        requests:
+          - GET / => 200
+          - GET /health => 200
         memory_policy:
           min_total_savings_mib: 20
           min_total_savings_percent: 10
@@ -6112,6 +6115,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         coverage_digest: coverage_digest,
         baseline_rss_kb: 100_000,
         candidate_rss_kb: 95_000,
+        request_paths: ["/", "/health"],
       )
 
       stdout, _stderr, status = Open3.capture3(
@@ -6150,6 +6154,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         coverage_digest: "sha256:stale",
         baseline_rss_kb: 100_000,
         candidate_rss_kb: 60_000,
+        request_paths: ["/", "/health"],
       )
 
       stale_stdout, _stale_stderr, stale_status = Open3.capture3(
@@ -6185,6 +6190,51 @@ class RailsDependencyPrunerTest < Minitest::Test
         },
       ], stale_payload.dig("production_risks", "measurement_context_gaps")
 
+      incomplete_measurement_path = File.join(dir, "incomplete-measurement.json")
+      write_measurement_report(
+        path: incomplete_measurement_path,
+        profile_id: profile_id,
+        coverage_digest: coverage_digest,
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 60_000,
+        request_paths: ["/"],
+      )
+
+      incomplete_stdout, _incomplete_stderr, incomplete_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        incomplete_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute incomplete_status.success?
+
+      incomplete_payload = JSON.parse(incomplete_stdout)
+      assert_includes incomplete_payload.fetch("errors"),
+        "production verify measurement context mismatch: measurement.request_paths missing reviewed paths /health"
+      assert_equal [
+        {
+          "requirement" => "measurement.request_paths",
+          "expected" => ["/", "/health"],
+          "actual" => ["/"],
+          "missing" => ["/health"],
+        },
+      ], incomplete_payload.dig("production_risks", "measurement_context_gaps")
+
       passing_measurement_path = File.join(dir, "passing-measurement.json")
       write_measurement_report(
         path: passing_measurement_path,
@@ -6192,6 +6242,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         coverage_digest: coverage_digest,
         baseline_rss_kb: 100_000,
         candidate_rss_kb: 60_000,
+        request_paths: ["/", "/health"],
       )
 
       approve_stdout, approve_stderr, approve_status = Open3.capture3(
@@ -10839,7 +10890,15 @@ class RailsDependencyPrunerTest < Minitest::Test
       coverage_path
     end
 
-    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil)
+    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil, request_paths: ["/"])
+      request_status_matrix = request_paths.to_h do |request_path|
+        [
+          request_path,
+          {
+            "statuses" => [200],
+          },
+        ]
+      end
       report = {
         "target" => "requests",
         "profile" => {
@@ -10849,23 +10908,15 @@ class RailsDependencyPrunerTest < Minitest::Test
           "baseline" => {
             "status" => "ok",
             "rss_kb_median" => baseline_rss_kb,
-            "request_status_matrix" => {
-              "/" => {
-                "statuses" => [200],
-              },
-            },
+            "request_status_matrix" => request_status_matrix,
           },
           candidate_variant => {
             "status" => "ok",
             "rss_kb_median" => candidate_rss_kb,
-            "request_status_matrix" => {
-              "/" => {
-                "statuses" => [200],
-              },
-            },
+            "request_status_matrix" => request_status_matrix,
           },
         },
-        "request_paths" => ["/"],
+        "request_paths" => request_paths,
       }
       if coverage_digest
         report["coverage"] = {

@@ -875,6 +875,17 @@ Artifacts: `tmp/measurement-context-doctor-lobsters.json`,
 `generic_blog_app/tmp/measurement-context-mp-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
 target remains open.
+Measurement-path verification follow-up rejects coverage-bound request
+measurements that omit reviewed request paths. Sequential static smokes still
+passed: Lobsters doctor max RSS `53657600` bytes, Lobsters coverage-template max
+RSS `53886976` bytes, generic_blog_app doctor max RSS `47808512` bytes, and
+generic_blog_app coverage-template max RSS `48267264` bytes. Artifacts:
+`tmp/measurement-paths-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/measurement-paths-lobsters-template.yml`,
+`tmp/measurement-paths-doctor-mp.json`, and
+`generic_blog_app/tmp/measurement-paths-mp-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
+target remains open.
 
 ## what eats memory
 

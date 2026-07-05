@@ -1305,6 +1305,7 @@ module RailsDependencyPruner
                 "actual" => actual_rails_env,
               }
             end
+            gaps.concat(measurement_request_path_gaps(expected_coverage_digest, actual_coverage_digest))
             gaps
           end
         end
@@ -1313,6 +1314,47 @@ module RailsDependencyPruner
       def measurement_profile_id
         measurement.dig("source_profile", "profile_id") ||
           measurement.dig("profile", "profile_id")
+      end
+
+      def measurement_request_path_gaps(expected_coverage_digest, actual_coverage_digest)
+        return [] unless expected_coverage_digest && actual_coverage_digest == expected_coverage_digest
+        return [] unless measurement_request_workload?
+
+        expected_paths = coverage_manifest_request_paths
+        return [] if expected_paths.empty?
+
+        actual_paths = measurement_request_paths
+        missing_paths = expected_paths - actual_paths
+        return [] if missing_paths.empty?
+
+        [
+          {
+            "requirement" => "measurement.request_paths",
+            "expected" => expected_paths,
+            "actual" => actual_paths,
+            "missing" => missing_paths,
+          },
+        ]
+      end
+
+      def measurement_request_workload?
+        measurement["target"] == "requests" ||
+          Array(measurement["request_paths"]).any? ||
+          Array(measurement.dig("coverage", "workloads")).map(&:to_s).include?("requests")
+      end
+
+      def coverage_manifest_request_paths
+        Array(coverage_manifest&.request_entries).map { |entry| entry.fetch("path") }.uniq.sort
+      end
+
+      def measurement_request_paths
+        paths = Array(measurement["request_paths"]).map(&:to_s).reject(&:empty?)
+        if paths.empty?
+          paths = measurement.fetch("variants", {}).values.flat_map do |summary|
+            summary.fetch("request_status_matrix", {}).keys
+          end
+        end
+        paths.uniq.sort
       end
 
       def dynamic_constantization_risks
@@ -1447,6 +1489,10 @@ module RailsDependencyPruner
       end
 
       def format_measurement_context_gap(gap)
+        if gap["requirement"] == "measurement.request_paths"
+          return "measurement.request_paths missing reviewed paths #{Array(gap["missing"]).join(", ")}"
+        end
+
         actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
         "#{gap.fetch("requirement")} expected #{gap.fetch("expected")}, got #{actual}"
       end
