@@ -3772,6 +3772,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes patch, "-require \"active_job/railtie\""
       assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie; proof: explanations.activejob)"
       assert_includes patch, "+# require \"active_job/railtie\""
+      assert_patch_applies(app_root: app_root, patch_path: patch_path)
 
       assert_equal boot_plan.fetch("required_frameworks"), profile.dig("boot_plan", "required_frameworks")
       assert_equal boot_plan.fetch("pruned_frameworks"), profile.dig("boot_plan", "pruned_frameworks")
@@ -5793,6 +5794,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie)"
       assert_includes patch, "+# require \"active_job/railtie\""
       assert_includes File.read(application_path), "require \"rails/all\""
+      assert_patch_applies(app_root: app_root, patch_path: patch_path)
     end
   end
 
@@ -5837,6 +5839,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie)"
       assert_includes patch, "+# require \"active_job/railtie\""
       assert_includes File.read(application_path), "require \"active_job/railtie\""
+      assert_patch_applies(app_root: app_root, patch_path: patch_path)
     end
   end
 
@@ -5944,6 +5947,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes patch, "+rails_env: production"
       assert_includes File.read(application_path), "require \"rails/all\""
       refute_includes File.read(production_path), "rails_dependency_pruner"
+      assert_patch_applies(app_root: app_root, patch_path: patch_path)
     end
   end
 
@@ -6964,6 +6968,18 @@ class RailsDependencyPrunerTest < Minitest::Test
   end
 
   private
+    def assert_patch_applies(app_root:, patch_path:)
+      Dir.mktmpdir("rails_dependency_pruner_patch_apply") do |dir|
+        check_root = File.join(dir, "app")
+        FileUtils.cp_r(app_root, check_root)
+        _init_stdout, init_stderr, init_status = Open3.capture3("git", "init", "--quiet", chdir: check_root)
+        assert init_status.success?, init_stderr
+
+        _apply_stdout, apply_stderr, apply_status = Open3.capture3("git", "apply", "--check", patch_path, chdir: check_root)
+        assert apply_status.success?, apply_stderr
+      end
+    end
+
     def write_coverage_manifest(app_root)
       coverage_path = File.join(app_root, "config/pruner_coverage.yml")
       FileUtils.mkdir_p(File.dirname(coverage_path))
