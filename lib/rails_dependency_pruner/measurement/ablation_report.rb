@@ -41,14 +41,16 @@ module RailsDependencyPruner
         def append_summary(lines)
           lines << "## Summary"
           lines << ""
-          lines << "| variant | status | transforms | RSS median | RSS saved | saved | boot ms | first req ms | p95 req ms | warm p95 ms | Rails features | GC slots | T_STRING |"
-          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          lines << "| variant | status | transforms | events | unexpected | RSS median | RSS saved | saved | boot ms | first req ms | p95 req ms | warm p95 ms | Rails features | GC slots | T_STRING |"
+          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           payload.fetch("variants", {}).each do |variant, summary|
             delta = delta_for(variant)
             lines << [
               table_cell(variant),
               table_cell(summary.fetch("status")),
               transform_ids_for(variant).length,
+              value(summary["events_count"]),
+              value(summary["unexpected_events_count"]),
               kb(summary["rss_kb_median"]),
               saved_kb(delta["rss_kb"]),
               saved_percent(delta["rss_kb"]),
@@ -179,6 +181,12 @@ module RailsDependencyPruner
 
         def table_cell(value)
           value.to_s.gsub("|", "\\|")
+        end
+
+        def value(number)
+          return "" if number.nil?
+
+          number.to_s
         end
 
         def kb(number)

@@ -170,6 +170,8 @@ module RailsDependencyPruner
           next unless summary.fetch("status") == "ok"
 
           puts "  RSS median: #{summary.fetch("rss_kb_median")} KB"
+          puts "  Events: #{summary.fetch("events_count")}" if summary.key?("events_count")
+          puts "  Unexpected events: #{summary.fetch("unexpected_events_count")}" if summary.key?("unexpected_events_count")
           puts "  Rails loaded features median: #{summary.fetch("rails_loaded_features_median")}"
           puts "  GC live slots median: #{summary.fetch("gc_heap_live_slots_median")}"
           framework_features = summary.fetch("rails_loaded_features_by_framework_median", {})

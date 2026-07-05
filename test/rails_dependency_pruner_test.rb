@@ -5486,6 +5486,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "- Target: `application`"
       assert_includes markdown, "| baseline | ok |"
       assert_includes markdown, "| shadow | ok |"
+      assert_includes markdown, "events | unexpected"
       assert_includes markdown, "## Process Memory"
       assert_includes markdown, "## Process Memory Deltas"
       assert_includes markdown, "physical footprint"
@@ -5516,6 +5517,67 @@ class RailsDependencyPrunerTest < Minitest::Test
 
     assert_equal 2368, RailsDependencyPruner::Measurement::MemoryProbe.parse_macos_physical_footprint_kb(vmmap)
     assert_equal 1536, RailsDependencyPruner::Measurement::MemoryProbe.parse_memory_size_kb("1.5M")
+  end
+
+  def test_measure_captures_early_boot_event_counts
+    Dir.mktmpdir("rails_dependency_pruner_measure_events") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      FileUtils.mkdir_p(File.join(app_root, "lib"))
+      File.write(File.join(app_root, "lib/blocked_feature.rb"), "# frozen_string_literal: true\n")
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
+        require "blocked_feature"
+      RUBY
+
+      profile_path = File.join(dir, "profile.json")
+      payload = {
+        "schema_version" => 3,
+        "profile_id" => nil,
+        "fingerprints" => { "profile_id" => nil },
+        "mode" => "boot_prune",
+        "pruning" => {
+          "disabled_frameworks" => [],
+          "disabled_railties" => [],
+          "disabled_require_paths" => [],
+          "disabled_constants" => [],
+        },
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => ["blocked_feature"],
+          "lazy_require_paths" => [],
+          "lazy_gems" => [],
+          "config_namespace_stubs" => [],
+        },
+        "safety" => {
+          "production_allowed" => false,
+        },
+      }
+      payload["transforms"] = RailsDependencyPruner::TransformRegistry.transforms_for_payload(payload)
+      payload["expected_events"] = payload.fetch("transforms").flat_map { |transform| Array(transform["expected_events"]) }
+      RailsDependencyPruner::ProfileSchema.set_profile_id(payload, RailsDependencyPruner::Profile.new(payload).digest)
+      RailsDependencyPruner::Profile.new(payload).write(profile_path)
+
+      report = RailsDependencyPruner::Measurement::Runner.new(
+        app_root: app_root,
+        variants: %w[baseline boot_prune],
+        profile_path: profile_path,
+        runs: 1,
+      ).run
+
+      assert_equal "ok", report.dig("variants", "baseline", "status")
+      assert_equal "ok", report.dig("variants", "boot_prune", "status")
+      assert_nil report.dig("variants", "baseline", "events_count")
+      assert_equal 1, report.dig("runs", "boot_prune", 0, "events_count")
+      assert_equal 1, report.dig("runs", "boot_prune", 0, "expected_events_count")
+      assert_equal 0, report.dig("runs", "boot_prune", 0, "unexpected_events_count")
+      assert_equal 1, report.dig("runs", "boot_prune", 0, "counters", "pruner.event.skipped_require")
+      assert_equal 1, report.dig("variants", "boot_prune", "events_count")
+      assert_equal 0, report.dig("variants", "boot_prune", "unexpected_events_count")
+      assert_equal 1, report.dig("variants", "boot_prune", "counters", "pruner.event.skipped_require")
+    end
   end
 
   def test_measure_ablation_reports_transform_buckets
@@ -5570,6 +5632,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "## Transform Sets"
       assert_includes markdown, "boot ms"
       assert_includes markdown, "warm p95 ms"
+      assert_includes markdown, "events | unexpected"
       assert_includes markdown, "RSS is process memory"
     end
   end

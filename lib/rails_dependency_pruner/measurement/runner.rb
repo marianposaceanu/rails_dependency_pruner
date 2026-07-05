@@ -2,6 +2,7 @@
 
 require "json"
 require "open3"
+require "tmpdir"
 
 require_relative "../profile"
 
@@ -224,20 +225,40 @@ module RailsDependencyPruner
         end
 
         def run_once(variant)
-          env = env_for(variant)
-          command = ruby_command + ["-e", BOOT_SCRIPT, app_root]
-          stdout, stderr, status = Open3.capture3(env, *command, chdir: app_root)
+          Dir.mktmpdir("rails_dependency_pruner_measure_events") do |dir|
+            early_output_path = File.join(dir, "early-boot.json")
+            env = env_for(variant)
+            env["RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT"] = early_output_path if env["RAILS_DEPENDENCY_PRUNER_PROFILE"]
+            command = ruby_command + ["-e", BOOT_SCRIPT, app_root]
+            stdout, stderr, status = Open3.capture3(env, *command, chdir: app_root)
 
-          if status.success?
-            parse_successful_run(stdout, stderr)
-          else
-            {
-              "status" => "error",
-              "exitstatus" => status.exitstatus,
-              "stdout" => stdout,
-              "stderr" => stderr,
-            }
+            result = if status.success?
+              parse_successful_run(stdout, stderr)
+            else
+              {
+                "status" => "error",
+                "exitstatus" => status.exitstatus,
+                "stdout" => stdout,
+                "stderr" => stderr,
+              }
+            end
+            merge_early_boot_summary(result, early_output_path)
           end
+        end
+
+        def merge_early_boot_summary(result, path)
+          return result unless File.file?(path)
+
+          summary = JSON.parse(File.read(path))
+          result["events_count"] = summary["events_count"].to_i if summary.key?("events_count")
+          result["expected_events_count"] = summary["expected_events_count"].to_i if summary.key?("expected_events_count")
+          result["unexpected_events_count"] = summary["unexpected_events_count"].to_i if summary.key?("unexpected_events_count")
+          result["counters"] = summary["counters"] if summary["counters"].is_a?(Hash)
+          result["early_boot_event_summary"] = summary.reject { |key, _value| key == "events" }
+          result
+        rescue JSON::ParserError => error
+          result["early_boot_event_summary_error"] = error.message
+          result
         end
 
         def parse_successful_run(stdout, stderr)
@@ -369,6 +390,8 @@ module RailsDependencyPruner
 
           request_status_matrix = summarize_request_status_matrix(runs)
           summary["request_status_matrix"] = request_status_matrix unless request_status_matrix.empty?
+          event_counts = summarize_event_counts(runs)
+          summary.merge!(event_counts) unless event_counts.empty?
           summary
         end
 
@@ -437,6 +460,32 @@ module RailsDependencyPruner
             path_result["statuses"] = statuses unless statuses.empty?
             path_result["errors"] = errors unless errors.empty?
             result[path] = path_result unless path_result.empty?
+          end
+        end
+
+        def summarize_event_counts(runs)
+          event_runs = runs.select do |run|
+            run.key?("events_count") ||
+              run.key?("expected_events_count") ||
+              run.key?("unexpected_events_count") ||
+              !run.fetch("counters", {}).empty?
+          end
+          return {} if event_runs.empty?
+
+          summary = {}
+          %w[events_count expected_events_count unexpected_events_count].each do |key|
+            values = event_runs.filter_map { |run| run[key] }
+            summary[key] = values.max unless values.empty?
+          end
+          counters = summarize_counters(event_runs)
+          summary["counters"] = counters unless counters.empty?
+          summary
+        end
+
+        def summarize_counters(runs)
+          keys = runs.flat_map { |run| run.fetch("counters", {}).keys }.uniq.sort
+          keys.to_h do |key|
+            [key, runs.sum { |run| run.fetch("counters", {}).fetch(key, 0).to_i }]
           end
         end
 

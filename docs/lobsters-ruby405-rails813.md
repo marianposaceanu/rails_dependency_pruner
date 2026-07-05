@@ -56,11 +56,11 @@ Strict no-`svg-graph` profile smoke, one run:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | requests | `233072 KB` | `129920 KB` | `103152 KB` (`100.7 MiB`, `44.3%`) | `2610.6 -> 871.0` | `14.3 -> 231.4` | `4.2 -> 23.9` | `-201` | `-273497` |
 
-Request-status policy smoke, one run:
+Request-status and event-policy smoke, one run:
 
-| target | baseline RSS | production RSS | saved RSS | request status gate |
-| --- | ---: | ---: | ---: | --- |
-| requests | `254528 KB` | `120640 KB` | `133888 KB` (`130.8 MiB`, `52.6%`) | passed for `/privacy`, `/login`, `/404` |
+| target | baseline RSS | production RSS | saved RSS | events | unexpected | request status gate |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| requests | `232672 KB` | `123344 KB` | `109328 KB` (`106.8 MiB`, `47.0%`) | `2` | `0` | passed for `/privacy`, `/login`, `/404` |
 
 The strict-profile request smoke hit `/privacy` and `/login` with `200`, and
 `/404` with `404`. The first request is slower because deferred boot work moves

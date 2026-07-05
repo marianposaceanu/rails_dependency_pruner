@@ -73,13 +73,15 @@ module RailsDependencyPruner
         def append_variants(lines)
           lines << "## Variants"
           lines << ""
-          lines << "| variant | status | runs | RSS median | RSS min | RSS max | boot ms | first req ms | p95 req ms | warm p95 ms | loaded features | Rails features | GC live slots |"
-          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          lines << "| variant | status | runs | events | unexpected | RSS median | RSS min | RSS max | boot ms | first req ms | p95 req ms | warm p95 ms | loaded features | Rails features | GC live slots |"
+          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           payload.fetch("variants", {}).each do |variant, summary|
             lines << [
               table_cell(variant),
               table_cell(summary.fetch("status")),
               summary.fetch("successful_runs", 0),
+              value(summary["events_count"]),
+              value(summary["unexpected_events_count"]),
               kb(summary["rss_kb_median"]),
               kb(summary["rss_kb_min"]),
               kb(summary["rss_kb_max"]),

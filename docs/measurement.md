@@ -111,6 +111,8 @@ The report records:
 - `GC.stat[:heap_live_slots]`
 - live Ruby object type counts from `ObjectSpace.count_objects`
 - request status and response size for request-warmed runs
+- early-boot event counts, unexpected-event counts, and telemetry counters when
+  a profiled variant runs
 - app boot time, first request time, and warmed request percentiles
 
 The Rails part of memory shows up in three surfaces:
