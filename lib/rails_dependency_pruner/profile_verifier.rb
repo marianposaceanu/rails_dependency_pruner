@@ -142,6 +142,9 @@ module RailsDependencyPruner
         unsupported_lazy_gems.each do |name|
           errors << "production verify found unsupported lazy gem: #{name}"
         end
+        unsupported_lazy_constant_policies.each do |policy|
+          errors << "production verify found unsupported lazy constant policy: #{format_unsupported_lazy_constant_policy(policy)}"
+        end
         structured_lazy_gem_policy_gaps.each do |gap|
           errors << "production verify missing structured lazy gem policy: #{format_structured_lazy_gem_policy_gap(gap)}"
         end
@@ -187,6 +190,7 @@ module RailsDependencyPruner
           "extreme_boot_static_matches" => extreme_boot_static_matches,
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
+          "unsupported_lazy_constant_policies" => unsupported_lazy_constant_policies,
           "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
           "external_integration_gaps" => external_integration_gaps,
           "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
@@ -452,6 +456,27 @@ module RailsDependencyPruner
             "mismatched_fields" => mismatched_fields,
           }
         end.sort_by { |gap| [gap.fetch("gem"), gap.fetch("constant")] }
+      end
+
+      def unsupported_lazy_constant_policies
+        @unsupported_lazy_constant_policies ||= begin
+          expected_constants = lazy_constant_policy_requirements.map { |requirement| requirement.fetch("constant") }.to_set
+          policies = profile.payload["lazy_constants"]
+          if policies.is_a?(Hash)
+            policies.filter_map do |constant, policy|
+              constant = constant.to_s
+              next if expected_constants.include?(constant)
+
+              {
+                "constant" => constant,
+                "gem" => policy.is_a?(Hash) ? policy["gem"].to_s : nil,
+                "allowed_constants" => expected_constants.to_a.sort,
+              }
+            end.sort_by { |policy| [policy["gem"].to_s, policy.fetch("constant")] }
+          else
+            []
+          end
+        end
       end
 
       def external_integration_gaps
@@ -1034,6 +1059,12 @@ module RailsDependencyPruner
         parts << "mismatched #{mismatched.join(", ")}" unless mismatched.empty?
 
         "#{gap.fetch("constant")} for #{gap.fetch("gem")} #{parts.join("; ")}"
+      end
+
+      def format_unsupported_lazy_constant_policy(policy)
+        gem = policy["gem"].to_s.empty? ? "unknown gem" : policy["gem"]
+
+        "#{policy.fetch("constant")} for #{gem}"
       end
 
       def format_external_integration_gap(gap)

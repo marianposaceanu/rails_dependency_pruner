@@ -2886,6 +2886,80 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_extra_lazy_constant_policy
+    Dir.mktmpdir("rails_dependency_pruner_extra_lazy_constant_policy") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "faker",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      profile_payload = JSON.parse(File.read(profile_path))
+      profile_payload["lazy_constants"]["FakerTools"] = {
+        "gem" => "faker",
+        "require" => "faker",
+        "allowed_phases" => [],
+        "disallowed_phases" => [],
+      }
+      RailsDependencyPruner::ProfileSchema.set_profile_id(profile_payload, RailsDependencyPruner::Profile.new(profile_payload).digest)
+      File.write(profile_path, JSON.pretty_generate(profile_payload))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify found unsupported lazy constant policy: FakerTools for faker"
+      assert_equal(
+        [
+          {
+            "constant" => "FakerTools",
+            "gem" => "faker",
+            "allowed_constants" => ["Faker"],
+          },
+        ],
+        payload.dig("production_risks", "unsupported_lazy_constant_policies"),
+      )
+      assert_empty payload.dig("production_risks", "lazy_constant_policy_gaps")
+    end
+  end
+
   def test_verify_production_rejects_extreme_boot_static_mailbox_usage
     Dir.mktmpdir("rails_dependency_pruner_extreme_static_verify") do |dir|
       app_root = File.join(dir, "app")

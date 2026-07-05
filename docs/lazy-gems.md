@@ -51,6 +51,10 @@ modes record every lazy load event. Canary rejects unexpected or disallowed
 events. Production fails closed for unexpected boot events and reports request
 events unless the profile asks for stricter behavior.
 
+The lazy constant list is an allowlist from the gem policy registry. Production
+verification rejects extra `lazy_constants` entries, even when they point to an
+approved lazy gem.
+
 ## measuring
 
 Use ablation to keep only lazy-gem groups that actually save RSS:
