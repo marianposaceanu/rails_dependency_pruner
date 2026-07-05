@@ -118,6 +118,8 @@ The report records:
 - Rails loaded features grouped by framework gem
 - `GC.stat[:heap_live_slots]`
 - live Ruby object type counts from `ObjectSpace.count_objects`
+- optional ObjectSpace memsize by Ruby object type and class when
+  `--object-memory` is set
 - request status and response size for request-warmed runs
 - early-boot event counts, unexpected-event counts, and telemetry counters when
   a profiled variant runs
@@ -127,7 +129,8 @@ The Rails part of memory shows up in three surfaces:
 
 Generated Markdown reports include process memory tables for variant medians and
 deltas so RSS, PSS, USS, and physical footprint can be compared without opening
-the JSON artifact.
+the JSON artifact. With `--object-memory`, they also include top Ruby heap
+classes and class-size deltas.
 
 - framework code and constants loaded from gems such as `activerecord`,
   `actionview`, `activestorage`, and `railties`

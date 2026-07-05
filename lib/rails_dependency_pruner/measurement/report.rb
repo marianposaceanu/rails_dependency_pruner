@@ -25,7 +25,9 @@ module RailsDependencyPruner
         append_process_memory_deltas(lines)
         append_framework_deltas(lines)
         append_object_deltas(lines)
-        lines << "RSS is reported from the measured process. PSS/USS appear on Linux when `/proc/self/smaps_rollup` is available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Request timings are in-process Rack mock timings. Compare process memory with loaded-feature and GC-slot deltas before claiming a memory win."
+        append_object_memory(lines)
+        append_object_memory_deltas(lines)
+        lines << "RSS is reported from the measured process. PSS/USS appear on Linux when `/proc/self/smaps_rollup` is available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Object memory appears when `--object-memory` is set. Request timings are in-process Rack mock timings. Compare process memory with loaded-feature and GC-slot deltas before claiming a memory win."
         lines << ""
         lines.join("\n")
       end
@@ -258,6 +260,54 @@ module RailsDependencyPruner
           lines << ""
         end
 
+        def append_object_memory(lines)
+          rows = payload.fetch("variants", {}).filter_map do |variant, summary|
+            classes = summary.fetch("object_memsize_by_class_median", {})
+            types = summary.fetch("object_memsize_by_type_median", {})
+            next if classes.empty? && types.empty?
+
+            [
+              table_cell(variant),
+              table_cell(top_memory_classes(classes)),
+              table_cell(top_memory_classes(types)),
+            ]
+          end
+          return if rows.empty?
+
+          lines << "## Ruby Object Memory"
+          lines << ""
+          lines << "| variant | largest classes | largest types |"
+          lines << "| --- | --- | --- |"
+          rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
+        def append_object_memory_deltas(lines)
+          rows = payload.fetch("deltas", {}).filter_map do |variant, delta|
+            classes = delta.fetch("object_memsize_by_class", {})
+            types = delta.fetch("object_memsize_by_type", {})
+            next if classes.empty? && types.empty?
+
+            [
+              table_cell(variant),
+              table_cell(top_memory_reductions(classes)),
+              table_cell(top_memory_reductions(types)),
+            ]
+          end
+          return if rows.empty?
+
+          lines << "## Ruby Object Memory Deltas"
+          lines << ""
+          lines << "| variant | largest class reductions | largest type reductions |"
+          lines << "| --- | --- | --- |"
+          rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
         def list(values)
           values = Array(values)
           return "`none`" if values.empty?
@@ -297,6 +347,37 @@ module RailsDependencyPruner
           return "" if number.nil?
 
           "`#{signed(number)} KB`"
+        end
+
+        def top_memory_classes(values)
+          top = values.reject { |key, _value| %w[FREE TOTAL].include?(key) }
+            .sort_by { |_key, value| -value.to_f }
+            .first(5)
+          return "`none`" if top.empty?
+
+          top.map { |key, value| "`#{key}` #{bytes(value)}" }.join(", ")
+        end
+
+        def top_memory_reductions(values)
+          top = values.reject { |key, _value| %w[FREE TOTAL].include?(key) }
+            .select { |_key, value| value.to_f.negative? }
+            .sort_by { |_key, value| value.to_f }
+            .first(5)
+          return "`none`" if top.empty?
+
+          top.map { |key, value| "`#{key}` #{signed_bytes(value)}" }.join(", ")
+        end
+
+        def bytes(number)
+          return "" if number.nil?
+
+          "`#{format("%.1f", number.to_f / 1024.0)} KiB`"
+        end
+
+        def signed_bytes(number)
+          return "" if number.nil?
+
+          "`#{format("%+.1f", number.to_f / 1024.0)} KiB`"
         end
 
         def signed_ms(number)

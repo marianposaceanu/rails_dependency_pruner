@@ -20,8 +20,9 @@ module RailsDependencyPruner
         append_process_memory(lines)
         append_rails_memory_buckets(lines)
         append_object_buckets(lines)
+        append_object_memory_buckets(lines)
         append_transform_sets(lines)
-        lines << "RSS is process memory. PSS/USS appear on Linux when available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Rails feature buckets and Ruby object counts are attribution signals, not byte-exact ownership."
+        lines << "RSS is process memory. PSS/USS appear on Linux when available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Object memory appears when `--object-memory` is set. Rails feature buckets and Ruby object counts are attribution signals, not byte-exact ownership."
         lines << ""
         lines.join("\n")
       end
@@ -131,6 +132,32 @@ module RailsDependencyPruner
           lines << ""
         end
 
+        def append_object_memory_buckets(lines)
+          rows = payload.fetch("deltas", {}).filter_map do |variant, delta|
+            classes = delta.fetch("object_memsize_by_class", {})
+            types = delta.fetch("object_memsize_by_type", {})
+            next if classes.empty? && types.empty?
+
+            [
+              table_cell(variant),
+              table_cell(top_memory_reductions(classes)),
+              table_cell(top_memory_reductions(types)),
+            ]
+          end
+          return if rows.empty?
+
+          lines << "## Ruby Object Memory Buckets"
+          lines << ""
+          lines << "These are ObjectSpace memsize deltas by Ruby class and object type. Use them to spot which Ruby heap classes moved when a transform is active."
+          lines << ""
+          lines << "| variant | largest class reductions | largest type reductions |"
+          lines << "| --- | --- | --- |"
+          rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
         def append_transform_sets(lines)
           variants = Array(payload["ablation_variants"])
           return if variants.empty?
@@ -180,6 +207,16 @@ module RailsDependencyPruner
           top_reductions(values.reject { |key, _value| %w[FREE TOTAL].include?(key) })
         end
 
+        def top_memory_reductions(values)
+          reductions = values.reject { |key, _value| %w[FREE TOTAL].include?(key) }
+            .select { |_key, value| value.to_f.negative? }
+            .sort_by { |_key, value| value.to_f }
+            .first(5)
+          return "`none`" if reductions.empty?
+
+          reductions.map { |key, value| "`#{key}` #{signed_bytes(value)}" }.join(", ")
+        end
+
         def list(values)
           values = Array(values)
           return "`none`" if values.empty?
@@ -226,6 +263,12 @@ module RailsDependencyPruner
           return "" if number.nil?
 
           number.positive? ? "+#{number}" : number.to_s
+        end
+
+        def signed_bytes(number)
+          return "" if number.nil?
+
+          "`#{format("%+.1f", number.to_f / 1024.0)} KiB`"
         end
     end
   end

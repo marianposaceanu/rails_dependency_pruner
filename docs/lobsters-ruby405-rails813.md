@@ -832,12 +832,22 @@ RSS `47923200` bytes, and generic_blog_app coverage-template max RSS `48496640`
 bytes. Artifacts: `tmp/env-scan-doctor-lobsters.json`,
 `tmp/env-scan-coverage-lobsters-template.yml`, `tmp/env-scan-doctor-mp.json`,
 and `tmp/env-scan-coverage-mp-template.yml`.
+Object-memory measurement follow-up added opt-in ObjectSpace memsize by Ruby
+type and class via `--object-memory`. Sequential static smokes still passed:
+Lobsters doctor max RSS `53411840` bytes, Lobsters coverage-template max RSS
+`54214656` bytes, generic_blog_app doctor max RSS `47742976` bytes, and
+generic_blog_app coverage-template max RSS `48136192` bytes. Artifacts:
+`tmp/object-memory-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/object-memory-coverage-lobsters-template.yml`,
+`tmp/object-memory-doctor-mp.json`, and
+`generic_blog_app/tmp/object-memory-coverage-mp-template.yml`.
 
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,
 not exact framework memory ownership. The measurement can prove process RSS,
-loaded Rails feature counts, and GC live-slot deltas.
+loaded Rails feature counts, opt-in ObjectSpace class-size deltas, and GC
+live-slot deltas.
 
 Request-warmed framework deltas:
 

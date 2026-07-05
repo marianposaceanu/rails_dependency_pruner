@@ -8938,6 +8938,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         "baseline,shadow",
         "--runs",
         "1",
+        "--object-memory",
         "--output",
         report_path,
         "--markdown",
@@ -8950,13 +8951,18 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       payload = JSON.parse(stdout)
       assert_equal "application", payload.fetch("target")
+      assert_equal true, payload.fetch("object_memory")
       assert_equal "ok", payload.dig("variants", "baseline", "status")
       assert_equal "ok", payload.dig("variants", "shadow", "status")
       assert_operator payload.dig("variants", "baseline", "rss_kb_median"), :>, 0
       assert_operator payload.dig("variants", "baseline", "process_memory_median", "rss_kb"), :>, 0
+      assert_operator payload.dig("variants", "baseline", "object_memsize_by_class_median", "String"), :>, 0
+      assert_operator payload.dig("variants", "baseline", "object_memsize_by_type_median", "T_STRING"), :>, 0
       assert_kind_of Hash, payload.dig("variants", "baseline", "rails_loaded_features_by_framework_median")
       assert payload.dig("deltas", "shadow").key?("rss_kb")
       assert payload.dig("deltas", "shadow", "process_memory").key?("rss_kb")
+      assert_kind_of Hash, payload.dig("deltas", "shadow", "object_memsize_by_class")
+      assert_kind_of Hash, payload.dig("deltas", "shadow", "object_memsize_by_type")
       assert_kind_of Hash, payload.dig("deltas", "shadow", "rails_loaded_features_by_framework")
       assert_equal "sha256:test", payload.dig("profile", "profile_id")
       assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
@@ -8972,6 +8978,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "events | unexpected"
       assert_includes markdown, "## Process Memory"
       assert_includes markdown, "## Process Memory Deltas"
+      assert_includes markdown, "## Ruby Object Memory"
+      assert_includes markdown, "## Ruby Object Memory Deltas"
       assert_includes markdown, "physical footprint"
       assert_includes markdown, "## Deltas Vs Baseline"
       assert_includes markdown, "## Rails Features By Framework"
@@ -9088,6 +9096,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         profile_path,
         "--runs",
         "1",
+        "--object-memory",
         "--output",
         report_path,
         "--markdown",
@@ -9101,10 +9110,13 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal true, payload.fetch("ablation")
       assert_equal "application", payload.fetch("target")
+      assert_equal true, payload.fetch("object_memory")
       assert_equal "ok", payload.dig("variants", "baseline", "status")
       assert_equal "ok", payload.dig("variants", "all_approved_transforms", "status")
       assert_kind_of Hash, payload.dig("variants", "baseline", "object_counts_median")
+      assert_operator payload.dig("variants", "baseline", "object_memsize_by_class_median", "String"), :>, 0
       assert_kind_of Hash, payload.dig("deltas", "all_approved_transforms", "object_counts")
+      assert_kind_of Hash, payload.dig("deltas", "all_approved_transforms", "object_memsize_by_class")
       variant_names = payload.fetch("ablation_variants").map { |variant| variant.fetch("name") }
       assert_includes variant_names, "disable_eager_load_only"
       assert_includes variant_names, "lazy_gems_only"
@@ -9121,6 +9133,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "## Process Memory"
       assert_includes markdown, "## Rails Memory Buckets"
       assert_includes markdown, "## Ruby Object Buckets"
+      assert_includes markdown, "## Ruby Object Memory Buckets"
       assert_includes markdown, "## Transform Sets"
       assert_includes markdown, "assessment"
       assert_includes markdown, "boot ms"
@@ -9565,12 +9578,16 @@ class RailsDependencyPrunerTest < Minitest::Test
       variants: ["baseline"],
       runs: 1,
       process_memory_details: true,
+      object_memory: true,
     )
 
     assert_equal "1", runner.send(:env_for, "baseline").fetch("RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS")
+    assert_equal "1", runner.send(:env_for, "baseline").fetch("RAILS_DEPENDENCY_PRUNER_OBJECT_MEMORY")
 
     report = runner.run
     assert_equal true, report.fetch("process_memory_details")
+    assert_equal true, report.fetch("object_memory")
+    assert_operator report.dig("variants", "baseline", "object_memsize_by_class_median", "String"), :>, 0
   end
 
   def test_measure_runner_parses_json_after_app_stdout_noise

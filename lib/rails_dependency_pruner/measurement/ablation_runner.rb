@@ -24,9 +24,9 @@ module RailsDependencyPruner
       end
 
       attr_reader :app_root, :profile_path, :coverage_path, :runs, :target, :request_paths,
-        :process_memory_details
+        :process_memory_details, :object_memory
 
-      def initialize(app_root:, profile_path:, coverage_path: nil, runs: 5, target: "application", request_paths: [], process_memory_details: false)
+      def initialize(app_root:, profile_path:, coverage_path: nil, runs: 5, target: "application", request_paths: [], process_memory_details: false, object_memory: false)
         @app_root = File.expand_path(app_root)
         @profile_path = File.expand_path(profile_path)
         @coverage_path = coverage_path && File.expand_path(coverage_path)
@@ -34,6 +34,7 @@ module RailsDependencyPruner
         @target = target
         @request_paths = Array(request_paths)
         @process_memory_details = process_memory_details == true
+        @object_memory = object_memory == true
       end
 
       def run
@@ -48,6 +49,7 @@ module RailsDependencyPruner
             request_paths: request_paths,
             variant_profile_paths: profile_paths,
             process_memory_details: process_memory_details,
+            object_memory: object_memory,
           ).run
 
           report = report.merge(

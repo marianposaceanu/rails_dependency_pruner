@@ -22,7 +22,7 @@ module RailsDependencyPruner
 
       def snapshot
         process_memory = process_memory_snapshot
-        {
+        payload = {
           "rss_kb" => process_memory.fetch("rss_kb"),
           "process_memory" => process_memory,
           "loaded_features" => $LOADED_FEATURES.length,
@@ -31,6 +31,11 @@ module RailsDependencyPruner
           "object_counts" => object_counts,
           "gc_heap_live_slots" => GC.stat[:heap_live_slots],
         }
+        if object_memory?
+          payload["object_memsize_by_type"] = object_memsize_by_type
+          payload["object_memsize_by_class"] = object_memsize_by_class
+        end
+        payload
       end
 
       def rss_kb
@@ -48,6 +53,10 @@ module RailsDependencyPruner
 
       def detailed_process_memory?
         ENV["RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS"] == "1"
+      end
+
+      def object_memory?
+        ENV["RAILS_DEPENDENCY_PRUNER_OBJECT_MEMORY"] == "1"
       end
 
       def linux_smaps_rollup_memory(path = "/proc/self/smaps_rollup")
@@ -122,6 +131,38 @@ module RailsDependencyPruner
 
       def object_counts
         ObjectSpace.count_objects.transform_keys(&:to_s)
+      end
+
+      def object_memsize_by_type
+        require "objspace"
+
+        ObjectSpace.count_objects_size.transform_keys(&:to_s)
+      rescue LoadError
+        {}
+      end
+
+      def object_memsize_by_class
+        require "objspace"
+
+        sizes = Hash.new(0)
+        ObjectSpace.each_object do |object|
+          bytes = ObjectSpace.memsize_of(object)
+          next if bytes.zero?
+
+          sizes[object_class_name(object)] += bytes
+        rescue StandardError
+          next
+        end
+        sizes.sort.to_h
+      rescue LoadError
+        {}
+      end
+
+      def object_class_name(object)
+        klass = object.class
+        klass.name || klass.inspect
+      rescue StandardError
+        "(unknown)"
       end
     end
   end

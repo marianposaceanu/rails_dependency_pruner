@@ -185,9 +185,9 @@ module RailsDependencyPruner
       TARGETS = %w[application environment requests].freeze
 
       attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties, :request_paths,
-        :variant_profile_paths, :process_memory_details
+        :variant_profile_paths, :process_memory_details, :object_memory
 
-      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {}, process_memory_details: false)
+      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {}, process_memory_details: false, object_memory: false)
         @app_root = File.expand_path(app_root)
         @variants = variants
         @runs = runs
@@ -199,6 +199,7 @@ module RailsDependencyPruner
           File.expand_path(path)
         end
         @process_memory_details = process_memory_details == true
+        @object_memory = object_memory == true
       end
 
       def run
@@ -214,6 +215,7 @@ module RailsDependencyPruner
           "deltas" => deltas(results),
         }
         report["process_memory_details"] = true if process_memory_details
+        report["object_memory"] = true if object_memory
         report["request_paths"] = request_paths if target == "requests"
         report["profile"] = profile_metadata if profile_path
         report
@@ -316,6 +318,7 @@ module RailsDependencyPruner
             "RUBYLIB" => ruby_lib,
           }
           env["RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS"] = "1" if process_memory_details
+          env["RAILS_DEPENDENCY_PRUNER_OBJECT_MEMORY"] = "1" if object_memory
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES"] = skip_railties.join(",") if skip_railties_variant?(variant)
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS"] = JSON.generate(request_paths) if target == "requests"
           env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))
@@ -378,6 +381,10 @@ module RailsDependencyPruner
             "object_counts_median" => summarize_numeric_hash(runs, "object_counts"),
             "gc_heap_live_slots_median" => median(runs.map { |run| run.fetch("gc_heap_live_slots") }),
           }
+          object_memsize_by_type = summarize_numeric_hash(runs, "object_memsize_by_type")
+          object_memsize_by_class = summarize_numeric_hash(runs, "object_memsize_by_class")
+          summary["object_memsize_by_type_median"] = object_memsize_by_type unless object_memsize_by_type.empty?
+          summary["object_memsize_by_class_median"] = object_memsize_by_class unless object_memsize_by_class.empty?
           {
             "boot_time_ms_median" => median_for_key(runs, "boot_time_ms"),
             "first_request_duration_ms_median" => median_for_key(runs, "first_request_duration_ms"),
@@ -406,7 +413,7 @@ module RailsDependencyPruner
             summary = summarize(runs)
             next [variant, { "status" => "error" }] unless summary["status"] == "ok"
 
-            [variant, {
+            delta = {
               "rss_kb" => summary.fetch("rss_kb_median") - baseline.fetch("rss_kb_median"),
               "loaded_features" => summary.fetch("loaded_features_median") - baseline.fetch("loaded_features_median"),
               "rails_loaded_features" => summary.fetch("rails_loaded_features_median") - baseline.fetch("rails_loaded_features_median"),
@@ -429,7 +436,21 @@ module RailsDependencyPruner
               "request_duration_ms_p99" => numeric_delta(summary, baseline, "request_duration_ms_p99_median"),
               "warmed_request_duration_ms_p95" => numeric_delta(summary, baseline, "warmed_request_duration_ms_p95_median"),
               "warmed_request_duration_ms_p99" => numeric_delta(summary, baseline, "warmed_request_duration_ms_p99_median"),
-            }.compact]
+            }.compact
+            if baseline.key?("object_memsize_by_type_median") || summary.key?("object_memsize_by_type_median")
+              delta["object_memsize_by_type"] = numeric_hash_delta(
+                baseline.fetch("object_memsize_by_type_median", {}),
+                summary.fetch("object_memsize_by_type_median", {}),
+              )
+            end
+            if baseline.key?("object_memsize_by_class_median") || summary.key?("object_memsize_by_class_median")
+              delta["object_memsize_by_class"] = numeric_hash_delta(
+                baseline.fetch("object_memsize_by_class_median", {}),
+                summary.fetch("object_memsize_by_class_median", {}),
+              )
+            end
+
+            [variant, delta]
           end.compact.to_h
         end
 

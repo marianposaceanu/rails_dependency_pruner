@@ -244,6 +244,7 @@ module RailsDependencyPruner
           target: options.fetch(:target),
           request_paths: options.fetch(:request_paths),
           process_memory_details: options.fetch(:process_memory_details),
+          object_memory: options.fetch(:object_memory),
         ).run
 
         if options[:output_path]
@@ -278,6 +279,7 @@ module RailsDependencyPruner
           skip_railties: options.fetch(:skip_railties),
           request_paths: options.fetch(:request_paths),
           process_memory_details: options.fetch(:process_memory_details),
+          object_memory: options.fetch(:object_memory),
         ).run
 
         if options[:output_path]

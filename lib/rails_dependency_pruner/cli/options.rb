@@ -461,6 +461,7 @@ module RailsDependencyPruner
           skip_railties: [],
           request_paths: [],
           process_memory_details: false,
+          object_memory: false,
           output_path: nil,
           markdown_path: nil,
           json: false,
@@ -476,6 +477,7 @@ module RailsDependencyPruner
           parser.on("--skip-railties PATHS", "Comma-separated railties for skip_railties variants") { |paths| options[:skip_railties] = split_csv(paths) }
           parser.on("--request-paths PATHS", "Comma-separated paths for --target requests") { |paths| options[:request_paths] = split_csv(paths) }
           parser.on("--process-memory-details", "Collect platform-specific memory details such as macOS physical footprint") { options[:process_memory_details] = true }
+          parser.on("--object-memory", "Collect ObjectSpace memsize by Ruby type and class") { options[:object_memory] = true }
           parser.on("--output PATH", "Write measurement JSON") { |path| options[:output_path] = path }
           parser.on("--markdown PATH", "Write measurement Markdown") { |path| options[:markdown_path] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
@@ -510,6 +512,7 @@ module RailsDependencyPruner
           target: "application",
           request_paths: [],
           process_memory_details: false,
+          object_memory: false,
           output_path: nil,
           markdown_path: nil,
           json: false,
@@ -524,6 +527,7 @@ module RailsDependencyPruner
           parser.on("--target NAME", "Measure target: application, environment, or requests") { |target| options[:target] = target }
           parser.on("--request-paths PATHS", "Comma-separated paths for --target requests") { |paths| options[:request_paths] = split_csv(paths) }
           parser.on("--process-memory-details", "Collect platform-specific memory details such as macOS physical footprint") { options[:process_memory_details] = true }
+          parser.on("--object-memory", "Collect ObjectSpace memsize by Ruby type and class") { options[:object_memory] = true }
           parser.on("--output PATH", "Write ablation JSON") { |path| options[:output_path] = path }
           parser.on("--markdown PATH", "Write ablation Markdown") { |path| options[:markdown_path] = path }
           parser.on("--json", "Print JSON output") { options[:json] = true }
