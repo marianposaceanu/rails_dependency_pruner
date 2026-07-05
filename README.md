@@ -241,6 +241,9 @@ action_text:
   review_required: false
   rich_text_expected: false
   declarations: []
+external_integrations:
+  sentry: disabled_in_production
+  rack-mini-profiler: disabled_in_production
 rake_tasks:
   review_required: false
   tasks:

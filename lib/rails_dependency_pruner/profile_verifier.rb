@@ -43,6 +43,10 @@ module RailsDependencyPruner
       strategy
       strategies
     ].freeze
+    EXTERNAL_INTEGRATION_GEM_CLASSES = %w[
+      middleware_integration
+      railtie_integration
+    ].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {
         "paths" => %w[app/mailboxes],
@@ -134,6 +138,9 @@ module RailsDependencyPruner
         structured_lazy_gem_policy_gaps.each do |gap|
           errors << "production verify missing structured lazy gem policy: #{format_structured_lazy_gem_policy_gap(gap)}"
         end
+        external_integration_gaps.each do |gap|
+          errors << "production verify missing external integration proof: #{format_external_integration_gap(gap)}"
+        end
         lazy_constant_policy_gaps.each do |gap|
           errors << "production verify missing lazy constant policy: #{format_lazy_constant_policy_gap(gap)}"
         end
@@ -174,6 +181,7 @@ module RailsDependencyPruner
           "unsupported_lazy_require_paths" => unsupported_lazy_require_paths,
           "unsupported_lazy_gems" => unsupported_lazy_gems,
           "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
+          "external_integration_gaps" => external_integration_gaps,
           "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
           "safety_policy_gaps" => safety_policy_gaps,
           "rollback_evidence_gaps" => rollback_evidence_gaps,
@@ -437,6 +445,21 @@ module RailsDependencyPruner
         end.sort_by { |gap| [gap.fetch("gem"), gap.fetch("constant")] }
       end
 
+      def external_integration_gaps
+        @external_integration_gaps ||= Array(extreme_boot["lazy_gems"]).filter_map do |name|
+          policy = profile.payload.dig("lazy_gems", name)
+          next unless external_integration_policy?(policy)
+          next if coverage_manifest&.external_integration_reviewed?(name)
+
+          {
+            "gem" => name,
+            "requirement" => "external_integrations.#{name}",
+            "actual" => coverage_manifest&.external_integration_status(name),
+            "accepted_statuses" => CoverageManifest::EXTERNAL_INTEGRATION_REVIEW_STATUSES,
+          }
+        end.sort_by { |gap| gap.fetch("gem") }
+      end
+
       def high_risk_transform_gaps
         @high_risk_transform_gaps ||= begin
           gaps = []
@@ -567,6 +590,10 @@ module RailsDependencyPruner
 
           normalized_lazy_gem_value(actual[field]) != normalized_lazy_gem_value(expected[field])
         end.sort
+      end
+
+      def external_integration_policy?(policy)
+        policy.is_a?(Hash) && EXTERNAL_INTEGRATION_GEM_CLASSES.include?(policy["class"].to_s)
       end
 
       def extreme_boot_static_matches
@@ -892,6 +919,11 @@ module RailsDependencyPruner
         parts << "mismatched #{mismatched.join(", ")}" unless mismatched.empty?
 
         "#{gap.fetch("constant")} for #{gap.fetch("gem")} #{parts.join("; ")}"
+      end
+
+      def format_external_integration_gap(gap)
+        actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
+        "#{gap.fetch("gem")} requires #{gap.fetch("requirement")} reviewed status; got #{actual}"
       end
 
       def format_catalog_coverage_gap(gap)

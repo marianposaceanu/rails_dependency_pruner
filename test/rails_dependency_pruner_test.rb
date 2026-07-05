@@ -2269,6 +2269,140 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_external_integration_proof_for_lazy_integration_gems
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_integration_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "sentry-rails",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing external integration proof: sentry-rails requires external_integrations.sentry-rails reviewed status; got missing"
+      assert_equal(
+        [
+          {
+            "gem" => "sentry-rails",
+            "requirement" => "external_integrations.sentry-rails",
+            "actual" => nil,
+            "accepted_statuses" => RailsDependencyPruner::CoverageManifest::EXTERNAL_INTEGRATION_REVIEW_STATUSES,
+          },
+        ],
+        payload.dig("production_risks", "external_integration_gaps"),
+      )
+    end
+  end
+
+  def test_verify_production_accepts_reviewed_external_integration_alias
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_integration_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          review_required: false
+          include: all
+        external_integrations:
+          sentry: disabled_in_production
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "sentry-rails",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "external_integration_gaps")
+    end
+  end
+
   def test_verify_production_requires_lazy_constant_policy_for_lazy_gems
     Dir.mktmpdir("rails_dependency_pruner_lazy_constant_policy_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -6511,6 +6645,43 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
       assert_equal %w[upload], manifest.active_storage_actions
+    end
+  end
+
+  def test_coverage_manifest_requires_reviewed_external_integration_status
+    Dir.mktmpdir("rails_dependency_pruner_external_integration_review") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        external_integrations:
+          rack-mini-profiler: review
+          sentry:
+            review_required: true
+            status: disabled_in_production
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal "review", manifest.external_integration_status("rack-mini-profiler")
+      assert_equal false, manifest.external_integration_reviewed?("rack-mini-profiler")
+      assert_nil manifest.external_integration_status("sentry-rails")
+      assert_equal false, manifest.external_integration_reviewed?("sentry-rails")
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        external_integrations:
+          rack_mini_profiler:
+            review_required: false
+            production_behavior: disabled_in_production
+          sentry: no_production_dsn
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal "disabled_in_production", manifest.external_integration_status("rack-mini-profiler")
+      assert_equal true, manifest.external_integration_reviewed?("rack-mini-profiler")
+      assert_equal "no_production_dsn", manifest.external_integration_status("sentry-rails")
+      assert_equal true, manifest.external_integration_reviewed?("sentry-rails")
     end
   end
 

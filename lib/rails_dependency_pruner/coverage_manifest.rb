@@ -35,6 +35,20 @@ module RailsDependencyPruner
       representation
       attachment_read
     ].freeze
+    EXTERNAL_INTEGRATION_REVIEW_STATUSES = %w[
+      covered
+      disabled
+      disabled_in_profile
+      disabled_in_production
+      disabled_in_test_profile
+      no_production_dsn
+      not_used
+    ].freeze
+    EXTERNAL_INTEGRATION_ALIASES = {
+      "rack-mini-profiler" => %w[rack_mini_profiler],
+      "sentry-rails" => %w[sentry],
+      "sentry-ruby" => %w[sentry],
+    }.freeze
 
     attr_reader :path, :payload
 
@@ -134,6 +148,29 @@ module RailsDependencyPruner
       override.merge("expires_at" => expires_at.iso8601)
     end
 
+    def external_integration_status(name)
+      value = external_integration_value(name)
+      case value
+      when Hash
+        return if value["review_required"] == true
+
+        (
+          value["status"] ||
+          value["production_behavior"] ||
+          value["production_status"] ||
+          value["value"]
+        ).to_s
+      when nil
+        nil
+      else
+        value.to_s
+      end
+    end
+
+    def external_integration_reviewed?(name)
+      EXTERNAL_INTEGRATION_REVIEW_STATUSES.include?(external_integration_status(name))
+    end
+
     def rollback_tested?
       rollback = payload["rollback"]
       return false unless rollback.is_a?(Hash)
@@ -180,6 +217,23 @@ module RailsDependencyPruner
 
       def high_risk_override_key(transform_id)
         transform_id.to_s.tr(":-", "__")
+      end
+
+      def external_integration_value(name)
+        integrations = payload["external_integrations"]
+        return unless integrations.is_a?(Hash)
+
+        external_integration_keys(name).each do |key|
+          return integrations[key] if integrations.key?(key)
+        end
+        nil
+      end
+
+      def external_integration_keys(name)
+        normalized = name.to_s
+        keys = [normalized, normalized.tr("-", "_")]
+        keys.concat(EXTERNAL_INTEGRATION_ALIASES.fetch(normalized, []))
+        keys.uniq
       end
 
       def parse_date(value)

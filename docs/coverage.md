@@ -26,6 +26,8 @@ Typical review steps:
 - remove sections that are not covered
 - add storage, Action Text, inbound email, job, mailer, and channel coverage
   when those flows exist in production
+- replace external integration `review` placeholders with a reviewed production
+  status before lazying or stubbing integration gems
 - keep `rake_tasks` to the production tasks covered by the release process
 - set `rollback.review_required: false` and `rollback.disable_env_tested: true`
   only after testing `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
@@ -41,6 +43,11 @@ catalog. For example, Active Storage catalog evidence requires the normalized
 `attachments` workload before an Active Storage railtie skip can be approved.
 Action Text pruning requires reviewed `action_text` coverage, even when the
 review says rich-text declarations are not expected in production.
+Lazy or stubbed middleware and Railtie integration gems, such as
+`rack-mini-profiler` and `sentry-rails`, require a reviewed
+`external_integrations` status. Accepted statuses are `covered`,
+`disabled`, `disabled_in_profile`, `disabled_in_production`,
+`disabled_in_test_profile`, `no_production_dsn`, and `not_used`.
 For v2 manifests, production verification also requires reviewed rollback
 evidence through `rollback.disable_env_tested: true`.
 

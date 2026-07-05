@@ -275,6 +275,8 @@ Runtime event manifest smoke:
   `active_storage.attachment_read: false`; max RSS `42614784` bytes
 - Action Text coverage smoke generated explicit negative rich-text coverage
   with `action_text.rich_text_expected: false`; max RSS `42319872` bytes
+- external-integration coverage smoke generated review placeholders for
+  Rack Mini Profiler and Sentry integrations; max RSS `42418176` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
@@ -294,7 +296,9 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-coverage-template-attachment-read-smoke.yml`,
   `tmp/lobsters-ruby405-coverage-template-attachment-read-smoke.time`,
   `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-action-text-coverage-smoke.yml`,
-  `tmp/lobsters-ruby405-action-text-coverage-smoke.time`
+  `tmp/lobsters-ruby405-action-text-coverage-smoke.time`,
+  `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-external-integrations-smoke.yml`,
+  `tmp/lobsters-ruby405-external-integrations-smoke.time`
 
 The current strict-profile smoke above uses the no-`svg-graph` profile. The
 older full-profile RSS rows are still useful as historical context, but do not
