@@ -10032,6 +10032,46 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_coverage_manifest_does_not_count_web_server_context_as_request_coverage
+    Dir.mktmpdir("rails_dependency_pruner_request_server_context") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          review_required: false
+          web_servers:
+            - server: puma
+              mode: clustered
+              clustered: true
+              coverage_required:
+                - requests
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      refute_includes manifest.workloads, "requests"
+      assert_empty manifest.request_entries
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          review_required: false
+          paths:
+            - method: GET
+              path: /health
+          web_servers:
+            - server: puma
+              mode: clustered
+              clustered: true
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_includes manifest.workloads, "requests"
+      assert_equal [{ "method" => "GET", "path" => "/health" }], manifest.request_entries
+    end
+  end
+
   def test_coverage_manifest_requires_reviewed_storage_action_for_attachment_workload
     Dir.mktmpdir("rails_dependency_pruner_coverage_template_storage_review") do |dir|
       manifest_path = File.join(dir, "coverage.yml")
