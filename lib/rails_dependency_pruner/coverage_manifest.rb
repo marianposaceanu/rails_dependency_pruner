@@ -67,6 +67,12 @@ module RailsDependencyPruner
       payload["rails_env"]
     end
 
+    def version
+      Integer(payload.fetch("version", 1))
+    rescue ArgumentError, TypeError
+      1
+    end
+
     def eager_load
       value = payload.dig("boot", "eager_load")
       return value if value == true || value == false
@@ -83,9 +89,11 @@ module RailsDependencyPruner
       {
         "path" => path.to_s,
         "digest" => digest,
+        "version" => version,
         "rails_env" => rails_env,
         "eager_load" => eager_load,
         "workloads" => workloads,
+        "rollback_tested" => rollback_tested?,
       }
     end
 
@@ -117,6 +125,14 @@ module RailsDependencyPruner
       return if accepted_by.empty? || reason.empty? || expires_at.nil? || expires_at <= today
 
       override.merge("expires_at" => expires_at.iso8601)
+    end
+
+    def rollback_tested?
+      rollback = payload["rollback"]
+      return false unless rollback.is_a?(Hash)
+      return false if rollback["review_required"] == true
+
+      rollback["disable_env_tested"] == true
     end
 
     private

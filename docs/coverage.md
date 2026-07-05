@@ -27,6 +27,8 @@ Typical review steps:
 - add storage, inbound email, job, mailer, and channel coverage when those flows
   exist in production
 - keep `rake_tasks` to the production tasks covered by the release process
+- set `rollback.review_required: false` and `rollback.disable_env_tested: true`
+  only after testing `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
 
 The parser accepts v1-style simple arrays and v2 review sections. `channels`
 normalizes to the existing `cable` workload name, and reviewed `active_storage`
@@ -37,6 +39,8 @@ inventory by itself is not attachment coverage.
 Production verification also checks coverage required by the Rails feature
 catalog. For example, Active Storage catalog evidence requires the normalized
 `attachments` workload before an Active Storage railtie skip can be approved.
+For v2 manifests, production verification also requires reviewed rollback
+evidence through `rollback.disable_env_tested: true`.
 
 High-risk overrides are explicit and temporary:
 

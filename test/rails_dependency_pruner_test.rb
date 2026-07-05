@@ -1665,6 +1665,10 @@ class RailsDependencyPrunerTest < Minitest::Test
           preview: true
           representation: true
           attachment_read: true
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
       YAML
       profile_path = File.join(dir, "profile.json")
 
@@ -2746,6 +2750,139 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       refute validate_status.success?
       assert JSON.parse(validate_stdout).fetch("errors").any? { |error| error.include?("coverage_manifest_digest mismatch") }
+    end
+  end
+
+  def test_verify_production_requires_v2_rollback_evidence
+    Dir.mktmpdir("rails_dependency_pruner_rollback_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      profile_path = File.join(dir, "profile.json")
+
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        rollback:
+          review_required: true
+          disable_env_tested: false
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "build",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--write",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+      assert status.success?, stderr
+
+      profile = JSON.parse(stdout)
+      assert_equal 2, profile.dig("evidence", "coverage_manifest_version")
+      assert_equal false, profile.dig("evidence", "rollback_tested")
+
+      verify_stdout, _verify_stderr, verify_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute verify_status.success?
+      payload = JSON.parse(verify_stdout)
+      assert_includes payload.fetch("errors"), "production verify missing rollback proof: rollback.disable_env_tested must be true for RAILS_DEPENDENCY_PRUNER_DISABLE"
+      assert_equal [
+        {
+          "requirement" => "rollback.disable_env_tested",
+          "expected" => true,
+          "env_var" => "RAILS_DEPENDENCY_PRUNER_DISABLE",
+        },
+      ], payload.dig("production_risks", "rollback_evidence_gaps")
+
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+
+      rebuild_stdout, rebuild_stderr, rebuild_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "build",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--write",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+      assert rebuild_status.success?, rebuild_stderr
+      assert_equal true, JSON.parse(rebuild_stdout).dig("evidence", "rollback_tested")
+
+      approved_stdout, approved_stderr, approved_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert approved_status.success?, approved_stderr
+      assert_empty JSON.parse(approved_stdout).dig("production_risks", "rollback_evidence_gaps")
     end
   end
 
@@ -5940,6 +6077,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal %w[assets:precompile db:migrate], payload.dig("rake_tasks", "tasks")
       assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler")
       assert_equal "review", payload.dig("external_integrations", "sentry-rails")
+      assert_equal true, payload.dig("rollback", "review_required")
+      assert_equal false, payload.dig("rollback", "disable_env_tested")
+      assert_equal "RAILS_DEPENDENCY_PRUNER_DISABLE", payload.dig("rollback", "env_var")
     end
   end
 
@@ -6068,6 +6208,37 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
       assert_nil manifest.high_risk_override("stub:active_storage_vips_analyzer")
+    end
+  end
+
+  def test_coverage_manifest_requires_reviewed_rollback_evidence
+    Dir.mktmpdir("rails_dependency_pruner_rollback_coverage") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        rollback:
+          review_required: true
+          disable_env_tested: true
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal 2, manifest.version
+      assert_equal false, manifest.rollback_tested?
+      assert_equal false, manifest.to_h.fetch("rollback_tested")
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal true, manifest.rollback_tested?
+      assert_equal true, manifest.to_h.fetch("rollback_tested")
     end
   end
 

@@ -38,6 +38,10 @@ module RailsDependencyPruner
         document["inbound_email"] = review_section("mailboxes" => mailbox_classes) if mailbox_classes.any?
         document["rake_tasks"] = review_section("tasks" => DEFAULT_RAKE_TASKS)
         document["external_integrations"] = external_integrations_section if external_integrations.any?
+        document["rollback"] = review_section(
+          "disable_env_tested" => false,
+          "env_var" => "RAILS_DEPENDENCY_PRUNER_DISABLE",
+        )
         document
       end
     end

@@ -139,6 +139,8 @@ module RailsDependencyPruner
       {
         "runtime_evidence_digests" => runtime_evidence_paths.filter_map { |path| SourceDigest.file(path) }.sort,
         "coverage_manifest_digest" => coverage_manifest&.digest,
+        "coverage_manifest_version" => coverage_manifest&.version,
+        "rollback_tested" => coverage_manifest&.rollback_tested?,
         "workloads" => coverage_manifest&.workloads || [],
       }
     end

@@ -249,6 +249,8 @@ Runtime event manifest smoke:
   and macOS physical footprint `35226 KB`; max RSS `45957120` bytes
 - process-memory report-render smoke wrote the Markdown `## Process Memory`
   section from the static scan; max RSS `45973504` bytes
+- rollback-template smoke wrote reviewed rollback placeholders to
+  `tmp/lobsters-ruby405-rollback-template-smoke.yml`; max RSS `42205184` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,

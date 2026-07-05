@@ -135,6 +135,9 @@ module RailsDependencyPruner
         lazy_constant_policy_gaps.each do |gap|
           errors << "production verify missing lazy constant policy: #{format_lazy_constant_policy_gap(gap)}"
         end
+        rollback_evidence_gaps.each do |gap|
+          errors << "production verify missing rollback proof: #{format_rollback_evidence_gap(gap)}"
+        end
         high_risk_transform_gaps.each do |gap|
           errors << "production verify missing high-risk transform proof: #{format_high_risk_transform_gap(gap)}"
         end
@@ -167,6 +170,7 @@ module RailsDependencyPruner
           "unsupported_lazy_gems" => unsupported_lazy_gems,
           "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
           "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
+          "rollback_evidence_gaps" => rollback_evidence_gaps,
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
           "memory_policy" => memory_policy_result,
@@ -449,6 +453,25 @@ module RailsDependencyPruner
           end
 
           gaps.sort_by { |gap| gap.fetch("transform_id") }
+        end
+      end
+
+      def rollback_evidence_gaps
+        @rollback_evidence_gaps ||= begin
+          manifest = coverage_manifest
+          manifest_version = manifest ? manifest.version.to_i : 1
+
+          if manifest_version < 2 || manifest.rollback_tested?
+            []
+          else
+            [
+              {
+                "requirement" => "rollback.disable_env_tested",
+                "expected" => true,
+                "env_var" => "RAILS_DEPENDENCY_PRUNER_DISABLE",
+              },
+            ]
+          end
         end
       end
 
@@ -884,6 +907,10 @@ module RailsDependencyPruner
 
       def format_transform_contract_gap(gap)
         "#{gap.fetch("transform_id")} missing #{gap.fetch("missing_fields").join(", ")}"
+      end
+
+      def format_rollback_evidence_gap(gap)
+        "#{gap.fetch("requirement")} must be true for #{gap.fetch("env_var")}"
       end
   end
 end
