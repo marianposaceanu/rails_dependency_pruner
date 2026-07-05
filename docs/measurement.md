@@ -153,3 +153,8 @@ Use Lobsters for the larger real-app workload. For a smaller generic blog app,
 use `generic_blog_app`. The target for that app is at
 least `40%` RSS reduction on a production request workload, measured with the
 same baseline and candidate request paths before it is reported as a result.
+
+The checked-in static regression matrix lives under `test/fixtures/apps`. It
+covers minimal Rails, Active Record only, Action Mailer, Active Storage
+attachments, Action Cable, and mounted engine shapes. These fixtures assert
+planner decisions only; Lobsters and generic_blog_app remain the RSS benchmarks.

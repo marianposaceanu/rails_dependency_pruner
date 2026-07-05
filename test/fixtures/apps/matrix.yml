@@ -1,0 +1,97 @@
+apps:
+  minimal_rails:
+    description: controller plus Active Record model
+    expected_required:
+      - actionpack
+      - actionview
+      - activemodel
+      - activerecord
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actiontext
+      - activejob
+      - activestorage
+  active_record_only:
+    description: Active Record model only
+    expected_required:
+      - activemodel
+      - activerecord
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
+      - activejob
+      - activestorage
+  action_mailer:
+    description: mailer class and mail DSL
+    expected_required:
+      - actionmailer
+      - actionpack
+      - actionview
+      - activejob
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actiontext
+      - activemodel
+      - activerecord
+      - activestorage
+  active_storage_attachments:
+    description: Active Storage attachment DSL
+    expected_required:
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
+  action_cable:
+    description: channel class and mounted Action Cable server
+    expected_required:
+      - actioncable
+      - actionpack
+      - actionview
+      - activesupport
+      - railties
+    expected_pruned:
+      - actionmailbox
+      - actionmailer
+      - actiontext
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
+  engine_mount:
+    description: mounted Rack or engine route
+    expected_required:
+      - actionpack
+      - actionview
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actiontext
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage

@@ -11,6 +11,7 @@ class RailsDependencyPrunerTest < Minitest::Test
   ROOT = Pathname.new(__dir__).join("..").expand_path
   FAKE_RAILS_ROOT = ROOT.join("test/fixtures/fake_rails")
   FAKE_APP_ROOT = ROOT.join("test/fixtures/fake_app")
+  REFERENCE_APPS_ROOT = ROOT.join("test/fixtures/apps")
   RUBY = RbConfig.ruby
 
   def write_measurement_profile(path)
@@ -80,6 +81,25 @@ class RailsDependencyPrunerTest < Minitest::Test
     refute_includes planner.unused_features, "activerecord/lib/active_record/orphan_feature.rb"
     refute_includes planner.unused_require_paths, "active_record/orphan_feature"
     refute_includes planner.unused_require_paths, "active_record/base"
+  end
+
+  def test_reference_app_regression_matrix_matches_expected_boot_plans
+    index = RailsDependencyPruner::ConstantIndex.build(
+      rails_root: FAKE_RAILS_ROOT,
+      frameworks: RailsDependencyPruner::ConstantIndex::DEFAULT_FRAMEWORKS,
+    )
+    matrix = YAML.safe_load(File.read(REFERENCE_APPS_ROOT.join("matrix.yml")), aliases: false).fetch("apps")
+
+    matrix.each do |name, expectation|
+      app_root = REFERENCE_APPS_ROOT.join(name)
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+      plan = RailsDependencyPruner::BootPrunePlanner.new(planner).plan
+
+      assert_empty usage.parse_errors, name
+      assert_equal expectation.fetch("expected_required").sort, plan.required_frameworks, name
+      assert_equal expectation.fetch("expected_pruned").sort, plan.pruned_frameworks, name
+    end
   end
 
   def test_app_literal_require_keeps_rails_file_constants
