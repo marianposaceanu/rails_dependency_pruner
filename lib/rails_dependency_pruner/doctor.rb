@@ -285,6 +285,7 @@ module RailsDependencyPruner
 
       def capabilities
         {
+          "boot" => boot,
           "configured_frameworks" => configured_frameworks,
           "loaded_railties" => loaded_railties,
           "engines" => engines,
@@ -322,6 +323,15 @@ module RailsDependencyPruner
           path = app_root.join("config/application.rb")
           path.file? ? path.read : ""
         end
+      end
+
+      def boot
+        {
+          "eager_load" => eager_load_settings,
+          "production_eager_load" => eager_load_settings.find { |entry| entry["environment"] == "production" },
+          "bootsnap" => boot_gem_status("bootsnap", %w[bootsnap/setup]),
+          "spring" => boot_gem_status("spring", %w[spring/commands]),
+        }
       end
 
       def configured_frameworks
@@ -601,6 +611,48 @@ module RailsDependencyPruner
         adapter.to_s.tr("-", "_")
       end
 
+      def eager_load_settings
+        @eager_load_settings ||= environment_config_files.flat_map do |path|
+          grep_file(path, /\bconfig\.eager_load\s*=/).filter_map do |match|
+            source = match.fetch("source")
+            next if source.start_with?("#")
+
+            value = source[/\bconfig\.eager_load\s*=\s*(true|false)\b/, 1]
+            next unless value
+
+            match.merge(
+              "environment" => environment_name_for(match.fetch("path")),
+              "value" => value == "true",
+            )
+          end
+        end.sort_by { |entry| [entry["environment"].to_s, entry.fetch("path"), entry.fetch("line")] }
+      end
+
+      def boot_gem_status(name, require_paths)
+        matches = boot_require_matches(require_paths)
+        {
+          "gem" => name,
+          "present" => gem_names.include?(name),
+          "required" => matches.any?,
+          "matches" => matches,
+        }.merge(ADAPTER_POLICIES.fetch(name).slice("class", "risk", "coverage_required", "production_rule"))
+      end
+
+      def boot_require_matches(require_paths)
+        require_paths = Array(require_paths).map(&:to_s)
+        return [] if require_paths.empty?
+
+        path = app_root.join("config/boot.rb")
+        return [] unless path.file?
+
+        grep_file(path, /\brequire(?:_relative)?\b/).filter_map do |match|
+          target = match.fetch("source")[/\brequire(?:_relative)?\s*\(?\s*["']([^"']+)["']/, 1]
+          next unless require_paths.include?(target)
+
+          match.merge("target" => target)
+        end
+      end
+
       def active_storage_configured_services
         grep_ruby(/\bconfig\.active_storage\.service\s*=/).filter_map do |match|
           source = match.fetch("source")
@@ -685,6 +737,10 @@ module RailsDependencyPruner
 
       def environment_name_for(path)
         path.to_s[%r{\Aconfig/environments/([^/]+)\.rb\z}, 1]
+      end
+
+      def environment_config_files
+        @environment_config_files ||= Pathname.glob(app_root.join("config/environments/*.rb").to_s).select(&:file?).sort
       end
 
       def action_mailer_delivery_methods

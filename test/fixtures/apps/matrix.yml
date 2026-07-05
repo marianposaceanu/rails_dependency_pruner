@@ -159,6 +159,22 @@ apps:
       - activemodel
       - activerecord
       - activestorage
+  boot_modes:
+    description: eager-load settings and boot-cache gems without app feature use
+    expected_required:
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
   configured_adapters:
     description: Rails config selects job, mailer, storage, and cable adapters
     expected_required:

@@ -9,6 +9,8 @@ bundle exec rails-dependency-pruner doctor --app . --json
 The report keeps the existing `recommendations` list and adds:
 
 - `runtime`: Ruby, Rails, and Bundler group context
+- `capabilities.boot`: environment `config.eager_load` settings plus
+  Bootsnap/Spring bundle and `config/boot.rb` require status
 - `capabilities.configured_frameworks`: `rails/all` and explicit railtie usage
 - `capabilities.loaded_railties`: railties required by `config/application.rb`
 - `capabilities.engines`: local engine directories and `Rails::Engine` classes

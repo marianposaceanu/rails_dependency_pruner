@@ -768,6 +768,19 @@ template used max RSS `47857664` bytes. Artifacts:
 `tmp/configured-adapters-matrix-doctor-mp.json`, and
 `tmp/configured-adapters-matrix-coverage-mp-template.yml`. No request RSS
 benchmark was run for this milestone.
+Boot-mode matrix follow-up added first-class doctor output for environment
+`config.eager_load` settings and Bootsnap/Spring boot requires. Lobsters doctor
+reported `development:false`, `production:true`, no Bootsnap/Spring surface,
+and max RSS `52740096` bytes; its coverage template kept `boot.eager_load: true`
+with max RSS `53411840` bytes. The generic_blog_app generic blog app doctor
+reported `development:false`, `production:true`, `test:false`, no
+Bootsnap/Spring surface, and max RSS `47775744` bytes; its coverage template
+kept `boot.eager_load: true` with max RSS `47628288` bytes. Artifacts:
+`tmp/boot-mode-matrix-doctor-lobsters.json`,
+`tmp/boot-mode-matrix-coverage-lobsters-template.yml`,
+`tmp/boot-mode-matrix-doctor-mp.json`, and
+`tmp/boot-mode-matrix-coverage-mp-template.yml`. No request RSS benchmark was
+run for this milestone.
 
 ## what eats memory
 

@@ -159,6 +159,39 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_empty payload.dig("capabilities", "parse_errors")
   end
 
+  def test_reference_boot_modes_fixture_reports_boot_surface
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "doctor",
+      "--app",
+      REFERENCE_APPS_ROOT.join("boot_modes").to_s,
+      "--json",
+      chdir: ROOT.to_s,
+    )
+
+    assert status.success?, stderr
+
+    payload = JSON.parse(stdout)
+    assert_equal %w[bootsnap spring], payload.dig("capabilities", "adapters")
+    adapter_policies = payload.dig("capabilities", "adapter_gem_policies")
+    assert_equal %w[boot_cache development_preloader], adapter_policies.map { |entry| entry.fetch("class") }
+    assert_equal [%w[boot], %w[boot]], adapter_policies.map { |entry| entry.fetch("coverage_required") }
+
+    boot = payload.dig("capabilities", "boot")
+    assert_equal [["development", false], ["production", true]], boot.fetch("eager_load").map { |entry| [entry.fetch("environment"), entry.fetch("value")] }
+    assert_equal true, boot.dig("production_eager_load", "value")
+    assert_equal "config/environments/production.rb", boot.dig("production_eager_load", "path")
+    assert_equal true, boot.dig("bootsnap", "present")
+    assert_equal true, boot.dig("bootsnap", "required")
+    assert_equal ["config/boot.rb"], boot.dig("bootsnap", "matches").map { |entry| entry.fetch("path") }
+    assert_equal ["bootsnap/setup"], boot.dig("bootsnap", "matches").map { |entry| entry.fetch("target") }
+    assert_equal true, boot.dig("spring", "present")
+    assert_equal false, boot.dig("spring", "required")
+    assert_empty boot.dig("spring", "matches")
+    assert_empty payload.dig("capabilities", "parse_errors")
+  end
+
   def test_reference_configured_adapters_fixture_reports_config_surface
     stdout, stderr, status = Open3.capture3(
       RUBY,
@@ -9430,6 +9463,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       FileUtils.mkdir_p(File.join(app_root, "config/environments"))
       File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
         Rails.application.configure do
+          config.eager_load = true
           config.active_job.queue_adapter = :solid_queue
           config.active_storage.service = :local
           config.action_mailer.delivery_method = :smtp
@@ -9538,6 +9572,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes ids, "use_autoload_lib_ignore"
 
       assert_equal "8.1.3", payload.dig("runtime", "rails_version")
+      assert_equal true, payload.dig("capabilities", "boot", "production_eager_load", "value")
+      assert_equal true, payload.dig("capabilities", "boot", "bootsnap", "present")
+      assert_equal false, payload.dig("capabilities", "boot", "bootsnap", "required")
       assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
       assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
       assert_equal %w[honeybadger rollbar sentry-rails sentry-ruby], payload.dig("capabilities", "integrations")
