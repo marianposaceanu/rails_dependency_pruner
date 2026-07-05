@@ -11,7 +11,7 @@ bundle exec rails-dependency-pruner doctor --app .
 bundle exec rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml
 bundle exec rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
 bundle exec rails-dependency-pruner plan --app . --coverage config/pruner_coverage.yml --runtime-evidence tmp/pruner-runtime.json
-bundle exec rails-dependency-pruner measure ablation --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --target requests --request-paths /,/login,/health --output tmp/pruner-ablation.json --markdown tmp/pruner-ablation.md
+bundle exec rails-dependency-pruner measure ablation --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --target requests --request-paths /,/login,/health --process-memory-details --output tmp/pruner-ablation.json --markdown tmp/pruner-ablation.md
 bundle exec rails-dependency-pruner approve --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json --approved-by release-owner
 bundle exec rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
 ```

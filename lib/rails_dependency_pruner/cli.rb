@@ -242,6 +242,7 @@ module RailsDependencyPruner
           runs: options.fetch(:runs),
           target: options.fetch(:target),
           request_paths: options.fetch(:request_paths),
+          process_memory_details: options.fetch(:process_memory_details),
         ).run
 
         if options[:output_path]
@@ -275,6 +276,7 @@ module RailsDependencyPruner
           target: options.fetch(:target),
           skip_railties: options.fetch(:skip_railties),
           request_paths: options.fetch(:request_paths),
+          process_memory_details: options.fetch(:process_memory_details),
         ).run
 
         if options[:output_path]
@@ -655,7 +657,7 @@ module RailsDependencyPruner
           Common path:
             rails-dependency-pruner plan
             rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
-            rails-dependency-pruner measure ablation --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --output tmp/pruner-ablation.json
+            rails-dependency-pruner measure ablation --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --process-memory-details --output tmp/pruner-ablation.json
             rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json
             rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
             rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml
@@ -770,6 +772,7 @@ module RailsDependencyPruner
             --target application|environment|requests
             --skip-railties PATHS
             --request-paths PATHS
+            --process-memory-details
             --output PATH
             --markdown PATH
             --json

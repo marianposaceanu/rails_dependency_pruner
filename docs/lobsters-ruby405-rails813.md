@@ -116,6 +116,12 @@ Artifacts:
 - `tmp/rake-task-entry-gate-mp-template.yml`
 - `tmp/rake-task-entry-gate-mp-template.stdout`
 - `tmp/rake-task-entry-gate-mp-template.time`
+- `tmp/process-memory-details-flag-lobsters-template.yml`
+- `tmp/process-memory-details-flag-lobsters-template.stdout`
+- `tmp/process-memory-details-flag-lobsters-template.time`
+- `tmp/process-memory-details-flag-mp-template.yml`
+- `tmp/process-memory-details-flag-mp-template.stdout`
+- `tmp/process-memory-details-flag-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -165,6 +171,17 @@ The generic_blog_app template found `assets:precompile`, `db:migrate`,
 `admin:user:create`, and `semantic_search:reindex`. This was a static
 coverage-template smoke only; the `40%` RSS reduction target for that app still
 needs a production request measurement.
+
+Process-memory detail flag static smoke:
+
+| app | artifact | exact task entries | max RSS |
+| --- | --- | ---: | ---: |
+| Lobsters | `tmp/process-memory-details-flag-lobsters-template.yml` | `8` | `53116928` bytes |
+| generic_blog_app, generic blog simple app | `tmp/process-memory-details-flag-mp-template.yml` | `4` | `47546368` bytes |
+
+This was another static coverage-template smoke. It verifies the benchmark apps
+still scan cheaply after making macOS physical-footprint measurement a first
+class `--process-memory-details` option.
 
 Gem policy smoke:
 

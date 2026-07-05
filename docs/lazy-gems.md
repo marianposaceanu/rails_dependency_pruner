@@ -81,6 +81,7 @@ bundle exec rails-dependency-pruner measure ablation \
   --target requests \
   --request-paths /,/login,/health \
   --runs 5 \
+  --process-memory-details \
   --output tmp/pruner-ablation.json \
   --markdown tmp/pruner-ablation.md
 ```

@@ -185,9 +185,9 @@ module RailsDependencyPruner
       TARGETS = %w[application environment requests].freeze
 
       attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties, :request_paths,
-        :variant_profile_paths
+        :variant_profile_paths, :process_memory_details
 
-      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {})
+      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {}, process_memory_details: false)
         @app_root = File.expand_path(app_root)
         @variants = variants
         @runs = runs
@@ -198,6 +198,7 @@ module RailsDependencyPruner
         @variant_profile_paths = variant_profile_paths.to_h.transform_keys(&:to_s).transform_values do |path|
           File.expand_path(path)
         end
+        @process_memory_details = process_memory_details == true
       end
 
       def run
@@ -212,6 +213,7 @@ module RailsDependencyPruner
           "runs" => results,
           "deltas" => deltas(results),
         }
+        report["process_memory_details"] = true if process_memory_details
         report["request_paths"] = request_paths if target == "requests"
         report["profile"] = profile_metadata if profile_path
         report
@@ -313,6 +315,7 @@ module RailsDependencyPruner
             "RAILS_DEPENDENCY_PRUNER_MEASURE_TARGET" => target,
             "RUBYLIB" => ruby_lib,
           }
+          env["RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS"] = "1" if process_memory_details
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES"] = skip_railties.join(",") if skip_railties_variant?(variant)
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS"] = JSON.generate(request_paths) if target == "requests"
           env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))

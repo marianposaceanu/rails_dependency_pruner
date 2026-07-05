@@ -22,6 +22,7 @@ bundle exec rails-dependency-pruner measure ablation \
   --target requests \
   --request-paths /,/login,/health \
   --runs 5 \
+  --process-memory-details \
   --output tmp/pruner-ablation.json \
   --markdown tmp/pruner-ablation.md
 ```
@@ -112,7 +113,7 @@ The report records:
 - process RSS from the measured child process
 - structured `process_memory` for each run, with RSS everywhere, Linux PSS/USS
   from `/proc/self/smaps_rollup` when present, and macOS physical footprint
-  when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1`
+  when `--process-memory-details` is set
 - total loaded features
 - Rails loaded features grouped by framework gem
 - `GC.stat[:heap_live_slots]`

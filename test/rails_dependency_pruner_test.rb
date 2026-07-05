@@ -9260,6 +9260,20 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_measure_runner_passes_process_memory_details_to_child
+    runner = RailsDependencyPruner::Measurement::Runner.new(
+      app_root: FAKE_APP_ROOT.to_s,
+      variants: ["baseline"],
+      runs: 1,
+      process_memory_details: true,
+    )
+
+    assert_equal "1", runner.send(:env_for, "baseline").fetch("RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS")
+
+    report = runner.run
+    assert_equal true, report.fetch("process_memory_details")
+  end
+
   def test_measure_runner_parses_json_after_app_stdout_noise
     runner = RailsDependencyPruner::Measurement::Runner.new(
       app_root: FAKE_APP_ROOT.to_s,
