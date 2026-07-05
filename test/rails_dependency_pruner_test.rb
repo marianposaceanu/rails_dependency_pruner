@@ -46,6 +46,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       "safety" => {
         "production_allowed" => false,
       },
+      "memory_policy" => {
+        "forced_transform_ids" => [],
+      },
     }
     payload["transforms"] = RailsDependencyPruner::TransformRegistry.transforms_for_payload(payload)
     payload["expected_events"] = payload.fetch("transforms").flat_map { |transform| Array(transform["expected_events"]) }
@@ -6145,6 +6148,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes variant_names, "rails_prune_plan_only"
       assert_includes variant_names, "all_low_risk_transforms"
       assert_equal profile_path, payload.dig("source_profile", "path")
+      assert_equal true, payload.dig("memory_policy", "configured")
+      assert_kind_of Array, payload.dig("memory_policy", "ablation_assessment")
       assert File.exist?(report_path)
       assert File.exist?(markdown_path)
 
@@ -6154,6 +6159,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "## Rails Memory Buckets"
       assert_includes markdown, "## Ruby Object Buckets"
       assert_includes markdown, "## Transform Sets"
+      assert_includes markdown, "assessment"
       assert_includes markdown, "boot ms"
       assert_includes markdown, "warm p95 ms"
       assert_includes markdown, "events | unexpected"
@@ -6218,6 +6224,86 @@ class RailsDependencyPrunerTest < Minitest::Test
         "saved_mib" => 9.765625,
       },
     ], result.fetch("transform_savings")
+    assert_equal "production_candidate", result.dig("ablation_assessment", 0, "classification")
+  end
+
+  def test_memory_policy_classifies_ablation_transform_variants
+    result = RailsDependencyPruner::MemoryPolicy.new(
+      policy: {
+        "min_total_savings_mib" => 20,
+        "min_transform_savings_mib" => 2,
+        "max_first_request_latency_regression_ms" => 100,
+        "forced_transform_ids" => ["lazy_gem:small"],
+      },
+      measurement: {
+        "ablation" => true,
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+          },
+          "small_transform_only" => {
+            "status" => "ok",
+            "rss_kb_median" => 99_000,
+            "first_request_duration_ms_median" => 20.0,
+          },
+          "forced_transform_only" => {
+            "status" => "ok",
+            "rss_kb_median" => 99_000,
+            "first_request_duration_ms_median" => 20.0,
+          },
+          "slow_transform_only" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 140.0,
+          },
+          "all_approved_transforms" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+            "first_request_duration_ms_median" => 25.0,
+          },
+        },
+        "ablation_variants" => [
+          {
+            "name" => "baseline",
+            "transform_ids" => [],
+          },
+          {
+            "name" => "small_transform_only",
+            "transform_ids" => ["lazy_gem:tiny"],
+          },
+          {
+            "name" => "forced_transform_only",
+            "transform_ids" => ["lazy_gem:small"],
+          },
+          {
+            "name" => "slow_transform_only",
+            "transform_ids" => ["disable_eager_load"],
+          },
+          {
+            "name" => "all_approved_transforms",
+            "transform_ids" => ["lazy_gem:tiny", "lazy_gem:small", "disable_eager_load"],
+          },
+        ],
+      },
+    ).evaluate
+
+    assert_equal false, result.fetch("passed")
+    assert_includes result.fetch("errors"), "memory policy min_transform_savings_mib not met for small_transform_only: saved 1.0 MiB, required 2.0 MiB"
+    refute result.fetch("errors").any? { |error| error.include?("forced_transform_only") }
+
+    assessments = result.fetch("ablation_assessment").each_with_object({}) do |entry, hash|
+      hash[entry.fetch("variant")] = entry
+    end
+    assert_equal "not_worth_enabling", assessments.dig("small_transform_only", "classification")
+    assert_includes assessments.dig("small_transform_only", "reasons"), "saved 1.0 MiB below 2.0 MiB threshold"
+    assert_equal "forced", assessments.dig("forced_transform_only", "classification")
+    assert_includes assessments.dig("forced_transform_only", "reasons"), "forced by memory_policy.forced_transform_ids"
+    assert_equal "unsafe_for_production", assessments.dig("slow_transform_only", "classification")
+    assert_includes assessments.dig("slow_transform_only", "reasons"), "first_request latency regression 120.0 ms exceeds 100.0 ms"
+    assert_equal "production_candidate", assessments.dig("all_approved_transforms", "classification")
+    assert_equal 40_000, assessments.dig("all_approved_transforms", "saved_kb")
   end
 
   def test_memory_policy_enforces_latency_regression_gates

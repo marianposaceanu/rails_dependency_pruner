@@ -3,6 +3,7 @@
 require "json"
 require "tmpdir"
 
+require_relative "../memory_policy"
 require_relative "../profile"
 require_relative "../profile_schema"
 require_relative "../transform_registry"
@@ -46,12 +47,17 @@ module RailsDependencyPruner
             variant_profile_paths: profile_paths,
           ).run
 
-          report.merge(
+          report = report.merge(
             "ablation" => true,
             "coverage_path" => coverage_path,
             "source_profile" => source_profile_metadata,
             "ablation_variants" => definitions.map(&:to_h),
           ).compact
+          policy = source_profile.payload["memory_policy"]
+          if policy.is_a?(Hash) && !policy.empty?
+            report["memory_policy"] = MemoryPolicy.new(policy: policy, measurement: report).evaluate
+          end
+          report
         end
       end
 

@@ -53,9 +53,11 @@ A coverage manifest can define a profile-level memory policy:
 memory_policy:
   min_total_savings_mib: 20
   min_total_savings_percent: 10
+  min_transform_savings_mib: 2
   max_first_request_latency_regression_ms: 100
   max_warmed_p95_latency_regression_percent: 5
   max_warmed_p99_latency_regression_percent: 10
+  forced_transform_ids: []
   preserve_at_least_percent_of_reference_savings: 80
   reference_savings_mib: 98.3
   reference_profile_id: sha256:...
@@ -97,6 +99,11 @@ It evaluates individual ablation transform groups and is intentionally harsh:
 low-risk transforms that do not save RSS will fail that gate. Failed individual
 ablation variants also fail policy approval because a memory win with a broken
 transform is not usable.
+When an ablation report has a memory policy, JSON and Markdown include
+per-variant assessments. Variants can be `production_candidate`,
+`not_worth_enabling`, `unsafe_for_production`, or `forced`. Use
+`forced_transform_ids` only for reviewed transforms that should stay enabled
+despite a local threshold miss.
 
 ## what eats memory
 

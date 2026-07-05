@@ -57,6 +57,7 @@ module RailsDependencyPruner
       transform_savings = transform_savings_summary
       request_status = request_status_summary(errors, summary)
       unexpected_events = unexpected_event_summary(errors)
+      ablation_assessment = build_ablation_assessment
 
       check_total_savings(errors, summary)
       check_reference_profile(errors)
@@ -75,6 +76,7 @@ module RailsDependencyPruner
       }
       result["request_status"] = request_status unless request_status.empty?
       result["unexpected_events"] = unexpected_events unless unexpected_events.empty?
+      result["ablation_assessment"] = ablation_assessment unless ablation_assessment.empty?
       result
     end
 
@@ -179,6 +181,7 @@ module RailsDependencyPruner
 
         transform_savings.each do |entry|
           next if entry.fetch("saved_mib") >= min_mib
+          next if forced_ablation_entry?(entry)
 
           errors << format(
             "memory policy min_transform_savings_mib not met for #{entry.fetch("variant")}: saved %.1f MiB, required %.1f MiB",
@@ -419,6 +422,136 @@ module RailsDependencyPruner
             "saved_mib" => saved_kb / 1024.0,
           }
         end
+      end
+
+      def build_ablation_assessment
+        return [] unless measurement["ablation"] == true
+
+        baseline = variant_summary("baseline")
+        baseline_rss_kb = number(baseline && baseline["rss_kb_median"])
+        return [] unless baseline && baseline["status"] == "ok" && baseline_rss_kb
+
+        ablation_variants.filter_map do |variant|
+          name = variant.fetch("name")
+          transform_ids = Array(variant["transform_ids"]).map(&:to_s)
+          next if name == "baseline" || transform_ids.empty?
+
+          summary = variant_summary(name)
+          entry = {
+            "variant" => name,
+            "transform_ids" => transform_ids,
+            "classification" => "production_candidate",
+            "reasons" => [],
+          }
+
+          if summary.nil?
+            entry["classification"] = "unsafe_for_production"
+            entry.fetch("reasons") << "measurement missing"
+            next entry
+          end
+
+          unless summary["status"] == "ok"
+            entry["classification"] = "unsafe_for_production"
+            entry.fetch("reasons") << "measurement status #{summary["status"] || "(missing)"}"
+            next entry
+          end
+
+          rss_kb = number(summary["rss_kb_median"])
+          if rss_kb
+            saved_kb = baseline_rss_kb - rss_kb
+            entry["rss_kb"] = rss_kb
+            entry["saved_kb"] = saved_kb
+            entry["saved_mib"] = saved_kb / 1024.0
+            entry["saved_percent"] = baseline_rss_kb.positive? ? (saved_kb.to_f / baseline_rss_kb) * 100.0 : 0.0
+          else
+            entry["classification"] = "unsafe_for_production"
+            entry.fetch("reasons") << "RSS median missing"
+          end
+
+          classify_ablation_savings!(entry)
+          classify_ablation_latency!(entry, baseline, summary)
+          classify_ablation_events!(entry, summary)
+          entry["reasons"] = entry.fetch("reasons").uniq
+          entry
+        end
+      end
+
+      def classify_ablation_savings!(entry)
+        return unless entry.key?("saved_mib")
+
+        if forced_ablation_entry?(entry)
+          entry["classification"] = "forced"
+          entry.fetch("reasons") << "forced by memory_policy.forced_transform_ids"
+          return
+        end
+
+        min_mib = if AGGREGATE_ABLATION_VARIANTS.include?(entry.fetch("variant"))
+          number(policy["min_total_savings_mib"])
+        else
+          number(policy["min_transform_savings_mib"])
+        end
+        return unless min_mib
+        return if entry.fetch("saved_mib") >= min_mib
+
+        entry["classification"] = "not_worth_enabling" unless entry["classification"] == "unsafe_for_production"
+        entry.fetch("reasons") << format("saved %.1f MiB below %.1f MiB threshold", entry.fetch("saved_mib"), min_mib)
+      end
+
+      def classify_ablation_latency!(entry, baseline, summary)
+        violations = latency_gate_violations(baseline, summary)
+        return if violations.empty?
+
+        entry["classification"] = "unsafe_for_production"
+        entry.fetch("reasons").concat(violations)
+      end
+
+      def classify_ablation_events!(entry, summary)
+        count = unexpected_event_count(summary)
+        return unless count.positive?
+
+        entry["classification"] = "unsafe_for_production"
+        entry.fetch("reasons") << "unexpected runtime events: #{count}"
+      end
+
+      def latency_gate_violations(baseline, candidate)
+        LATENCY_GATES.each_with_object([]) do |gate, violations|
+          max_ms = number(policy[gate.fetch("max_ms_key")])
+          max_percent = number(policy[gate.fetch("max_percent_key")])
+          next unless max_ms || max_percent
+
+          baseline_ms = number(baseline[gate.fetch("metric_key")])
+          candidate_ms = number(candidate[gate.fetch("metric_key")])
+          next unless baseline_ms && candidate_ms
+
+          delta_ms = candidate_ms - baseline_ms
+          if max_ms && delta_ms > max_ms
+            violations << format("%s latency regression %.1f ms exceeds %.1f ms", gate.fetch("name"), delta_ms, max_ms)
+          end
+          next unless max_percent && baseline_ms.positive?
+
+          delta_percent = (delta_ms / baseline_ms) * 100.0
+          if delta_percent > max_percent
+            violations << format("%s latency regression %.1f%% exceeds %.1f%%", gate.fetch("name"), delta_percent, max_percent)
+          end
+        end
+      end
+
+      def forced_ablation_entry?(entry)
+        variant = entry["variant"] || entry[:variant]
+        return true if forced_ablation_variants.include?(variant.to_s)
+
+        transform_ids = Array(entry["transform_ids"] || entry[:transform_ids]).map(&:to_s)
+        return false if transform_ids.empty? || forced_transform_ids.empty?
+
+        (transform_ids - forced_transform_ids).empty?
+      end
+
+      def forced_transform_ids
+        @forced_transform_ids ||= Array(policy["forced_transform_ids"] || policy["force_transform_ids"]).map(&:to_s).reject(&:empty?)
+      end
+
+      def forced_ablation_variants
+        @forced_ablation_variants ||= Array(policy["forced_ablation_variants"] || policy["force_ablation_variants"]).map(&:to_s).reject(&:empty?)
       end
 
       def default_candidate_variant

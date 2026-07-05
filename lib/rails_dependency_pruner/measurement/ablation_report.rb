@@ -41,13 +41,14 @@ module RailsDependencyPruner
         def append_summary(lines)
           lines << "## Summary"
           lines << ""
-          lines << "| variant | status | transforms | events | unexpected | RSS median | RSS saved | saved | boot ms | first req ms | p95 req ms | warm p95 ms | Rails features | GC slots | T_STRING |"
-          lines << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          lines << "| variant | status | assessment | transforms | events | unexpected | RSS median | RSS saved | saved | boot ms | first req ms | p95 req ms | warm p95 ms | Rails features | GC slots | T_STRING |"
+          lines << "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           payload.fetch("variants", {}).each do |variant, summary|
             delta = delta_for(variant)
             lines << [
               table_cell(variant),
               table_cell(summary.fetch("status")),
+              table_cell(assessment_for(variant)),
               transform_ids_for(variant).length,
               value(summary["events_count"]),
               value(summary["unexpected_events_count"]),
@@ -157,6 +158,13 @@ module RailsDependencyPruner
         def transform_ids_for(variant)
           definition = Array(payload["ablation_variants"]).find { |entry| entry["name"] == variant }
           Array(definition&.fetch("transform_ids", []))
+        end
+
+        def assessment_for(variant)
+          assessment = Array(payload.dig("memory_policy", "ablation_assessment")).find do |entry|
+            entry["variant"] == variant
+          end
+          assessment&.fetch("classification", nil).to_s
         end
 
         def top_reductions(values)
