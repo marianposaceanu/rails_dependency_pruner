@@ -591,7 +591,7 @@ module RailsDependencyPruner
         parser = OptionParser.new do |parser|
           parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
-          parser.on("--coverage PATH", "Coverage manifest for report metadata") { |path| options[:coverage_path] = path }
+          parser.on("--coverage PATH", "Coverage manifest for metadata and default request workload") { |path| options[:coverage_path] = path }
           parser.on("--output PATH", "Write runtime evidence JSON") { |path| options[:output_path] = path }
           parser.on("--command COMMAND", "Command to run with runtime recorder preloaded") { |command| options[:command] = command }
           parser.on("--rails-root PATH", "Rails source root or path-list for runtime filtering") { |path| options[:rails_root] = path }

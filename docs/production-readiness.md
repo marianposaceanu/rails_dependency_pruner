@@ -16,6 +16,10 @@ bundle exec rails-dependency-pruner approve --app . --profile config/rails_depen
 bundle exec rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
 ```
 
+`runtime collect --coverage` drives reviewed request paths from the manifest.
+Use `--command` for authenticated flows, jobs, mailers, or other app-specific
+coverage harnesses.
+
 If environment and request measurements are captured separately, use
 `--measurements tmp/pruner-environment.json,tmp/pruner-requests.json` at
 approval time.

@@ -1068,6 +1068,20 @@ reference is the better Vips-specific estimate than comparing unrelated RSS
 runs. The gain comes from avoiding the ActiveStorage analyzer's boot-time
 `ruby-vips` load; it does not remove direct app `Vips` use.
 
+Runtime coverage milestone on 2026-07-05:
+
+| app | command | result | max RSS | artifact |
+| --- | --- | --- | ---: | --- |
+| Lobsters | `runtime collect` | passed, boot snapshot only | `232980480 B` (`222.2 MiB`) | `tmp/runtime-coverage-lobsters-runtime.json` |
+| Lobsters | `doctor --json` | passed | `53854208 B` (`51.4 MiB`) | `tmp/runtime-coverage-doctor-lobsters.json` |
+| Lobsters | `coverage template` | passed | `54771712 B` (`52.2 MiB`) | `tmp/lobsters-ruby405-rails813/tmp/runtime-coverage-lobsters-template.yml` |
+| generic blog app | `doctor --json` | passed | `48300032 B` (`46.1 MiB`) | `tmp/runtime-coverage-doctor-generic-blog.json` |
+| generic blog app | `coverage template` | passed | `48578560 B` (`46.3 MiB`) | `generic_blog_app/tmp/runtime-coverage-generic-blog-template.yml` |
+
+The generic blog app runtime-collect boot smoke did not run under Ruby `4.0.5`
+because that app's Gemfile pins Ruby `4.0.2`. No request RSS benchmark was run
+for this milestone, so the generic blog app `40%` target remains open.
+
 ## commands
 
 Build and approve:

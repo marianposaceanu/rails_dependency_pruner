@@ -797,7 +797,7 @@ module RailsDependencyPruner
             --output PATH
 
           Useful options:
-            --coverage PATH
+            --coverage PATH           Use reviewed request paths when present
             --command COMMAND
             --rails-root PATH
             --json

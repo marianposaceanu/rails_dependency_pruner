@@ -198,6 +198,11 @@ bundle exec rails-dependency-pruner runtime collect \
   --output tmp/rails_dependency_pruner_runtime.json
 ```
 
+When `--coverage` has reviewed request paths, `runtime collect` initializes the
+app and hits those paths with `Rack::MockRequest` before writing runtime
+evidence. Pass `--command` when the app needs a custom logged-in or job/mail
+coverage harness.
+
 When `--rails-root` is omitted, the collector asks the app bundle for the
 installed Rails framework gem paths and uses them to filter runtime features.
 For a Rails checkout, add `--rails-root /path/to/rails`.

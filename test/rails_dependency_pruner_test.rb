@@ -7782,6 +7782,84 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_runtime_collect_uses_coverage_request_paths
+    Dir.mktmpdir("rails_dependency_pruner_runtime_collect_requests") do |dir|
+      app_root = File.join(dir, "app")
+      output_path = File.join(dir, "runtime.json")
+      hit_path = File.join(dir, "request-hit.txt")
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(File.join(app_root, "config/environments/production.rb"), "")
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails"
+        require "action_controller/railtie"
+        require "logger"
+
+        class RuntimeCollectController < ActionController::Base
+          def index
+            File.write(#{hit_path.dump}, Rails.env)
+            render plain: "runtime"
+          end
+        end
+
+        module RuntimeCollectRequestsApp
+          class Application < Rails::Application
+            config.root = #{app_root.dump}
+            config.secret_key_base = "x" * 64
+            config.logger = Logger.new(nil)
+            config.eager_load = false
+            config.hosts.clear
+            routes.append do
+              get "/runtime" => "runtime_collect#index"
+            end
+          end
+        end
+      RUBY
+      File.write(File.join(app_root, "config/pruner_coverage.yml"), <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          - GET /runtime => 200
+      YAML
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "runtime",
+        "collect",
+        "--app",
+        app_root,
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--output",
+        output_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      report = JSON.parse(stdout)
+      assert_equal "ok", report.fetch("status")
+      assert_equal "production", File.read(hit_path)
+      assert_equal ["requests"], report.dig("coverage", "workloads")
+      assert_equal [
+        {
+          "method" => "GET",
+          "path" => "/runtime",
+          "status" => 200,
+          "bytes" => 7,
+        },
+      ], report.fetch("requests")
+
+      runtime = JSON.parse(File.read(output_path))
+      phases = runtime.fetch("snapshots").map { |snapshot| snapshot.fetch("phase") }
+      assert_includes phases, "after_application_load"
+      assert_includes phases, "after_request:GET /runtime"
+    end
+  end
+
   def test_engine_installs_guards_from_profile
     Dir.mktmpdir("rails_dependency_pruner_engine") do |dir|
       profile_path = File.join(dir, "profile.json")
