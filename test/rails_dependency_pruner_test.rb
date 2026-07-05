@@ -5349,6 +5349,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "- Target: `application`"
       assert_includes markdown, "| baseline | ok |"
       assert_includes markdown, "| shadow | ok |"
+      assert_includes markdown, "## Process Memory"
+      assert_includes markdown, "## Process Memory Deltas"
+      assert_includes markdown, "physical footprint"
       assert_includes markdown, "## Deltas Vs Baseline"
       assert_includes markdown, "## Rails Features By Framework"
       assert_includes markdown, "## Rails Feature Deltas By Framework"
@@ -5424,6 +5427,7 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       markdown = File.read(markdown_path)
       assert_includes markdown, "# Rails Dependency Pruner Ablation"
+      assert_includes markdown, "## Process Memory"
       assert_includes markdown, "## Rails Memory Buckets"
       assert_includes markdown, "## Ruby Object Buckets"
       assert_includes markdown, "## Transform Sets"

@@ -17,10 +17,11 @@ module RailsDependencyPruner
 
         append_context(lines)
         append_summary(lines)
+        append_process_memory(lines)
         append_rails_memory_buckets(lines)
         append_object_buckets(lines)
         append_transform_sets(lines)
-        lines << "RSS is process memory. Rails feature buckets and Ruby object counts are attribution signals, not byte-exact ownership."
+        lines << "RSS is process memory. PSS/USS appear on Linux when available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Rails feature buckets and Ruby object counts are attribution signals, not byte-exact ownership."
         lines << ""
         lines.join("\n")
       end
@@ -59,6 +60,36 @@ module RailsDependencyPruner
               signed(delta["gc_heap_live_slots"]),
               signed(delta.dig("object_counts", "T_STRING")),
             ].join(" | ").then { |row| "| #{row} |" }
+          end
+          lines << ""
+        end
+
+        def append_process_memory(lines)
+          rows = payload.fetch("variants", {}).filter_map do |variant, summary|
+            memory = summary.fetch("process_memory_median", {})
+            delta = delta_for(variant).fetch("process_memory", {})
+            next if memory.empty?
+
+            [
+              table_cell(variant),
+              kb(memory["rss_kb"]),
+              saved_kb(delta["rss_kb"]),
+              kb(memory["pss_kb"]),
+              saved_kb(delta["pss_kb"]),
+              kb(memory["uss_kb"]),
+              saved_kb(delta["uss_kb"]),
+              kb(memory["physical_footprint_kb"]),
+              saved_kb(delta["physical_footprint_kb"]),
+            ]
+          end
+          return if rows.empty?
+
+          lines << "## Process Memory"
+          lines << ""
+          lines << "| variant | RSS | RSS saved | PSS | PSS saved | USS | USS saved | physical footprint | footprint saved |"
+          lines << "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
           end
           lines << ""
         end

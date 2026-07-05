@@ -18,12 +18,14 @@ module RailsDependencyPruner
         append_target(lines)
         append_profile(lines)
         append_variants(lines)
+        append_process_memory(lines)
         append_request_status_matrix(lines)
         append_framework_features(lines)
         append_deltas(lines)
+        append_process_memory_deltas(lines)
         append_framework_deltas(lines)
         append_object_deltas(lines)
-        lines << "RSS is reported from the measured process. Request timings are in-process Rack mock timings. Compare RSS with loaded-feature and GC-slot deltas before claiming a memory win."
+        lines << "RSS is reported from the measured process. PSS/USS appear on Linux when `/proc/self/smaps_rollup` is available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Request timings are in-process Rack mock timings. Compare process memory with loaded-feature and GC-slot deltas before claiming a memory win."
         lines << ""
         lines.join("\n")
       end
@@ -89,6 +91,31 @@ module RailsDependencyPruner
               value(summary["rails_loaded_features_median"]),
               value(summary["gc_heap_live_slots_median"]),
             ].join(" | ").then { |row| "| #{row} |" }
+          end
+          lines << ""
+        end
+
+        def append_process_memory(lines)
+          rows = payload.fetch("variants", {}).filter_map do |variant, summary|
+            memory = summary.fetch("process_memory_median", {})
+            next if memory.empty?
+
+            [
+              table_cell(variant),
+              kb(memory["rss_kb"]),
+              kb(memory["pss_kb"]),
+              kb(memory["uss_kb"]),
+              kb(memory["physical_footprint_kb"]),
+            ]
+          end
+          return if rows.empty?
+
+          lines << "## Process Memory"
+          lines << ""
+          lines << "| variant | RSS | PSS | USS | physical footprint |"
+          lines << "| --- | ---: | ---: | ---: | ---: |"
+          rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
           end
           lines << ""
         end
@@ -159,6 +186,31 @@ module RailsDependencyPruner
               signed(delta["rails_loaded_features"]),
               signed(delta["gc_heap_live_slots"]),
             ].join(" | ").then { |row| "| #{row} |" }
+          end
+          lines << ""
+        end
+
+        def append_process_memory_deltas(lines)
+          rows = payload.fetch("deltas", {}).filter_map do |variant, delta|
+            memory = delta.fetch("process_memory", {})
+            next if memory.empty?
+
+            [
+              table_cell(variant),
+              signed_kb(memory["rss_kb"]),
+              signed_kb(memory["pss_kb"]),
+              signed_kb(memory["uss_kb"]),
+              signed_kb(memory["physical_footprint_kb"]),
+            ]
+          end
+          return if rows.empty?
+
+          lines << "## Process Memory Deltas"
+          lines << ""
+          lines << "| variant | RSS | PSS | USS | physical footprint |"
+          lines << "| --- | ---: | ---: | ---: | ---: |"
+          rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
           end
           lines << ""
         end

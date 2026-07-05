@@ -110,6 +110,10 @@ The report records:
 
 The Rails part of memory shows up in three surfaces:
 
+Generated Markdown reports include process memory tables for variant medians and
+deltas so RSS, PSS, USS, and physical footprint can be compared without opening
+the JSON artifact.
+
 - framework code and constants loaded from gems such as `activerecord`,
   `actionview`, `activestorage`, and `railties`
 - Ruby heap objects created by those frameworks, visible as movement in object
