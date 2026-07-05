@@ -354,6 +354,13 @@ was `36077568` bytes for doctor and `36323328` bytes for coverage template. It
 did not run a request RSS benchmark, so the `40%` RSS reduction remains the
 small-app target, not a measured result.
 
+Mounted-app coverage smoke generated a Lobsters starter request entry for
+`GET /jobs`, sourced from `MissionControl::Jobs::Engine` at
+`config/routes.rb:273`. Artifact:
+`tmp/mount-path-coverage-lobsters-template.yml`; max RSS `42778624` bytes.
+The same static template smoke on `generic_blog_app`
+found no mounted Rack apps; max RSS `36421632` bytes.
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,

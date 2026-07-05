@@ -229,7 +229,7 @@ module RailsDependencyPruner
         route_lines.select { |match| match.fetch("source").match?(/\bmount\b/) }.map do |match|
           source = match.fetch("source").sub(/\A.*?\bmount\s+/, "")
           target = source.split(/\s*(?:,|=>|\sat:)\s*/, 2).first.strip
-          match.merge("target" => target)
+          match.merge("target" => target, "mount_path" => mount_path_for(match.fetch("source"))).compact
         end
       end
 
@@ -420,6 +420,14 @@ module RailsDependencyPruner
           "require_paths" => Array(require_paths).sort,
           "matches" => matches,
         }
+      end
+
+      def mount_path_for(source)
+        path = source[/,\s*at:\s*["']([^"']+)["']/, 1] ||
+          source[/=>\s*["']([^"']+)["']/, 1]
+        return unless path
+
+        path.start_with?("/") ? path : "/#{path}"
       end
 
       def class_name_near(relative_path, line)

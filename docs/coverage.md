@@ -22,6 +22,7 @@ keeps the template from approving a transform just because the app contains
 Typical review steps:
 
 - replace guessed request entries with the paths and statuses actually exercised
+- review mounted Rack app and engine paths generated from route `mount` calls
 - set reviewed workload sections to `review_required: false`
 - remove sections that are not covered
 - add storage, Action Text, inbound email, job, mailer, and channel coverage

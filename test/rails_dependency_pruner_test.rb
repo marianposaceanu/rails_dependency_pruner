@@ -7815,6 +7815,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["UserMailer"], payload.dig("capabilities", "mailers", "classes")
       assert_equal ["NotificationsChannel"], payload.dig("capabilities", "channels", "classes")
       assert_equal "AdminApp", payload.dig("capabilities", "mounted_rack_apps", 0, "target")
+      assert_equal "/admin", payload.dig("capabilities", "mounted_rack_apps", 0, "mount_path")
       assert_equal "use", payload.dig("capabilities", "middleware", 0, "operation")
       assert_equal ["resources", "mount"], payload.dig("capabilities", "routes", "calls").map { |entry| entry.fetch("call") }.sort.reverse
       assert_equal "config/initializers/dynamic_require.rb", payload.dig("risks", "initializers_dynamic_require_load", 0, "path")
@@ -7909,6 +7910,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes request_paths, ["GET", "/"]
       assert_includes request_paths, ["GET", "/settings"]
       assert_includes request_paths, ["POST", "/comments"]
+      assert_includes request_paths, ["GET", "/admin"]
       assert_equal ["CleanupJob"], payload.dig("jobs", "classes")
       assert_equal ["UserMailer#welcome"], payload.dig("mailers", "actions")
       assert_equal ["NotificationsChannel"], payload.dig("channels", "classes")
@@ -7964,6 +7966,37 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "#{output_path}\n", stdout
       assert File.exist?(output_path)
       assert_equal 2, YAML.safe_load(File.read(output_path), aliases: false).fetch("version")
+    end
+  end
+
+  def test_coverage_template_keeps_mounted_app_paths_after_request_cap
+    Dir.mktmpdir("rails_dependency_pruner_coverage_template_mount_cap") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      routes = ["Rails.application.routes.draw do", "  root \"home#index\""]
+      25.times do |index|
+        routes << "  get \"/pages/#{index}\", to: \"pages#show\""
+      end
+      routes << "  mount AdminApp, at: \"/admin\""
+      routes << "end"
+      File.write(File.join(app_root, "config/routes.rb"), "#{routes.join("\n")}\n")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "coverage",
+        "template",
+        "--app",
+        app_root,
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = YAML.safe_load(stdout, aliases: false)
+      request_paths = payload.dig("requests", "paths").map { |entry| [entry.fetch("method"), entry.fetch("path"), entry.fetch("source")] }
+      assert_includes request_paths, ["GET", "/admin", "config/routes.rb:28"]
+      assert_equal 21, request_paths.length
     end
   end
 

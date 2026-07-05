@@ -159,9 +159,16 @@ module RailsDependencyPruner
       end
 
       def request_entries
-        @request_entries ||= Array(capabilities.dig("routes", "calls")).filter_map do |entry|
-          route_request_entry(entry)
-        end.uniq { |entry| [entry.fetch("method"), entry.fetch("path")] }.first(20)
+        @request_entries ||= begin
+          entries = Array(capabilities.dig("routes", "calls")).filter_map do |entry|
+            request = route_request_entry(entry)
+            [entry, request] if request
+          end
+          regular_entries = entries.reject { |entry, _request| entry["call"].to_s == "mount" }.map(&:last).first(20)
+          mount_entries = entries.select { |entry, _request| entry["call"].to_s == "mount" }.map(&:last)
+
+          (regular_entries + mount_entries).uniq { |entry| [entry.fetch("method"), entry.fetch("path")] }
+        end
       end
 
       def route_request_entry(entry)
@@ -181,6 +188,7 @@ module RailsDependencyPruner
 
       def request_method_for(call, source)
         return "GET" if call == "root"
+        return "GET" if call == "mount"
         return "ANY" if call == "match"
 
         return call.upcase if %w[delete get patch post put].include?(call)
@@ -189,8 +197,17 @@ module RailsDependencyPruner
 
       def request_path_for(call, source)
         return "/" if call == "root"
+        return mount_path_for(source) if call == "mount"
 
         path = source[/\b#{Regexp.escape(call)}\s+["']([^"']+)["']/, 1]
+        return unless path
+
+        path.start_with?("/") ? path : "/#{path}"
+      end
+
+      def mount_path_for(source)
+        path = source[/,\s*at:\s*["']([^"']+)["']/, 1] ||
+          source[/=>\s*["']([^"']+)["']/, 1]
         return unless path
 
         path.start_with?("/") ? path : "/#{path}"

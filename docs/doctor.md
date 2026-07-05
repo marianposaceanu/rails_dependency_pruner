@@ -12,7 +12,7 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.configured_frameworks`: `rails/all` and explicit railtie usage
 - `capabilities.loaded_railties`: railties required by `config/application.rb`
 - `capabilities.engines`: local engine directories and `Rails::Engine` classes
-- `capabilities.mounted_rack_apps`: `mount` calls in routes
+- `capabilities.mounted_rack_apps`: `mount` calls in routes with mount paths
 - `capabilities.middleware`: `config.middleware.*` calls
 - `capabilities.routes`: route files and route DSL call sites
 - `capabilities.jobs`, `mailers`, `channels`
