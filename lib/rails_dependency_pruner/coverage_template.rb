@@ -35,7 +35,7 @@ module RailsDependencyPruner
         }
         document["routes"] = routes_section if route_files.any?
         document["requests"] = requests_section if request_entries.any?
-        document["jobs"] = review_section("classes" => job_classes) if job_classes.any?
+        document["jobs"] = jobs_section if job_classes.any? || queue_adapter_entries.any?
         document["mailers"] = review_section("actions" => mailer_actions) if mailer_actions.any?
         document["channels"] = review_section("classes" => channel_classes) if channel_classes.any?
         document["active_storage"] = active_storage_section
@@ -87,6 +87,12 @@ module RailsDependencyPruner
         review_section(
           "paths" => request_entries,
         )
+      end
+
+      def jobs_section
+        values = { "classes" => job_classes }
+        values["queue_adapters"] = queue_adapter_entries if queue_adapter_entries.any?
+        review_section(values)
       end
 
       def active_storage_section
@@ -230,6 +236,21 @@ module RailsDependencyPruner
 
       def job_classes
         Array(capabilities.dig("jobs", "classes"))
+      end
+
+      def queue_adapter_entries
+        Array(capabilities["active_job_queue_adapters"]).map do |entry|
+          {
+            "adapter" => entry["adapter"],
+            "gem" => entry["gem"],
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "path" => entry["path"],
+            "line" => entry["line"],
+            "production_rule" => entry["production_rule"],
+          }.compact
+        end
       end
 
       def mailer_actions

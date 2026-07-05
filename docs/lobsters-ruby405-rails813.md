@@ -144,6 +144,12 @@ Artifacts:
 - `tmp/queue-adapter-doctor-lobsters.time`
 - `tmp/queue-adapter-doctor-mp.json`
 - `tmp/queue-adapter-doctor-mp.time`
+- `tmp/queue-adapter-coverage-lobsters-template.yml`
+- `tmp/queue-adapter-coverage-lobsters-template.stdout`
+- `tmp/queue-adapter-coverage-lobsters-template.time`
+- `tmp/queue-adapter-coverage-mp-template.yml`
+- `tmp/queue-adapter-coverage-mp-template.stdout`
+- `tmp/queue-adapter-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -257,6 +263,17 @@ Queue adapter doctor static smoke:
 Both scans reported `0` parse errors, `0` dynamic constantization risks, and
 `0` initializer dynamic require/load risks. No request RSS benchmark was run for
 generic_blog_app in this milestone.
+
+Queue adapter coverage-template static smoke:
+
+| app | artifact | generated job adapter entries | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/queue-adapter-coverage-lobsters-template.yml` | `10` job classes; `solid_queue` in development and production | `53723136` bytes |
+| generic_blog_app, generic blog simple app | `tmp/queue-adapter-coverage-mp-template.yml` | no jobs section | `47808512` bytes |
+
+Generated `jobs.queue_adapters` entries remain review context while
+`jobs.review_required: true`; exact job class coverage is still required before
+approval. No request RSS benchmark was run for generic_blog_app in this milestone.
 
 Gem policy smoke:
 

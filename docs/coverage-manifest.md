@@ -37,6 +37,11 @@ jobs:
   review_required: false
   classes:
     - CleanupJob
+  queue_adapters:
+    - adapter: solid_queue
+      gem: solid_queue
+      class: job_adapter
+      risk: medium
 mailers:
   review_required: false
   actions:
@@ -119,6 +124,10 @@ that task.
 Production verification fails when a transform needs a workload that is missing
 or still marked for review. Active Storage declarations alone do not count as
 attachment coverage; at least one reviewed storage action must be true.
+
+Generated `jobs.queue_adapters` entries show configured
+`config.active_job.queue_adapter` values. They are review context for job
+coverage and do not replace exact job class coverage.
 
 If a lazy gem is used directly by app code, the manifest must also review that
 first-use surface under `lazy_gems`. Accepted statuses are `covered`,

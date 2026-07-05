@@ -9498,6 +9498,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
         Rails.application.configure do
           config.eager_load = true
+          config.active_job.queue_adapter = :solid_queue
         end
       RUBY
       File.write(File.join(app_root, "config/routes.rb"), <<~RUBY)
@@ -9521,6 +9522,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         source "https://rubygems.org"
         gem "rack-mini-profiler"
         gem "sentry-rails"
+        gem "solid_queue"
       RUBY
       FileUtils.mkdir_p(File.join(app_root, "app/jobs"))
       File.write(File.join(app_root, "app/jobs/cleanup_job.rb"), <<~RUBY)
@@ -9588,6 +9590,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes request_paths, ["POST", "/comments"]
       assert_includes request_paths, ["GET", "/admin"]
       assert_equal ["CleanupJob"], payload.dig("jobs", "classes")
+      assert_equal "solid_queue", payload.dig("jobs", "queue_adapters", 0, "adapter")
+      assert_equal "solid_queue", payload.dig("jobs", "queue_adapters", 0, "gem")
+      assert_equal "job_adapter", payload.dig("jobs", "queue_adapters", 0, "class")
+      assert_equal ["jobs"], payload.dig("jobs", "queue_adapters", 0, "coverage_required")
+      assert_equal "config/environments/production.rb", payload.dig("jobs", "queue_adapters", 0, "path")
       assert_equal ["UserMailer#welcome"], payload.dig("mailers", "actions")
       assert_equal ["NotificationsChannel"], payload.dig("channels", "classes")
       assert_equal ["ApplicationMailbox"], payload.dig("inbound_email", "mailboxes")

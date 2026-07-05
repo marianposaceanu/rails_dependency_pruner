@@ -30,6 +30,8 @@ Typical review steps:
 - keep generated job classes, mailer actions, channel classes, mailboxes,
   storage or rich-text declarations, and rake task names only when the exact
   entries were covered
+- review generated `jobs.queue_adapters` entries against the production Active
+  Job backend; they do not replace exact job class coverage
 - replace external integration `review` placeholders with a reviewed production
   status before lazying or stubbing integration gems; generated placeholders
   include policy class, risk, strategies, and unclassified markers for review
