@@ -307,6 +307,26 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_operator payload.fetch("constants_count"), :>, 0
   end
 
+  def test_ci_matrix_tracks_supported_ruby_and_rails_versions
+    workflow_path = ROOT.join(".github/workflows/ci.yml")
+    payload = YAML.safe_load(File.read(workflow_path), aliases: false)
+    matrix = payload.dig("jobs", "test", "strategy", "matrix")
+
+    assert_equal %w[3.2 3.3 3.4], matrix.fetch("ruby")
+    assert_equal ["8.0", "8.1"], matrix.fetch("rails").map { |entry| entry.fetch("version") }
+    assert_equal ["gemfiles/rails_8_0.gemfile", "gemfiles/rails_8_1.gemfile"], matrix.fetch("rails").map { |entry| entry.fetch("gemfile") }
+    assert_equal "${{ matrix.rails.gemfile }}", payload.dig("jobs", "test", "env", "BUNDLE_GEMFILE")
+
+    experimental = matrix.fetch("include").find do |entry|
+      entry.fetch("ruby") == "4.0.5" && entry.dig("rails", "version") == "8.1"
+    end
+    assert_equal true, experimental.fetch("experimental")
+    assert_equal "gemfiles/rails_8_1.gemfile", experimental.dig("rails", "gemfile")
+
+    assert_match(/gem "rails", "~> 8\.0\.0"/, File.read(ROOT.join("gemfiles/rails_8_0.gemfile")))
+    assert_match(/gem "rails", "~> 8\.1\.0"/, File.read(ROOT.join("gemfiles/rails_8_1.gemfile")))
+  end
+
   def test_runtime_evidence_keeps_observed_constants
     index = RailsDependencyPruner::ConstantIndex.build(
       rails_root: FAKE_RAILS_ROOT,

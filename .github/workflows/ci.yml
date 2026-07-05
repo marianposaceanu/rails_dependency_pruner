@@ -1,0 +1,45 @@
+name: ci
+
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: ruby ${{ matrix.ruby }} / rails ${{ matrix.rails.version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        ruby:
+          - "3.2"
+          - "3.3"
+          - "3.4"
+        rails:
+          - version: "8.0"
+            gemfile: gemfiles/rails_8_0.gemfile
+          - version: "8.1"
+            gemfile: gemfiles/rails_8_1.gemfile
+        experimental:
+          - false
+        include:
+          - os: ubuntu-latest
+            ruby: "4.0.5"
+            rails:
+              version: "8.1"
+              gemfile: gemfiles/rails_8_1.gemfile
+            experimental: true
+    env:
+      BUNDLE_GEMFILE: ${{ matrix.rails.gemfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle exec rake test

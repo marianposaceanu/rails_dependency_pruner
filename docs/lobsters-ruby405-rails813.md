@@ -804,6 +804,13 @@ bytes. Artifacts: `tmp/web-server-coverage-template-doctor-lobsters.json`,
 `tmp/web-server-coverage-template-doctor-mp.json`, and
 `tmp/web-server-coverage-template-mp-template.yml`. No request RSS benchmark was
 run for this milestone.
+CI matrix follow-up added Rails `8.0`/`8.1` bundle Gemfiles and a GitHub
+Actions matrix for Ruby `3.2`, `3.3`, `3.4`, with Ruby `4.0.5` on Rails `8.1`
+marked experimental. Static doctor smokes still reported Rails `8.1.3` and
+clustered Puma for both apps; max RSS was `53624832` bytes for Lobsters and
+`48119808` bytes for the generic_blog_app generic blog app. Artifacts:
+`tmp/ci-matrix-doctor-lobsters.json` and `tmp/ci-matrix-doctor-mp.json`. No
+request RSS benchmark was run for this milestone.
 
 ## what eats memory
 

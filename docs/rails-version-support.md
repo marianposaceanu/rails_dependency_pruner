@@ -9,6 +9,7 @@ The gem currently targets Rails `8.x` apps on Ruby `>= 3.2`.
 | Ruby | gemspec allows `>= 3.2`; local production-readiness work uses Ruby `4.0.5` |
 | Rails | gemspec allows `>= 8.0`, `< 9.0` |
 | catalogs | versioned catalogs exist for Rails `8.0` and `8.1` |
+| CI matrix | GitHub Actions runs Rails `8.0` and `8.1` on Ruby `3.2`, `3.3`, and `3.4`; Ruby `4.0.5` with Rails `8.1` is experimental |
 | platform | local benchmark evidence is Darwin arm64 |
 | large app benchmark | Lobsters copy under `tmp/lobsters-ruby405-rails813` |
 | small app target | `generic_blog_app`, generic blog app |
@@ -42,6 +43,7 @@ signals. Lobsters and `generic_blog_app` remain the real RSS benchmark targets.
 
 - Rails `7.2` catalogs
 - Linux x86_64 and Linux arm64 release measurements
+- required CI coverage for Ruby `4.0.x`
 - bootable Puma clustered request measurements, Falcon, and Passenger matrices
 - Bootable Action Text and third-party observability sample apps beyond static fixtures
 
