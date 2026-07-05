@@ -4299,9 +4299,23 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "ruby-vips", profile.dig("lazy_constants", "Vips", "gem")
       assert_equal "vips", profile.dig("lazy_constants", "Vips", "require")
       assert_equal ["manual_app_use"], profile.dig("lazy_constants", "Vips", "allowed_phases")
+      faker_lazy_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "lazy_gem:faker" }
+      assert_equal [
+        {
+          "action" => "loaded_lazy_gem",
+          "gem" => "faker",
+        },
+      ], faker_lazy_transform.fetch("expected_events")
       vips_lazy_transform = profile.fetch("transforms").find { |transform| transform.fetch("id") == "lazy_gem:ruby-vips" }
       assert_equal "native_heavy_library", vips_lazy_transform.dig("gem_policy", "class")
       assert_equal "high", vips_lazy_transform.dig("gem_policy", "risk")
+      assert_equal [
+        {
+          "action" => "loaded_lazy_gem",
+          "gem" => "ruby-vips",
+          "phase" => "manual_app_use",
+        },
+      ], vips_lazy_transform.fetch("expected_events")
       assert_equal %w[active_storage_analyzer_stub lazy_constant], vips_lazy_transform.dig("gem_policy", "strategies")
       assert_equal ["Vips"], vips_lazy_transform.dig("gem_policy", "constants")
       assert_equal vips_lazy_transform.dig("gem_policy", "production_rule"), vips_lazy_transform.fetch("production_rule")
@@ -5539,6 +5553,64 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 1, early_payload.fetch("expected_events_count")
       assert_equal 0, early_payload.fetch("unexpected_events_count")
       assert_equal "manual_app_use", event.fetch("phase")
+      assert_equal "loaded_lazy_gem", event.fetch("action")
+      assert_equal true, event.fetch("expected")
+    end
+  end
+
+  def test_early_boot_expected_lazy_gem_event_without_phase_matches_request_phase
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_phase_wildcard") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "faker.rb"), "module Faker; def self.ok? = true; end\n")
+      payload = approved_early_boot_profile(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["faker"],
+          "config_namespace_stubs" => [],
+        },
+        "expected_events" => [
+          {
+            "action" => "loaded_lazy_gem",
+            "gem" => "faker",
+          },
+        ],
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      )
+      File.write(profile_path, JSON.pretty_generate(payload))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "canary",
+          "RAILS_DEPENDENCY_PRUNER_PHASE" => "request",
+          "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+          puts JSON.generate("ok" => Faker.ok?)
+        RUBY
+      )
+
+      assert status.success?, stderr
+      assert_equal true, JSON.parse(stdout).fetch("ok")
+
+      early_payload = JSON.parse(File.read(output_path))
+      event = early_payload.fetch("events").first
+      assert_equal 1, early_payload.fetch("expected_events_count")
+      assert_equal 0, early_payload.fetch("unexpected_events_count")
+      assert_equal "request", event.fetch("phase")
       assert_equal "loaded_lazy_gem", event.fetch("action")
       assert_equal true, event.fetch("expected")
     end

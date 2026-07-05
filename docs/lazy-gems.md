@@ -51,6 +51,11 @@ modes record every lazy load event. Canary rejects unexpected or disallowed
 events. Production fails closed for unexpected boot events and reports request
 events unless the profile asks for stricter behavior.
 
+Generated lazy-gem transforms add `loaded_lazy_gem` expected events. Policies
+with explicit `allowed_phases` get one expected event per allowed phase.
+Policies without explicit phases get a phase-less expected event, which matches
+any phase.
+
 The lazy constant list is an allowlist from the gem policy registry. Production
 verification rejects extra `lazy_constants` entries, even when they point to an
 approved lazy gem.

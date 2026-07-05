@@ -464,7 +464,6 @@ module RailsDependencyPruner
         normalized = event.each_with_object({}) do |(key, value), hash|
           hash[key.to_s] = value.to_s unless value.nil?
         end
-        normalized["phase"] ||= "boot"
         normalized unless normalized.empty?
       end
     end

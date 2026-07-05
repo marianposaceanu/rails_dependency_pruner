@@ -162,7 +162,7 @@ profiles whose runtime event summary contains unexpected events.
 
 Safety modes compare every event with `expected_events`. Expected event entries
 are partial matches, so a profile can match on `phase`, `action`, `path`, and
-`gem` without pinning caller lines.
+`gem` without pinning caller lines. Omitting `phase` matches any runtime phase.
 
 Supported `unexpected_event_policy` values:
 

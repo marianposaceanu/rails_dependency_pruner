@@ -335,8 +335,24 @@ module RailsDependencyPruner
             risk: policy&.risk || "unknown",
             description: "Defer #{gem_name} until first approved use",
             source: "extreme_boot.lazy_gems",
+            expected_events: lazy_gem_expected_events(gem_name, policy),
             gem_policy: policy&.to_h,
           )
+        end
+
+        def lazy_gem_expected_events(gem_name, policy)
+          return [] unless policy
+          return [] unless Array(policy.strategies).map(&:to_s).include?("lazy_constant")
+          return [] if policy.require_path.to_s.empty? || Array(policy.constants).empty?
+
+          base_event = {
+            "action" => "loaded_lazy_gem",
+            "gem" => gem_name.to_s,
+          }
+          phases = Array(policy.allowed_phases).map(&:to_s).reject(&:empty?).sort
+          return [base_event] if phases.empty?
+
+          phases.map { |phase| base_event.merge("phase" => phase) }
         end
 
         def dynamic_contract(id, kind:, risk:, gem_policy: nil)
