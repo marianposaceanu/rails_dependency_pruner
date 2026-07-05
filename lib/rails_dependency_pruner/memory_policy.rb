@@ -55,14 +55,17 @@ module RailsDependencyPruner
       warnings = []
       summary = measurement_summary(errors)
       transform_savings = transform_savings_summary
+      request_status = request_status_summary(errors, summary)
+      unexpected_events = unexpected_event_summary(errors)
 
       check_total_savings(errors, summary)
       check_reference_profile(errors)
       check_reference_savings(errors, summary)
+      check_ablation_variant_statuses(errors)
       check_transform_savings(errors, transform_savings)
       check_latency_regressions(errors, summary)
 
-      {
+      result = {
         "configured" => true,
         "passed" => errors.empty?,
         "errors" => errors,
@@ -70,6 +73,9 @@ module RailsDependencyPruner
         "measurement" => summary,
         "transform_savings" => transform_savings,
       }
+      result["request_status"] = request_status unless request_status.empty?
+      result["unexpected_events"] = unexpected_events unless unexpected_events.empty?
+      result
     end
 
     private
@@ -182,6 +188,23 @@ module RailsDependencyPruner
         end
       end
 
+      def check_ablation_variant_statuses(errors)
+        return unless measurement["ablation"] == true
+
+        ablation_variants.each do |variant|
+          name = variant.fetch("name")
+          next if name == "baseline"
+          next if Array(variant["transform_ids"]).empty?
+
+          summary = variant_summary(name)
+          if summary.nil?
+            errors << "memory policy ablation variant missing: #{name}"
+          elsif summary["status"] != "ok"
+            errors << "memory policy ablation variant failed: #{name}"
+          end
+        end
+      end
+
       def check_latency_regressions(errors, summary)
         LATENCY_GATES.each do |gate|
           max_ms = number(policy[gate.fetch("max_ms_key")])
@@ -217,6 +240,156 @@ module RailsDependencyPruner
             max_percent,
           )
         end
+      end
+
+      def request_status_summary(errors, measurement_summary)
+        return {} unless request_target?
+
+        baseline_variant = measurement_summary["baseline_variant"] || policy["baseline_variant"] || "baseline"
+        candidate_variant = measurement_summary["candidate_variant"] || policy["candidate_variant"] || default_candidate_variant
+        baseline = variant_summary(baseline_variant)
+        return {} unless baseline
+
+        baseline_matrix = baseline.fetch("request_status_matrix", {})
+        if baseline_matrix.empty?
+          errors << "memory policy request status matrix missing for baseline variant: #{baseline_variant}"
+          return {
+            "baseline_variant" => baseline_variant,
+            "checked_variants" => checked_request_status_variants(candidate_variant),
+            "passed" => false,
+          }
+        end
+
+        checked_variants = checked_request_status_variants(candidate_variant)
+        checked_variants.each do |variant|
+          compare_request_statuses(errors, baseline_variant, baseline_matrix, variant)
+        end
+
+        {
+          "baseline_variant" => baseline_variant,
+          "checked_variants" => checked_variants,
+          "paths" => request_status_paths(baseline_matrix),
+          "passed" => errors.none? { |error| error.start_with?("memory policy request") },
+        }
+      end
+
+      def compare_request_statuses(errors, baseline_variant, baseline_matrix, variant)
+        summary = variant_summary(variant)
+        if summary.nil?
+          errors << "memory policy request status variant missing: #{variant}"
+          return
+        end
+
+        matrix = summary.fetch("request_status_matrix", {})
+        if matrix.empty?
+          errors << "memory policy request status matrix missing for variant: #{variant}"
+          return
+        end
+
+        request_status_paths(baseline_matrix).each do |path|
+          baseline_entry = baseline_matrix.fetch(path, {})
+          variant_entry = matrix.fetch(path, {})
+          baseline_errors = Array(baseline_entry["errors"]).sort
+          variant_errors = Array(variant_entry["errors"]).sort
+          baseline_statuses = normalized_statuses(baseline_entry["statuses"])
+          variant_statuses = normalized_statuses(variant_entry["statuses"])
+
+          unless baseline_errors.empty?
+            errors << "memory policy request status baseline #{baseline_variant} has errors for #{path}: #{baseline_errors.join(", ")}"
+          end
+          unless variant_errors.empty?
+            errors << "memory policy request status variant #{variant} has errors for #{path}: #{variant_errors.join(", ")}"
+          end
+          if baseline_statuses.empty?
+            errors << "memory policy request status baseline #{baseline_variant} missing statuses for #{path}"
+          elsif variant_statuses.empty?
+            errors << "memory policy request status variant #{variant} missing statuses for #{path}"
+          elsif variant_statuses != baseline_statuses
+            errors << "memory policy request status mismatch for #{variant} #{path}: expected #{baseline_statuses.join(", ")}, got #{variant_statuses.join(", ")}"
+          end
+        end
+      end
+
+      def checked_request_status_variants(candidate_variant)
+        names = [candidate_variant.to_s]
+        if measurement["ablation"] == true
+          names.concat(
+            ablation_variants.filter_map do |variant|
+              name = variant["name"].to_s
+              next if name.empty? || name == "baseline"
+              next if Array(variant["transform_ids"]).empty?
+
+              name
+            end,
+          )
+        end
+        names.reject(&:empty?).uniq
+      end
+
+      def request_status_paths(baseline_matrix)
+        configured = Array(measurement["request_paths"]).map(&:to_s).reject(&:empty?)
+        return configured unless configured.empty?
+
+        baseline_matrix.keys.sort
+      end
+
+      def normalized_statuses(values)
+        Array(values).map { |value| Integer(value) }.uniq.sort
+      rescue ArgumentError, TypeError
+        []
+      end
+
+      def request_target?
+        measurement["target"] == "requests" || !Array(measurement["request_paths"]).empty?
+      end
+
+      def unexpected_event_summary(errors)
+        reports = unexpected_event_reports
+        return {} if reports.empty?
+
+        reports.each do |report|
+          errors << "memory policy measurement has unexpected runtime events in #{report.fetch("source")}: #{report.fetch("count")}"
+        end
+
+        {
+          "passed" => false,
+          "reports" => reports,
+        }
+      end
+
+      def unexpected_event_reports
+        reports = []
+        add_unexpected_event_report(reports, "measurement", measurement)
+        measurement.fetch("variants", {}).each do |variant, summary|
+          add_unexpected_event_report(reports, "variant #{variant}", summary)
+        end
+        measurement.fetch("runs", {}).each do |variant, runs|
+          Array(runs).each_with_index do |run, index|
+            add_unexpected_event_report(reports, "run #{variant}[#{index}]", run)
+          end
+        end
+        reports.uniq
+      end
+
+      def add_unexpected_event_report(reports, source, payload)
+        count = unexpected_event_count(payload)
+        return unless count.positive?
+
+        reports << {
+          "source" => source,
+          "count" => count,
+        }
+      end
+
+      def unexpected_event_count(payload)
+        return 0 unless payload.is_a?(Hash)
+
+        [
+          number(payload["unexpected_events_count"]),
+          number(payload.dig("runtime_event_summary", "unexpected_events_count")),
+          number(payload.dig("counters", "pruner.event.unexpected")),
+          Array(payload["unexpected_events"]).length,
+        ].compact.map(&:to_i).max || 0
       end
 
       def transform_savings_summary

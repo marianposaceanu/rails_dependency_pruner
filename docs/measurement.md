@@ -86,12 +86,17 @@ fails production approval when:
   or `max_request_p99_latency_regression_*`
 - warmed p95/p99 latency exceeds `max_warmed_p95_latency_regression_*`
   or `max_warmed_p99_latency_regression_*`
+- request-target measurements lack a request status matrix, report request
+  errors, or return statuses that differ from baseline
+- measurement, variant, or run summaries report unexpected runtime events
 - saved RSS is below the requested percentage of `reference_savings_mib`
 - `reference_profile_id` is set and does not match the measurement profile id
 
 `min_transform_savings_mib` can also be set for stricter local release checks.
 It evaluates individual ablation transform groups and is intentionally harsh:
-low-risk transforms that do not save RSS will fail that gate.
+low-risk transforms that do not save RSS will fail that gate. Failed individual
+ablation variants also fail policy approval because a memory win with a broken
+transform is not usable.
 
 ## what eats memory
 

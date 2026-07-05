@@ -5670,6 +5670,94 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_includes result.fetch("errors"), "memory policy max_warmed_p99_latency_regression_ms not met: regression 15.0 ms, allowed 10.0 ms"
   end
 
+  def test_memory_policy_enforces_request_status_and_unexpected_event_gates
+    result = RailsDependencyPruner::MemoryPolicy.new(
+      policy: {
+        "min_total_savings_mib" => 20,
+      },
+      measurement: {
+        "target" => "requests",
+        "request_paths" => ["/ok", "/missing"],
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "request_status_matrix" => {
+              "/ok" => { "statuses" => [200] },
+              "/missing" => { "statuses" => [404] },
+            },
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+            "request_status_matrix" => {
+              "/ok" => { "statuses" => [500] },
+              "/missing" => { "errors" => ["NoMethodError"] },
+            },
+            "runtime_event_summary" => {
+              "unexpected_events_count" => 1,
+            },
+          },
+        },
+      },
+    ).evaluate
+
+    assert_equal false, result.fetch("passed")
+    assert_equal false, result.dig("request_status", "passed")
+    assert_equal ["/ok", "/missing"], result.dig("request_status", "paths")
+    assert_includes result.fetch("errors"), "memory policy request status mismatch for boot_prune /ok: expected 200, got 500"
+    assert_includes result.fetch("errors"), "memory policy request status variant boot_prune has errors for /missing: NoMethodError"
+    assert_includes result.fetch("errors"), "memory policy request status variant boot_prune missing statuses for /missing"
+    assert_includes result.fetch("errors"), "memory policy measurement has unexpected runtime events in variant boot_prune: 1"
+    assert_equal [
+      {
+        "source" => "variant boot_prune",
+        "count" => 1,
+      },
+    ], result.dig("unexpected_events", "reports")
+  end
+
+  def test_memory_policy_rejects_failed_ablation_transform_variant
+    result = RailsDependencyPruner::MemoryPolicy.new(
+      policy: {
+        "min_total_savings_mib" => 20,
+      },
+      measurement: {
+        "ablation" => true,
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+          },
+          "all_approved_transforms" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+          },
+          "disable_eager_load_only" => {
+            "status" => "error",
+          },
+        },
+        "ablation_variants" => [
+          {
+            "name" => "baseline",
+            "transform_ids" => [],
+          },
+          {
+            "name" => "disable_eager_load_only",
+            "transform_ids" => ["disable_eager_load"],
+          },
+          {
+            "name" => "all_approved_transforms",
+            "transform_ids" => ["disable_eager_load"],
+          },
+        ],
+      },
+    ).evaluate
+
+    assert_equal false, result.fetch("passed")
+    assert_includes result.fetch("errors"), "memory policy ablation variant failed: disable_eager_load_only"
+  end
+
   def test_measure_environment_no_eager_load_variant_skips_eager_load
     Dir.mktmpdir("rails_dependency_pruner_measure_environment") do |dir|
       app_root = File.join(dir, "app")
@@ -6267,12 +6355,23 @@ class RailsDependencyPrunerTest < Minitest::Test
           "baseline" => {
             "status" => "ok",
             "rss_kb_median" => baseline_rss_kb,
+            "request_status_matrix" => {
+              "/" => {
+                "statuses" => [200],
+              },
+            },
           },
           candidate_variant => {
             "status" => "ok",
             "rss_kb_median" => candidate_rss_kb,
+            "request_status_matrix" => {
+              "/" => {
+                "statuses" => [200],
+              },
+            },
           },
         },
+        "request_paths" => ["/"],
       ))
     end
 

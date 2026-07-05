@@ -56,6 +56,12 @@ Strict no-`svg-graph` profile smoke, one run:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | requests | `233072 KB` | `129920 KB` | `103152 KB` (`100.7 MiB`, `44.3%`) | `2610.6 -> 871.0` | `14.3 -> 231.4` | `4.2 -> 23.9` | `-201` | `-273497` |
 
+Request-status policy smoke, one run:
+
+| target | baseline RSS | production RSS | saved RSS | request status gate |
+| --- | ---: | ---: | ---: | --- |
+| requests | `254528 KB` | `120640 KB` | `133888 KB` (`130.8 MiB`, `52.6%`) | passed for `/privacy`, `/login`, `/404` |
+
 The strict-profile request smoke hit `/privacy` and `/login` with `200`, and
 `/404` with `404`. The first request is slower because deferred boot work moves
 into that request. Warmed p95 moved by `+19.6 ms` in this one-run smoke.
@@ -98,6 +104,8 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-doctor.json`
 - `tmp/lobsters-ruby405-rails805-doctor-direct-gem-smoke.json`
 - `tmp/lobsters-ruby405-rails813-coverage-template.yml`
+- `tmp/lobsters-ruby405-request-status-policy-smoke.json`
+- `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 
 Static capability scan:
 

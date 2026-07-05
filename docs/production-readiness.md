@@ -50,6 +50,8 @@ A profile is ready only when:
   `rollback.disable_env_tested: true`
 - RSS savings satisfy the app memory policy
 - first request, p95, and p99 latency regressions satisfy the app policy
+- request-target measurements keep the same status matrix as baseline and have
+  no request errors or unexpected runtime events
 - the approved profile records `approved_at`, `approved_by`, verifier version,
   and verifier errors/warnings
 
