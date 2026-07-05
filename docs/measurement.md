@@ -104,6 +104,8 @@ fails production approval when:
 - the measurement artifact omits target, profile id, coverage digest, Rails env,
   or reviewed workload names, or declares a different value
 - a request measurement omits reviewed coverage request paths
+- `disable_eager_load` is enabled but the measurement artifact is not
+  `target: requests`
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`
 - total saved RSS is below `min_total_savings_percent`

@@ -921,6 +921,18 @@ coverage-template max RSS `48513024` bytes. Artifacts:
 `generic_blog_app/tmp/measurement-target-generic-blog-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app
 `40%` target remains open.
+Request-measurement verification follow-up rejects `disable_eager_load`
+production approval unless the measurement artifact uses `target: requests`
+after the latency policy is present. Sequential static smokes still passed:
+Lobsters doctor max RSS `53968896` bytes, Lobsters coverage-template max RSS
+`54165504` bytes, generic_blog_app doctor max RSS `48119808` bytes, and
+generic_blog_app coverage-template max RSS `48660480` bytes. Artifacts:
+`tmp/request-measurement-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/request-measurement-lobsters-template.yml`,
+`tmp/request-measurement-doctor-generic-blog.json`, and
+`generic_blog_app/tmp/request-measurement-generic-blog-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app
+`40%` target remains open.
 
 ## what eats memory
 

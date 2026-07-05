@@ -529,6 +529,8 @@ module RailsDependencyPruner
           if extreme_boot["disable_eager_load"] == true
             missing = disable_eager_load_latency_policy_gaps
             gaps << high_risk_gap("disable_eager_load", "latency_policy", missing) unless missing.empty?
+            missing = disable_eager_load_request_measurement_gaps
+            gaps << high_risk_gap("disable_eager_load", "request_measurement", missing) unless missing.empty?
             missing = disable_eager_load_declared_workload_gaps
             gaps << high_risk_gap("disable_eager_load", "declared_workload_coverage", missing) unless missing.empty?
           end
@@ -836,6 +838,12 @@ module RailsDependencyPruner
         end
 
         missing
+      end
+
+      def disable_eager_load_request_measurement_gaps
+        return [] unless disable_eager_load_latency_policy_gaps.empty?
+
+        measurement&.fetch("target", nil) == "requests" ? [] : ["measurement.target=requests"]
       end
 
       def disable_eager_load_declared_workload_gaps
