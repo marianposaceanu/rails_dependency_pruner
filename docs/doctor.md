@@ -21,6 +21,8 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.action_text`: `has_rich_text`
 - `capabilities.direct_gem_usage`: direct `Vips`, `Nokogiri`, `Sentry`,
   `Honeybadger`, and `Rollbar` API use
+- `capabilities.native_heavy_gems`: policy-registered native-heavy gems present
+  in the bundle or directly used by app code
 - `capabilities.integrations`: known observability/profiler gems
 - `capabilities.adapters`: known server/job/boot adapter gems
 - `risks.initializers_dynamic_require_load`

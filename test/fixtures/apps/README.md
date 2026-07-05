@@ -6,4 +6,5 @@ keep/prune decisions.
 
 Covered shapes include minimal Rails, Active Record only, Action Mailer, Active
 Storage attachments, Active Job, Action Text, Action Cable, mounted engines, and
-observability integrations.
+observability integrations. Doctor-only fixtures also cover direct native-heavy
+gem usage such as `ruby-vips` and `nokogiri`.

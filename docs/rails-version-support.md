@@ -26,9 +26,11 @@ The checked-in fixture matrix covers planner decisions for:
 - Action Cable channel and mount
 - mounted Rack or engine route
 - Sentry, Honeybadger, Rollbar, and Rack Mini Profiler integration signals
+- native-heavy direct-use signals for `ruby-vips` and `nokogiri`
 
-These fixtures are static source shapes, not bootable apps. Lobsters and
-`generic_blog_app` remain the real RSS benchmark targets.
+These fixtures are static source shapes, not bootable apps. Planner matrix
+fixtures assert keep/prune decisions; doctor fixtures assert app capability
+signals. Lobsters and `generic_blog_app` remain the real RSS benchmark targets.
 
 ## not production-supported yet
 

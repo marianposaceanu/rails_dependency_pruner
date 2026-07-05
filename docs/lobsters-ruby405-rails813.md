@@ -122,6 +122,10 @@ Artifacts:
 - `tmp/process-memory-details-flag-mp-template.yml`
 - `tmp/process-memory-details-flag-mp-template.stdout`
 - `tmp/process-memory-details-flag-mp-template.time`
+- `tmp/native-heavy-doctor-lobsters.json`
+- `tmp/native-heavy-doctor-lobsters.time`
+- `tmp/native-heavy-doctor-mp.json`
+- `tmp/native-heavy-doctor-mp.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -182,6 +186,16 @@ Process-memory detail flag static smoke:
 This was another static coverage-template smoke. It verifies the benchmark apps
 still scan cheaply after making macOS physical-footprint measurement a first
 class `--process-memory-details` option.
+
+Native-heavy doctor static smoke:
+
+| app | artifact | native-heavy surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/native-heavy-doctor-lobsters.json` | direct `nokogiri`, direct `ruby-vips`; bundled `bcrypt`, `commonmarker`, `stackprof` | `52723712` bytes |
+| generic_blog_app, generic blog simple app | `tmp/native-heavy-doctor-mp.json` | bundled `bcrypt`, bundled `nokogiri`; no direct static app use | `47824896` bytes |
+
+Both doctor scans reported `0` parse errors, `0` dynamic constantization risks,
+and `0` initializer dynamic require/load risks.
 
 Gem policy smoke:
 

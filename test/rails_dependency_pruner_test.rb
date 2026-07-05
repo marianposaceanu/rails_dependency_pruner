@@ -127,6 +127,31 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal "Rack::MiniProfiler", payload.dig("capabilities", "middleware", 0, "target")
   end
 
+  def test_reference_native_heavy_fixture_reports_native_gem_surface
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "doctor",
+      "--app",
+      REFERENCE_APPS_ROOT.join("native_heavy_gems").to_s,
+      "--json",
+      chdir: ROOT.to_s,
+    )
+
+    assert status.success?, stderr
+
+    payload = JSON.parse(stdout)
+    native_gems = payload.dig("capabilities", "native_heavy_gems")
+    assert_equal %w[nokogiri ruby-vips], native_gems.map { |entry| entry.fetch("gem") }
+    assert_equal %w[medium high], native_gems.map { |entry| entry.fetch("risk") }
+    assert_equal [true, true], native_gems.map { |entry| entry.fetch("direct_usage") }
+    assert_equal ["Nokogiri"], native_gems.dig(0, "constants")
+    assert_equal ["Vips"], native_gems.dig(1, "constants")
+    assert_equal true, payload.dig("capabilities", "direct_gem_usage", "nokogiri", "present")
+    assert_equal true, payload.dig("capabilities", "direct_gem_usage", "vips", "present")
+    assert_empty payload.dig("capabilities", "parse_errors")
+  end
+
   def test_app_literal_require_keeps_rails_file_constants
     Dir.mktmpdir("rails_dependency_pruner_static_require") do |dir|
       app_root = File.join(dir, "app")

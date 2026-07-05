@@ -5,6 +5,7 @@ require "rbconfig"
 
 require "prism"
 
+require_relative "gem_policy_registry"
 require_relative "static/dynamic_constant_visitor"
 require_relative "static/require_visitor"
 
@@ -182,6 +183,7 @@ module RailsDependencyPruner
           "action_text" => action_text,
           "rake_tasks" => rake_tasks,
           "direct_gem_usage" => direct_gem_usage,
+          "native_heavy_gems" => native_heavy_gems,
           "integrations" => integrations,
           "adapters" => adapters,
           "parse_errors" => parse_errors,
@@ -306,6 +308,26 @@ module RailsDependencyPruner
             require_paths: config.fetch("require_paths"),
           )
         end
+      end
+
+      def native_heavy_gems
+        GemPolicyRegistry.default.to_h.filter_map do |name, policy|
+          next unless policy["class"] == "native_heavy_library"
+
+          usage_key = native_heavy_usage_key(name, policy)
+          usage = direct_gem_usage[usage_key]
+          direct = usage && usage.fetch("present")
+          next unless direct || gem_names.include?(name)
+
+          {
+            "gem" => name,
+            "risk" => policy["risk"],
+            "strategies" => Array(policy["strategies"]),
+            "direct_usage" => direct == true,
+            "constants" => Array(policy["constants"]),
+            "require" => policy["require"],
+          }.compact
+        end.sort_by { |entry| entry.fetch("gem") }
       end
 
       def integrations
@@ -483,6 +505,13 @@ module RailsDependencyPruner
           "require_paths" => Array(require_paths).sort,
           "matches" => matches,
         }
+      end
+
+      def native_heavy_usage_key(name, policy)
+        return "vips" if name == "ruby-vips"
+
+        direct_key = [name, policy["require"]].compact.find { |key| DIRECT_GEM_USAGE.key?(key) }
+        direct_key || name
       end
 
       def mount_path_for(source)
