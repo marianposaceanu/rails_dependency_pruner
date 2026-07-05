@@ -54,6 +54,8 @@ A profile is ready only when:
   production status
 - canary event evidence passed through `--runtime-evidence` has no unexpected
   boot or request events
+- v2 coverage records reviewed canary evidence with zero unexpected events and
+  enough duration or request volume
 - v2 coverage records reviewed rollback evidence with
   `rollback.disable_env_tested: true`
 - RSS savings satisfy the app memory policy

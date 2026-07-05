@@ -160,6 +160,9 @@ module RailsDependencyPruner
         rollback_evidence_gaps.each do |gap|
           errors << "production verify missing rollback proof: #{format_rollback_evidence_gap(gap)}"
         end
+        canary_evidence_gaps.each do |gap|
+          errors << "production verify insufficient canary proof: #{format_canary_evidence_gap(gap)}"
+        end
         high_risk_transform_gaps.each do |gap|
           errors << "production verify missing high-risk transform proof: #{format_high_risk_transform_gap(gap)}"
         end
@@ -196,6 +199,7 @@ module RailsDependencyPruner
           "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
           "safety_policy_gaps" => safety_policy_gaps,
           "rollback_evidence_gaps" => rollback_evidence_gaps,
+          "canary_evidence_gaps" => canary_evidence_gaps,
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
           "memory_policy" => memory_policy_result,
@@ -536,6 +540,58 @@ module RailsDependencyPruner
                 "env_var" => "RAILS_DEPENDENCY_PRUNER_DISABLE",
               },
             ]
+          end
+        end
+      end
+
+      def canary_evidence_gaps
+        @canary_evidence_gaps ||= begin
+          manifest = coverage_manifest
+          manifest_version = manifest ? manifest.version.to_i : 1
+          if manifest_version < 2
+            []
+          else
+            evidence = manifest.canary_evidence
+            if evidence.empty?
+              [
+                {
+                  "requirement" => "canary",
+                  "expected" => "reviewed canary evidence",
+                  "actual" => "missing",
+                },
+              ]
+            elsif evidence["reviewed"] != true
+              [
+                {
+                  "requirement" => "canary.review_required",
+                  "expected" => false,
+                  "actual" => true,
+                },
+              ]
+            else
+              gaps = []
+              unless evidence["unexpected_events_count"] == 0
+                gaps << {
+                  "requirement" => "canary.unexpected_events_count",
+                  "expected" => 0,
+                  "actual" => evidence["unexpected_events_count"],
+                }
+              end
+              unless evidence["sample_passed"] == true
+                gaps << {
+                  "requirement" => "canary.duration_or_request_count",
+                  "expected" => {
+                    "duration_seconds" => evidence["min_duration_seconds"],
+                    "request_count" => evidence["min_request_count"],
+                  },
+                  "actual" => {
+                    "duration_seconds" => evidence["duration_seconds"],
+                    "request_count" => evidence["request_count"],
+                  },
+                }
+              end
+              gaps
+            end
           end
         end
       end
@@ -1106,6 +1162,24 @@ module RailsDependencyPruner
 
       def format_rollback_evidence_gap(gap)
         "#{gap.fetch("requirement")} must be true for #{gap.fetch("env_var")}"
+      end
+
+      def format_canary_evidence_gap(gap)
+        case gap.fetch("requirement")
+        when "canary"
+          "canary section is required for v2 production coverage"
+        when "canary.review_required"
+          "canary.review_required must be false"
+        when "canary.unexpected_events_count"
+          actual = gap["actual"].nil? ? "missing" : gap["actual"]
+          "canary.unexpected_events_count must be 0, got #{actual}"
+        when "canary.duration_or_request_count"
+          expected = gap.fetch("expected")
+          actual = gap.fetch("actual")
+          "canary requires duration_seconds >= #{expected.fetch("duration_seconds")} or request_count >= #{expected.fetch("request_count")}; got duration_seconds=#{actual["duration_seconds"] || "missing"}, request_count=#{actual["request_count"] || "missing"}"
+        else
+          gap.fetch("requirement")
+        end
       end
 
       def format_safety_policy_gap(gap)

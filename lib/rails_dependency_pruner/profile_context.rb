@@ -142,6 +142,7 @@ module RailsDependencyPruner
         "coverage_manifest_digest" => coverage_manifest&.digest,
         "coverage_manifest_version" => coverage_manifest&.version,
         "rollback_tested" => coverage_manifest&.rollback_tested?,
+        "canary_evidence" => coverage_manifest&.canary_evidence || {},
         "workloads" => coverage_manifest&.workloads || [],
       }
     end

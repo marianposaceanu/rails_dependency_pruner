@@ -2219,6 +2219,11 @@ class RailsDependencyPrunerTest < Minitest::Test
           preview: true
           representation: true
           attachment_read: true
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 100
+          unexpected_events_count: 0
         rollback:
           review_required: false
           disable_env_tested: true
@@ -2789,6 +2794,11 @@ class RailsDependencyPrunerTest < Minitest::Test
           include: all
         external_integrations:
           sentry: disabled_in_production
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 100
+          unexpected_events_count: 0
         rollback:
           review_required: false
           disable_env_tested: true
@@ -3722,6 +3732,11 @@ class RailsDependencyPrunerTest < Minitest::Test
           eager_load: true
         routes:
           include: all
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 100
+          unexpected_events_count: 0
         rollback:
           review_required: false
           disable_env_tested: true
@@ -3770,6 +3785,148 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       assert approved_status.success?, approved_stderr
       assert_empty JSON.parse(approved_stdout).dig("production_risks", "rollback_evidence_gaps")
+    end
+  end
+
+  def test_verify_production_requires_v2_canary_evidence
+    Dir.mktmpdir("rails_dependency_pruner_canary_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      profile_path = File.join(dir, "profile.json")
+
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify insufficient canary proof: canary section is required for v2 production coverage"
+      assert_equal [
+        {
+          "requirement" => "canary",
+          "expected" => "reviewed canary evidence",
+          "actual" => "missing",
+        },
+      ], payload.dig("production_risks", "canary_evidence_gaps")
+
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        canary:
+          review_required: false
+          duration_minutes: 15
+          request_count: 100
+          unexpected_events_count: 1
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify insufficient canary proof: canary.unexpected_events_count must be 0, got 1"
+      assert_includes payload.fetch("errors"), "production verify insufficient canary proof: canary requires duration_seconds >= 3600 or request_count >= 10000; got duration_seconds=900, request_count=100"
+      assert_equal %w[canary.unexpected_events_count canary.duration_or_request_count], payload.dig("production_risks", "canary_evidence_gaps").map { |gap| gap.fetch("requirement") }
+      assert_equal 900, JSON.parse(File.read(profile_path)).dig("evidence", "canary_evidence", "duration_seconds")
+
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        canary:
+          review_required: false
+          duration_minutes: 15
+          request_count: 10000
+          unexpected_events_count: 0
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout + stderr
+      assert_empty JSON.parse(stdout).dig("production_risks", "canary_evidence_gaps")
     end
   end
 
@@ -7606,6 +7763,12 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal %w[assets:precompile db:migrate], payload.dig("rake_tasks", "tasks")
       assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler")
       assert_equal "review", payload.dig("external_integrations", "sentry-rails")
+      assert_equal true, payload.dig("canary", "review_required")
+      assert_equal 0, payload.dig("canary", "duration_minutes")
+      assert_equal 0, payload.dig("canary", "request_count")
+      assert_nil payload.dig("canary", "unexpected_events_count")
+      assert_equal 60, payload.dig("canary", "min_duration_minutes")
+      assert_equal 10_000, payload.dig("canary", "min_request_count")
       assert_equal true, payload.dig("rollback", "review_required")
       assert_equal false, payload.dig("rollback", "disable_env_tested")
       assert_equal "RAILS_DEPENDENCY_PRUNER_DISABLE", payload.dig("rollback", "env_var")
@@ -7857,6 +8020,70 @@ class RailsDependencyPrunerTest < Minitest::Test
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
       assert_equal true, manifest.rollback_tested?
       assert_equal true, manifest.to_h.fetch("rollback_tested")
+    end
+  end
+
+  def test_coverage_manifest_requires_reviewed_canary_evidence
+    Dir.mktmpdir("rails_dependency_pruner_canary_coverage") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        canary:
+          review_required: true
+          duration_minutes: 60
+          request_count: 10000
+          unexpected_events_count: 0
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal false, manifest.canary_passed?
+      assert_equal false, manifest.canary_evidence.fetch("reviewed")
+      assert_equal false, manifest.canary_evidence.fetch("passed")
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        canary:
+          review_required: false
+          duration_minutes: 15
+          request_count: 100
+          unexpected_events_count: 1
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal false, manifest.canary_passed?
+      assert_equal 900, manifest.canary_evidence.fetch("duration_seconds")
+      assert_equal 100, manifest.canary_evidence.fetch("request_count")
+      assert_equal 1, manifest.canary_evidence.fetch("unexpected_events_count")
+      assert_equal false, manifest.canary_evidence.fetch("sample_passed")
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 100
+          unexpected_events_count: 0
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal true, manifest.canary_passed?
+      assert_equal true, manifest.to_h.dig("canary_evidence", "passed")
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        canary:
+          review_required: false
+          duration_minutes: 15
+          request_count: 10000
+          unexpected_events_count: 0
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal true, manifest.canary_passed?
     end
   end
 

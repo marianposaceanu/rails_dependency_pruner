@@ -49,7 +49,8 @@ Lazy or stubbed middleware and Railtie integration gems, such as
 `disabled`, `disabled_in_profile`, `disabled_in_production`,
 `disabled_in_test_profile`, `no_production_dsn`, and `not_used`.
 For v2 manifests, production verification also requires reviewed rollback
-evidence through `rollback.disable_env_tested: true`.
+evidence through `rollback.disable_env_tested: true` and reviewed canary
+evidence with zero unexpected events.
 
 Coverage can include a `safety_policy` section, but generated profiles still
 fail closed. Production verification rejects policy entries that weaken the

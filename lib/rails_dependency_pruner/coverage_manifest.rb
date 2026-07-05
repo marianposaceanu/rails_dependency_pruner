@@ -49,6 +49,8 @@ module RailsDependencyPruner
       "sentry-rails" => %w[sentry],
       "sentry-ruby" => %w[sentry],
     }.freeze
+    DEFAULT_CANARY_MIN_DURATION_SECONDS = 3_600
+    DEFAULT_CANARY_MIN_REQUEST_COUNT = 10_000
 
     attr_reader :path, :payload
 
@@ -108,6 +110,7 @@ module RailsDependencyPruner
         "eager_load" => eager_load,
         "workloads" => workloads,
         "rollback_tested" => rollback_tested?,
+        "canary_evidence" => canary_evidence,
       }
     end
 
@@ -184,6 +187,43 @@ module RailsDependencyPruner
       return false if rollback["review_required"] == true
 
       rollback["disable_env_tested"] == true
+    end
+
+    def canary_evidence
+      canary = payload["canary"]
+      return {} unless canary.is_a?(Hash)
+
+      duration_seconds = duration_seconds_for(canary)
+      request_count = integer(canary["request_count"] || canary["requests"])
+      unexpected_events_count = integer(canary["unexpected_events_count"] || canary["unexpected_events"])
+      min_duration_seconds = duration_seconds_for(canary, prefix: "min_") || DEFAULT_CANARY_MIN_DURATION_SECONDS
+      min_request_count = integer(canary["min_request_count"] || canary["min_requests"]) || DEFAULT_CANARY_MIN_REQUEST_COUNT
+      reviewed = canary["review_required"] == false
+
+      {
+        "reviewed" => reviewed,
+        "duration_seconds" => duration_seconds,
+        "request_count" => request_count,
+        "unexpected_events_count" => unexpected_events_count,
+        "min_duration_seconds" => min_duration_seconds,
+        "min_request_count" => min_request_count,
+        "sample_passed" => sample_passed?(
+          duration_seconds: duration_seconds,
+          request_count: request_count,
+          min_duration_seconds: min_duration_seconds,
+          min_request_count: min_request_count,
+        ),
+        "passed" => reviewed && unexpected_events_count == 0 && sample_passed?(
+          duration_seconds: duration_seconds,
+          request_count: request_count,
+          min_duration_seconds: min_duration_seconds,
+          min_request_count: min_request_count,
+        ),
+      }
+    end
+
+    def canary_passed?
+      canary_evidence["passed"] == true
     end
 
     private
@@ -269,6 +309,31 @@ module RailsDependencyPruner
         Date.iso8601(value.to_s)
       rescue ArgumentError
         nil
+      end
+
+      def duration_seconds_for(payload, prefix: "")
+        seconds = integer(payload["#{prefix}duration_seconds"])
+        return seconds unless seconds.nil?
+
+        minutes = integer(payload["#{prefix}duration_minutes"])
+        return minutes * 60 unless minutes.nil?
+
+        hours = integer(payload["#{prefix}duration_hours"])
+        return hours * 3_600 unless hours.nil?
+      end
+
+      def integer(value)
+        return value if value.is_a?(Integer)
+        return if value.nil? || value.to_s.empty?
+
+        Integer(value)
+      rescue ArgumentError, TypeError
+        nil
+      end
+
+      def sample_passed?(duration_seconds:, request_count:, min_duration_seconds:, min_request_count:)
+        duration_seconds.to_i >= min_duration_seconds.to_i ||
+          request_count.to_i >= min_request_count.to_i
       end
 
       def deep_stringify(value)

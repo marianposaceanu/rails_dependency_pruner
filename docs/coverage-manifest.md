@@ -59,6 +59,13 @@ rake_tasks:
   review_required: false
   tasks:
     - assets:precompile
+canary:
+  review_required: false
+  duration_minutes: 60
+  request_count: 100
+  unexpected_events_count: 0
+  min_duration_minutes: 60
+  min_request_count: 10000
 rollback:
   review_required: false
   disable_env_tested: true
@@ -86,6 +93,10 @@ memory_policy:
 
 `safety_policy` may repeat the generated fail-closed defaults. It must not
 weaken them for production approval.
+
+For v2 manifests, `canary` must be reviewed before production approval. The
+sample passes when `unexpected_events_count` is `0` and either the duration or
+request count reaches the configured minimum.
 
 Generic overrides can approve a known dynamic edge by path:
 

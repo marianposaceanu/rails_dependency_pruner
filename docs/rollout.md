@@ -68,6 +68,7 @@ Do not roll forward unless:
 - ablation marks the enabled transform set as usable
 - request statuses match baseline and request errors are absent
 - unexpected canary events are absent or explicitly handled by policy
+- v2 coverage records reviewed canary duration or request volume
 - rollback through `RAILS_DEPENDENCY_PRUNER_DISABLE=1` has been tested
 
 ## rollback
