@@ -96,11 +96,26 @@ bundle exec rails-dependency-pruner approve \
   --measurement tmp/pruner-ablation.json
 ```
 
+For separate environment and request measurements, pass both artifacts as a
+suite:
+
+```bash
+bundle exec rails-dependency-pruner approve \
+  --app . \
+  --profile config/rails_dependency_pruner_profile.json \
+  --coverage config/pruner_coverage.yml \
+  --measurements tmp/pruner-environment.json,tmp/pruner-requests.json
+```
+
+The request artifact drives the memory-policy gate. Every artifact in the suite
+must name the same profile id, coverage digest, and Rails env as the profile.
+
 For ablation reports, the default candidate is `all_approved_transforms`. For
 regular measurement reports, the default candidate is `boot_prune`. The policy
 fails production approval when:
 
 - the measurement artifact is missing
+- a measurement suite omits either `environment` or `requests` targets
 - the measurement artifact omits target, profile id, coverage digest, Rails env,
   or reviewed workload names, or declares a different value
 - a request measurement omits reviewed coverage request paths

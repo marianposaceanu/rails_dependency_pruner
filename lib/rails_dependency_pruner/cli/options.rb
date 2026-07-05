@@ -258,6 +258,7 @@ module RailsDependencyPruner
           profile_path: nil,
           coverage_path: nil,
           measurement_path: nil,
+          measurement_paths: [],
           runtime_evidence_paths: [],
           production: default_production,
           approve_production: default_approve_production,
@@ -275,6 +276,7 @@ module RailsDependencyPruner
           parser.on("--runtime-evidence PATHS", "Comma-separated runtime evidence JSON files") { |paths| options[:runtime_evidence_paths] = split_csv(paths) }
           parser.on("--coverage PATH", "Coverage manifest used for deterministic profile context") { |path| options[:coverage_path] = path }
           parser.on("--measurement PATH", "Measurement or ablation JSON used by production memory policy") { |path| options[:measurement_path] = path }
+          parser.on("--measurements PATHS", "Comma-separated measurement JSON files for production suite checks") { |paths| options[:measurement_paths] = split_csv(paths) }
           parser.on("--production", "Require production verification gates") { options[:production] = true }
           parser.on("--approve-production", "Set safety.production_allowed=true after successful --production verify") { options[:approve_production] = true }
           parser.on("--approved-by NAME", "Reviewer recorded in safety.approved_by") { |name| options[:approved_by] = name }
@@ -289,7 +291,11 @@ module RailsDependencyPruner
         options[:rails_root] ||= ENV["RAILS_ROOT_FOR_PRUNER"]
         raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
         raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        raise ArgumentError, "use either --measurement or --measurements" if options[:measurement_path] && !options.fetch(:measurement_paths).empty?
         raise ArgumentError, "--measurement does not exist" if options[:measurement_path] && !File.exist?(options[:measurement_path])
+        options.fetch(:measurement_paths).each do |path|
+          raise ArgumentError, "--measurements entry does not exist: #{path}" unless File.exist?(path)
+        end
         raise ArgumentError, "--approve-production requires --production" if options[:approve_production] && !options[:production]
 
         options

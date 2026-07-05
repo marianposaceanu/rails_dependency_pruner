@@ -226,6 +226,18 @@ Artifacts:
 - `tmp/lobsters-ruby405-safety-policy-measurement-smoke.json`
 - `tmp/lobsters-ruby405-safety-policy-measurement-smoke.md`
 
+Measurement-suite smoke on 2026-07-05:
+
+| app | command | max RSS | artifact |
+| --- | --- | ---: | --- |
+| Lobsters | `doctor --json` | `53673984 B` (`51.2 MiB`) | `tmp/measurement-suite-doctor-lobsters.json` |
+| Lobsters | `coverage template` | `54493184 B` (`52.0 MiB`) | `tmp/lobsters-ruby405-rails813/tmp/measurement-suite-lobsters-template.yml` |
+| generic blog app | `doctor --json` | `48283648 B` (`46.0 MiB`) | `tmp/measurement-suite-doctor-generic-blog.json` |
+| generic blog app | `coverage template` | `48513024 B` (`46.3 MiB`) | `generic_blog_app/tmp/measurement-suite-generic-blog-template.yml` |
+
+These are CLI smoke RSS numbers, not request-workload savings. No new
+production request benchmark was run for this milestone.
+
 Static capability scan:
 
 | capability | result |

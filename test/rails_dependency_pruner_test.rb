@@ -6920,6 +6920,125 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_accepts_measurement_suite_and_checks_each_context
+    Dir.mktmpdir("rails_dependency_pruner_measurement_suite") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        requests:
+          - GET / => 200
+          - GET /health => 200
+        memory_policy:
+          min_total_savings_mib: 20
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+      profile_payload = JSON.parse(File.read(profile_path))
+      profile_id = profile_payload.fetch("profile_id")
+      coverage_digest = profile_payload.dig("evidence", "coverage_manifest_digest")
+
+      environment_measurement_path = File.join(dir, "environment-measurement.json")
+      write_environment_measurement_report(
+        path: environment_measurement_path,
+        profile_id: profile_id,
+        coverage_digest: coverage_digest,
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 60_000,
+      )
+      request_measurement_path = File.join(dir, "request-measurement.json")
+      write_measurement_report(
+        path: request_measurement_path,
+        profile_id: profile_id,
+        coverage_digest: coverage_digest,
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 60_000,
+        request_paths: ["/", "/health"],
+      )
+      stale_environment_measurement_path = File.join(dir, "stale-environment-measurement.json")
+      write_environment_measurement_report(
+        path: stale_environment_measurement_path,
+        profile_id: profile_id,
+        coverage_digest: "sha256:stale",
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 60_000,
+      )
+
+      stale_stdout, _stale_stderr, stale_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurements",
+        [stale_environment_measurement_path, request_measurement_path].join(","),
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute stale_status.success?
+
+      stale_payload = JSON.parse(stale_stdout)
+      assert_includes stale_payload.fetch("errors"),
+        "production verify measurement suite mismatch: measurement 0 environment measurement.coverage.digest expected #{coverage_digest}, got sha256:stale"
+      assert_equal [
+        {
+          "measurement_index" => 0,
+          "measurement_target" => "environment",
+          "requirement" => "measurement.coverage.digest",
+          "expected" => coverage_digest,
+          "actual" => "sha256:stale",
+        },
+      ], stale_payload.dig("production_risks", "measurement_suite_gaps")
+
+      approve_stdout, approve_stderr, approve_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "approve",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurements",
+        [environment_measurement_path, request_measurement_path].join(","),
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert approve_status.success?, approve_stderr
+
+      approved_payload = JSON.parse(approve_stdout)
+      assert_equal true, approved_payload.fetch("verified")
+      assert_equal true, approved_payload.fetch("profile_approved")
+      assert_empty approved_payload.dig("production_risks", "measurement_suite_gaps")
+      assert_equal ["/", "/health"], approved_payload.dig("production_risks", "memory_policy", "request_status", "paths")
+      assert_equal 40_000, approved_payload.dig("production_risks", "memory_policy", "measurement", "saved_kb")
+    end
+  end
+
   def test_verify_approve_production_rewrites_profile_after_success
     Dir.mktmpdir("rails_dependency_pruner_approve_production") do |dir|
       app_root = File.join(dir, "app")
@@ -11667,6 +11786,33 @@ class RailsDependencyPrunerTest < Minitest::Test
           },
         },
         "request_paths" => request_paths,
+      }
+      if coverage_digest
+        report["coverage"] = {
+          "digest" => coverage_digest,
+          "rails_env" => "production",
+          "workloads" => coverage_workloads,
+        }
+      end
+      File.write(path, JSON.pretty_generate(report))
+    end
+
+    def write_environment_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil, coverage_workloads: %w[boot requests routes])
+      report = {
+        "target" => "environment",
+        "profile" => {
+          "profile_id" => profile_id,
+        },
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => baseline_rss_kb,
+          },
+          candidate_variant => {
+            "status" => "ok",
+            "rss_kb_median" => candidate_rss_kb,
+          },
+        },
       }
       if coverage_digest
         report["coverage"] = {

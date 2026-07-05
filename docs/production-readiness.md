@@ -16,6 +16,10 @@ bundle exec rails-dependency-pruner approve --app . --profile config/rails_depen
 bundle exec rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
 ```
 
+If environment and request measurements are captured separately, use
+`--measurements tmp/pruner-environment.json,tmp/pruner-requests.json` at
+approval time.
+
 Review and apply `tmp/pruner-rollout.patch` in the app repo. The command does
 not edit the app. See `rollout.md` for shadow, canary, production, and rollback
 steps.
@@ -49,6 +53,8 @@ A profile is ready only when:
 - coverage-bound measurement artifacts declare their target and name the same
   profile id, coverage digest, Rails env, and reviewed workload names, and
   request measurements cover the reviewed request paths
+- measurement suites include both environment and request targets when separate
+  artifacts are used
 - source, environment, bundle, runtime evidence, and profile fingerprints match
 - request, job, mail, storage, Action Text, cable, and task coverage covers the
   transforms

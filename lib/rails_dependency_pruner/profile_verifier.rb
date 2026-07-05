@@ -77,15 +77,16 @@ module RailsDependencyPruner
     }.freeze
     RAILTIE_FRAMEWORKS = BootPlan::RAILTIE_REQUIRE_PATHS.invert.freeze
 
-    attr_reader :profile, :context, :index, :usage, :production, :measurement
+    attr_reader :profile, :context, :index, :usage, :production, :measurement, :measurements
 
-    def initialize(profile:, context:, index:, usage:, production: false, measurement: nil)
+    def initialize(profile:, context:, index:, usage:, production: false, measurement: nil, measurements: nil)
       @profile = profile
       @context = context
       @index = index
       @usage = usage
       @production = production
       @measurement = measurement
+      @measurements = measurements ? Array(measurements) : Array(measurement)
     end
 
     def verify
@@ -171,6 +172,9 @@ module RailsDependencyPruner
         measurement_context_gaps.each do |gap|
           errors << "production verify measurement context mismatch: #{format_measurement_context_gap(gap)}"
         end
+        measurement_suite_gaps.each do |gap|
+          errors << "production verify measurement suite mismatch: #{format_measurement_suite_gap(gap)}"
+        end
         memory_policy_result.fetch("errors").each do |error|
           errors << "production verify #{error}"
         end
@@ -206,6 +210,7 @@ module RailsDependencyPruner
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
           "measurement_context_gaps" => measurement_context_gaps,
+          "measurement_suite_gaps" => measurement_suite_gaps,
           "memory_policy" => memory_policy_result,
         },
         "profile" => {
@@ -1374,9 +1379,109 @@ module RailsDependencyPruner
         end
       end
 
-      def measurement_profile_id
-        measurement.dig("source_profile", "profile_id") ||
-          measurement.dig("profile", "profile_id")
+      def measurement_suite_gaps
+        @measurement_suite_gaps ||= begin
+          if measurements.length <= 1
+            []
+          else
+            gaps = []
+            targets = measurements.map { |payload| payload["target"].to_s }.reject(&:empty?).uniq.sort
+            missing_targets = %w[environment requests] - targets
+            unless missing_targets.empty?
+              gaps << {
+                "requirement" => "measurement_suite.targets",
+                "expected" => %w[environment requests],
+                "actual" => targets,
+                "missing" => missing_targets,
+              }
+            end
+
+            measurements.each_with_index do |payload, index|
+              gaps.concat(measurement_suite_context_gaps(payload, index))
+            end
+            gaps
+          end
+        end
+      end
+
+      def measurement_suite_context_gaps(payload, index)
+        gaps = []
+        target = payload["target"].to_s
+        unless MEASUREMENT_TARGETS.include?(target)
+          gaps << measurement_suite_gap(index, payload, "measurement.target", MEASUREMENT_TARGETS, target.empty? ? nil : target)
+        end
+
+        expected_profile_id = profile.profile_id
+        actual_profile_id = measurement_profile_id(payload)
+        if expected_profile_id && (actual_profile_id.to_s.empty? || actual_profile_id != expected_profile_id)
+          gaps << measurement_suite_gap(index, payload, "measurement.profile_id", expected_profile_id, actual_profile_id)
+        end
+
+        expected_coverage_digest = profile.payload.dig("evidence", "coverage_manifest_digest")
+        actual_coverage_digest = payload.dig("coverage", "digest")
+        if expected_coverage_digest && (actual_coverage_digest.to_s.empty? || actual_coverage_digest != expected_coverage_digest)
+          gaps << measurement_suite_gap(index, payload, "measurement.coverage.digest", expected_coverage_digest, actual_coverage_digest)
+        end
+
+        expected_rails_env = profile.payload.dig("environment", "rails_env")
+        actual_rails_env = payload.dig("coverage", "rails_env")
+        if expected_rails_env && (actual_rails_env.to_s.empty? || actual_rails_env != expected_rails_env)
+          gaps << measurement_suite_gap(index, payload, "measurement.coverage.rails_env", expected_rails_env, actual_rails_env)
+        end
+
+        gaps.concat(measurement_suite_coverage_workload_gaps(payload, index, expected_coverage_digest, actual_coverage_digest))
+        gaps.concat(measurement_suite_request_path_gaps(payload, index, expected_coverage_digest, actual_coverage_digest))
+        gaps
+      end
+
+      def measurement_suite_coverage_workload_gaps(payload, index, expected_coverage_digest, actual_coverage_digest)
+        return [] unless expected_coverage_digest && actual_coverage_digest == expected_coverage_digest
+
+        expected_workloads = coverage_manifest_workloads
+        return [] if expected_workloads.empty?
+
+        actual_workloads = measurement_coverage_workloads(payload)
+        missing_workloads = expected_workloads - actual_workloads
+        return [] if missing_workloads.empty?
+
+        [
+          measurement_suite_gap(index, payload, "measurement.coverage.workloads", expected_workloads, actual_workloads).merge(
+            "missing" => missing_workloads,
+          ),
+        ]
+      end
+
+      def measurement_suite_request_path_gaps(payload, index, expected_coverage_digest, actual_coverage_digest)
+        return [] unless expected_coverage_digest && actual_coverage_digest == expected_coverage_digest
+        return [] unless measurement_request_workload?(payload)
+
+        expected_paths = coverage_manifest_request_paths
+        return [] if expected_paths.empty?
+
+        actual_paths = measurement_request_paths(payload)
+        missing_paths = expected_paths - actual_paths
+        return [] if missing_paths.empty?
+
+        [
+          measurement_suite_gap(index, payload, "measurement.request_paths", expected_paths, actual_paths).merge(
+            "missing" => missing_paths,
+          ),
+        ]
+      end
+
+      def measurement_suite_gap(index, payload, requirement, expected, actual)
+        {
+          "measurement_index" => index,
+          "measurement_target" => payload["target"],
+          "requirement" => requirement,
+          "expected" => expected,
+          "actual" => actual,
+        }
+      end
+
+      def measurement_profile_id(payload = measurement)
+        payload.dig("source_profile", "profile_id") ||
+          payload.dig("profile", "profile_id")
       end
 
       def measurement_target_gap
@@ -1431,16 +1536,16 @@ module RailsDependencyPruner
         ]
       end
 
-      def measurement_request_workload?
-        measurement["target"] == "requests"
+      def measurement_request_workload?(payload = measurement)
+        payload["target"] == "requests"
       end
 
       def coverage_manifest_workloads
         Array(coverage_manifest&.workloads).map(&:to_s).uniq.sort
       end
 
-      def measurement_coverage_workloads
-        Array(measurement.dig("coverage", "workloads"))
+      def measurement_coverage_workloads(payload = measurement)
+        Array(payload.dig("coverage", "workloads"))
           .map { |workload| CoverageManifest.normalize_workload_key(workload) }
           .reject(&:empty?)
           .uniq
@@ -1451,10 +1556,10 @@ module RailsDependencyPruner
         Array(coverage_manifest&.request_entries).map { |entry| entry.fetch("path") }.uniq.sort
       end
 
-      def measurement_request_paths
-        paths = Array(measurement["request_paths"]).map(&:to_s).reject(&:empty?)
+      def measurement_request_paths(payload = measurement)
+        paths = Array(payload["request_paths"]).map(&:to_s).reject(&:empty?)
         if paths.empty?
-          paths = measurement.fetch("variants", {}).values.flat_map do |summary|
+          paths = payload.fetch("variants", {}).values.flat_map do |summary|
             summary.fetch("request_status_matrix", {}).keys
           end
         end
@@ -1608,6 +1713,16 @@ module RailsDependencyPruner
 
         actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
         "#{gap.fetch("requirement")} expected #{gap.fetch("expected")}, got #{actual}"
+      end
+
+      def format_measurement_suite_gap(gap)
+        if gap["requirement"] == "measurement_suite.targets"
+          return "measurement suite missing targets #{Array(gap["missing"]).join(", ")}"
+        end
+
+        actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
+        target = gap["measurement_target"].to_s.empty? ? "unknown target" : gap["measurement_target"]
+        "measurement #{gap.fetch("measurement_index")} #{target} #{gap.fetch("requirement")} expected #{gap.fetch("expected")}, got #{actual}"
       end
 
       def high_risk_gap(transform_id, requirement, missing_requirements, alternative: nil)

@@ -90,12 +90,14 @@ Files under `tmp`, `vendor/bundle`, and `node_modules` are ignored.
 
 ## memory policy
 
-When `memory_policy` is present, production approval must receive a measurement
-or ablation JSON file through `--measurement`. The verifier compares the
-baseline RSS with `boot_prune` for regular measurements, or with
-`all_approved_transforms` for ablations.
-The measurement must also declare a target and name the same profile id,
-coverage digest, Rails env, and reviewed workload names as the profile; request
+When `memory_policy` is present, production approval must receive measurement
+proof through `--measurement` or a comma-separated suite through
+`--measurements`. The verifier compares the baseline RSS with `boot_prune` for
+regular measurements, or with `all_approved_transforms` for ablations. In a
+suite, the request artifact drives the memory-policy gate and the environment
+artifact proves the boot surface.
+Each measurement must declare a target and name the same profile id, coverage
+digest, Rails env, and reviewed workload names as the profile; request
 measurements must cover the reviewed request paths.
 
 Supported gates:

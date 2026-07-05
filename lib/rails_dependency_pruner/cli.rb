@@ -178,7 +178,8 @@ module RailsDependencyPruner
           runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
           coverage_path: options[:coverage_path],
         )
-        measurement = measurement_payload(options[:measurement_path])
+        measurements = measurement_payloads(options)
+        measurement = selected_measurement(measurements)
         report = ProfileVerifier.new(
           profile: profile,
           context: context,
@@ -186,6 +187,7 @@ module RailsDependencyPruner
           usage: usage,
           production: options.fetch(:production),
           measurement: measurement,
+          measurements: measurements,
         ).verify
         if options.fetch(:approve_production)
           report["profile_approved"] = false
@@ -664,6 +666,7 @@ module RailsDependencyPruner
             rails-dependency-pruner check --profile config/rails_dependency_pruner_profile.json --app .
             rails-dependency-pruner measure ablation --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --process-memory-details --output tmp/pruner-ablation.json
             rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --measurement tmp/pruner-ablation.json
+            rails-dependency-pruner approve --profile config/rails_dependency_pruner_profile.json --app . --coverage config/pruner_coverage.yml --measurements tmp/pruner-environment.json,tmp/pruner-requests.json
             rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch
             rails-dependency-pruner coverage template --app . --write config/pruner_coverage.yml
             rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json
@@ -675,6 +678,7 @@ module RailsDependencyPruner
             --patch PATH
             --coverage PATH
             --measurement PATH         Measurement JSON for production memory policy
+            --measurements PATHS       Comma-separated measurement JSON files
             --runtime-evidence PATHS
             --disable-eager-load
             --skip-railties PATHS
@@ -806,6 +810,24 @@ module RailsDependencyPruner
         JSON.parse(File.read(path))
       rescue JSON::ParserError => error
         raise ArgumentError, "measurement JSON is invalid: #{error.message}"
+      end
+
+      def measurement_payloads(options)
+        paths = if options[:measurement_path]
+          [options.fetch(:measurement_path)]
+        else
+          options.fetch(:measurement_paths, [])
+        end
+
+        paths.filter_map { |path| measurement_payload(path) }
+      end
+
+      def selected_measurement(measurements)
+        return nil if measurements.empty?
+
+        measurements.find { |payload| payload["target"] == "requests" } ||
+          measurements.find { |payload| payload["ablation"] == true } ||
+          measurements.first
       end
 
       def runtime_evidence_for(paths, index)
