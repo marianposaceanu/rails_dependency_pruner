@@ -54,6 +54,8 @@ events unless the profile asks for stricter behavior.
 The lazy constant list is an allowlist from the gem policy registry. Production
 verification rejects extra `lazy_constants` entries, even when they point to an
 approved lazy gem.
+Runtime loading is limited to exact top-level constants; nested misses such as
+`Reports::Faker` do not trigger a lazy gem load.
 
 ## measuring
 

@@ -858,6 +858,8 @@ module RailsDependencyPruner
     end
 
     def load_lazy_gem_for_constant(name, owner: nil, caller_location: nil)
+      return false unless top_level_constant_owner?(owner)
+
       constant_name = name.to_s
       policy = @lazy_constant_policies&.fetch(constant_name, nil)
       return false unless policy
@@ -903,6 +905,10 @@ module RailsDependencyPruner
         phase: phase,
       ))
       true
+    end
+
+    def top_level_constant_owner?(owner)
+      owner.equal?(::Object)
     end
 
     def lazy_constant_event(action:, constant:, owner:, caller_location:, policy:, phase:)

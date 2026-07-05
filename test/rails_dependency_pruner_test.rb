@@ -5220,6 +5220,84 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_lazy_constant_loader_ignores_nested_constant_owner
+    Dir.mktmpdir("rails_dependency_pruner_early_lazy_nested_owner") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      output_path = File.join(dir, "early.json")
+      File.write(File.join(dir, "faker.rb"), "module Faker; end\n")
+      File.write(profile_path, JSON.pretty_generate(
+        "mode" => "boot_prune",
+        "extreme_boot" => {
+          "disable_eager_load" => false,
+          "skip_railties" => [],
+          "lazy_require_paths" => [],
+          "lazy_gems" => ["faker"],
+          "config_namespace_stubs" => [],
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+          "disabled_railties" => [],
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_EARLY_OUTPUT" => output_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "boot_prune",
+          "RUBYLIB" => [dir, ROOT.join("lib").to_s].join(File::PATH_SEPARATOR),
+        },
+        RUBY,
+        "-e",
+        <<~RUBY,
+          require "json"
+          require "rails_dependency_pruner/early_boot"
+
+          module Reports
+            def self.resolve
+              Faker
+            end
+          end
+
+          nested_error = begin
+            Reports.resolve
+            nil
+          rescue NameError => error
+            error.name.to_s
+          end
+
+          top_level_before = Object.const_defined?(:Faker, false)
+          top_level_value = Faker
+          top_level_after = Object.const_defined?(:Faker, false)
+
+          puts JSON.generate(
+            "nested_error" => nested_error,
+            "top_level_before" => top_level_before,
+            "top_level_after" => top_level_after,
+            "top_level_name" => top_level_value.name,
+            "faker_loaded" => $LOADED_FEATURES.any? { |feature| feature.end_with?("/faker.rb") },
+          )
+        RUBY
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "Faker", payload.fetch("nested_error")
+      assert_equal false, payload.fetch("top_level_before")
+      assert_equal true, payload.fetch("top_level_after")
+      assert_equal "Faker", payload.fetch("top_level_name")
+      assert_equal true, payload.fetch("faker_loaded")
+
+      early_payload = JSON.parse(File.read(output_path))
+      events = early_payload.fetch("events")
+      assert_equal 1, early_payload.fetch("events_count")
+      assert_equal "loaded_lazy_gem", events.dig(0, "action")
+      assert_equal "Faker", events.dig(0, "constant")
+      assert_equal "Object", events.dig(0, "owner")
+    end
+  end
+
   def test_early_boot_canary_fails_lazy_constant_in_disallowed_phase
     Dir.mktmpdir("rails_dependency_pruner_early_lazy_phase_violation") do |dir|
       profile_path = File.join(dir, "profile.json")
