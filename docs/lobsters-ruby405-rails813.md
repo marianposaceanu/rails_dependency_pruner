@@ -271,6 +271,8 @@ Runtime event manifest smoke:
 - fixture-matrix doctor smoke scanned Lobsters without booting it, detected
   Rack Mini Profiler, Sentry, Puma, jobs, and mailers, and used max RSS
   `41353216` bytes
+- coverage-template smoke generated the reviewed storage action checklist with
+  `active_storage.attachment_read: false`; max RSS `42614784` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
@@ -286,7 +288,9 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-process-memory-report-smoke.json`,
   `tmp/lobsters-ruby405-process-memory-report-smoke.md`,
   `tmp/lobsters-ruby405-fixture-matrix-doctor-smoke.json`,
-  `tmp/lobsters-ruby405-fixture-matrix-doctor-smoke.time`
+  `tmp/lobsters-ruby405-fixture-matrix-doctor-smoke.time`,
+  `tmp/lobsters-ruby405-rails813/tmp/lobsters-ruby405-coverage-template-attachment-read-smoke.yml`,
+  `tmp/lobsters-ruby405-coverage-template-attachment-read-smoke.time`
 
 The current strict-profile smoke above uses the no-`svg-graph` profile. The
 older full-profile RSS rows are still useful as historical context, but do not

@@ -33,8 +33,8 @@ Typical review steps:
 The parser accepts v1-style simple arrays and v2 review sections. `channels`
 normalizes to the existing `cable` workload name, and reviewed `active_storage`
 coverage normalizes to `attachments` only when a storage action such as upload,
-analyze, variant, preview, or representation is marked covered. A declaration
-inventory by itself is not attachment coverage.
+analyze, variant, preview, representation, or attachment read is marked covered.
+A declaration inventory by itself is not attachment coverage.
 
 Production verification also checks coverage required by the Rails feature
 catalog. For example, Active Storage catalog evidence requires the normalized

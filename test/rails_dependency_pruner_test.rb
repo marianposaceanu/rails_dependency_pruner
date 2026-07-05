@@ -6343,6 +6343,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["ApplicationMailbox"], payload.dig("inbound_email", "mailboxes")
       assert_equal true, payload.dig("active_storage", "declarations_expected")
       assert_equal "image", payload.dig("active_storage", "declarations", 0, "name")
+      assert_equal false, payload.dig("active_storage", "attachment_read")
       assert_equal true, payload.dig("action_text", "rich_text_expected")
       assert_equal "bio", payload.dig("action_text", "declarations", 0, "name")
       assert_equal %w[assets:precompile db:migrate], payload.dig("rake_tasks", "tasks")

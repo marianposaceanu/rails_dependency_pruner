@@ -94,6 +94,7 @@ module RailsDependencyPruner
           "variant" => false,
           "preview" => false,
           "representation" => false,
+          "attachment_read" => false,
         }
       end
 

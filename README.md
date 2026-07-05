@@ -213,18 +213,38 @@ RailsDependencyPruner::RuntimeRecorder.snapshot!("after_routes_load")
 Production profiles should declare the workload they cover:
 
 ```yaml
-version: 1
+version: 2
 rails_env: production
 boot:
   eager_load: true
 routes:
+  review_required: false
   include: all
 jobs:
-  - CleanupJob
+  review_required: false
+  classes:
+    - CleanupJob
 mailers:
-  - UserMailer#welcome
+  review_required: false
+  actions:
+    - UserMailer#welcome
+active_storage:
+  review_required: false
+  declarations_expected: false
+  upload: false
+  analyze: false
+  variant: false
+  preview: false
+  representation: false
+  attachment_read: false
 rake_tasks:
-  - assets:precompile
+  review_required: false
+  tasks:
+    - assets:precompile
+rollback:
+  review_required: false
+  disable_env_tested: true
+  env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
 ```
 
 Use `bundle exec rails-dependency-pruner coverage template --app . --write
