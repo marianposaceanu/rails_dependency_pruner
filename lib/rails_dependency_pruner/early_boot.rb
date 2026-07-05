@@ -622,6 +622,9 @@ module RailsDependencyPruner
       unless expected_profile_id.to_s == expected
         raise UnsafeProfileError, "rails_dependency_pruner #{@mode} mode requires RAILS_DEPENDENCY_PRUNER_PROFILE_ID=#{expected}"
       end
+      if payload.key?("unexpected_event_policy") && !UNEXPECTED_EVENT_POLICIES.include?(payload["unexpected_event_policy"].to_s)
+        raise UnsafeProfileError, "rails_dependency_pruner #{@mode} mode requires a valid unexpected_event_policy"
+      end
 
       true
     end

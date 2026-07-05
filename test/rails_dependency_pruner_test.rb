@@ -6029,6 +6029,39 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_safety_modes_reject_invalid_unexpected_event_policy
+    %w[canary production].each do |mode|
+      Dir.mktmpdir("rails_dependency_pruner_early_invalid_policy") do |dir|
+        profile_path = File.join(dir, "profile.json")
+        payload = approved_early_boot_profile(
+          "mode" => "boot_prune",
+          "unexpected_event_policy" => "ignore_events",
+          "pruning" => {
+            "disabled_require_paths" => [],
+          },
+        )
+        File.write(profile_path, JSON.pretty_generate(payload))
+
+        _stdout, stderr, status = Open3.capture3(
+          {
+            "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+            "RAILS_DEPENDENCY_PRUNER_MODE" => mode,
+            "RAILS_DEPENDENCY_PRUNER_PROFILE_ID" => payload.fetch("profile_id"),
+          },
+          RUBY,
+          "-I#{ROOT.join("lib")}",
+          "-e",
+          <<~RUBY
+            require "rails_dependency_pruner/early_boot"
+          RUBY
+        )
+
+        refute status.success?, mode
+        assert_includes stderr, "#{mode} mode requires a valid unexpected_event_policy"
+      end
+    end
+  end
+
   def test_early_boot_canary_mode_blocks_with_approved_profile
     Dir.mktmpdir("rails_dependency_pruner_early_canary") do |dir|
       File.write(File.join(dir, "blocked_feature.rb"), "raise 'should not load'\n")
