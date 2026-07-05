@@ -933,6 +933,18 @@ generic_blog_app coverage-template max RSS `48660480` bytes. Artifacts:
 `generic_blog_app/tmp/request-measurement-generic-blog-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app
 `40%` target remains open.
+Ablation unsafe-classification follow-up rejects production approval when a
+per-transform ablation variant is classified `unsafe_for_production`, such as a
+transform-only first request latency regression. Sequential static smokes still
+passed: Lobsters doctor max RSS `53739520` bytes, Lobsters coverage-template max
+RSS `54689792` bytes, generic_blog_app doctor max RSS `48300032` bytes, and
+generic_blog_app coverage-template max RSS `48611328` bytes. Artifacts:
+`tmp/ablation-unsafe-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/ablation-unsafe-lobsters-template.yml`,
+`tmp/ablation-unsafe-doctor-generic-blog.json`, and
+`generic_blog_app/tmp/ablation-unsafe-generic-blog-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app
+`40%` target remains open.
 
 ## what eats memory
 

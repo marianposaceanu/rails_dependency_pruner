@@ -128,9 +128,9 @@ ablation variants also fail policy approval because a memory win with a broken
 transform is not usable.
 When an ablation report has a memory policy, JSON and Markdown include
 per-variant assessments. Variants can be `production_candidate`,
-`not_worth_enabling`, `unsafe_for_production`, or `forced`. Use
-`forced_transform_ids` only for reviewed transforms that should stay enabled
-despite a local threshold miss.
+`not_worth_enabling`, `unsafe_for_production`, or `forced`.
+`unsafe_for_production` fails approval. Use `forced_transform_ids` only for
+reviewed transforms that should stay enabled despite a local threshold miss.
 
 ## what eats memory
 

@@ -65,6 +65,7 @@ module RailsDependencyPruner
       check_ablation_variant_statuses(errors)
       check_transform_savings(errors, transform_savings)
       check_latency_regressions(errors, summary)
+      check_ablation_assessment(errors, ablation_assessment)
 
       result = {
         "configured" => true,
@@ -242,6 +243,16 @@ module RailsDependencyPruner
             delta_percent,
             max_percent,
           )
+        end
+      end
+
+      def check_ablation_assessment(errors, ablation_assessment)
+        ablation_assessment.each do |entry|
+          next unless entry["classification"] == "unsafe_for_production"
+
+          reasons = Array(entry["reasons"])
+          detail = reasons.empty? ? "" : ": #{reasons.join("; ")}"
+          errors << "memory policy ablation variant unsafe for production: #{entry.fetch("variant")}#{detail}"
         end
       end
 

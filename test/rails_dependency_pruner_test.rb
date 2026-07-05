@@ -9723,8 +9723,56 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_includes assessments.dig("forced_transform_only", "reasons"), "forced by memory_policy.forced_transform_ids"
     assert_equal "unsafe_for_production", assessments.dig("slow_transform_only", "classification")
     assert_includes assessments.dig("slow_transform_only", "reasons"), "first_request latency regression 120.0 ms exceeds 100.0 ms"
+    assert_includes result.fetch("errors"), "memory policy ablation variant unsafe for production: slow_transform_only: first_request latency regression 120.0 ms exceeds 100.0 ms"
     assert_equal "production_candidate", assessments.dig("all_approved_transforms", "classification")
     assert_equal 40_000, assessments.dig("all_approved_transforms", "saved_kb")
+  end
+
+  def test_memory_policy_rejects_unsafe_ablation_transform_variant
+    result = RailsDependencyPruner::MemoryPolicy.new(
+      policy: {
+        "min_total_savings_mib" => 20,
+        "max_first_request_latency_regression_ms" => 100,
+      },
+      measurement: {
+        "ablation" => true,
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+          },
+          "slow_transform_only" => {
+            "status" => "ok",
+            "rss_kb_median" => 70_000,
+            "first_request_duration_ms_median" => 140.0,
+          },
+          "all_approved_transforms" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+            "first_request_duration_ms_median" => 30.0,
+          },
+        },
+        "ablation_variants" => [
+          {
+            "name" => "baseline",
+            "transform_ids" => [],
+          },
+          {
+            "name" => "slow_transform_only",
+            "transform_ids" => ["disable_eager_load"],
+          },
+          {
+            "name" => "all_approved_transforms",
+            "transform_ids" => ["disable_eager_load"],
+          },
+        ],
+      },
+    ).evaluate
+
+    assert_equal false, result.fetch("passed")
+    assert_includes result.fetch("errors"), "memory policy ablation variant unsafe for production: slow_transform_only: first_request latency regression 120.0 ms exceeds 100.0 ms"
+    assert_equal "unsafe_for_production", result.dig("ablation_assessment", 0, "classification")
   end
 
   def test_memory_policy_enforces_latency_regression_gates
