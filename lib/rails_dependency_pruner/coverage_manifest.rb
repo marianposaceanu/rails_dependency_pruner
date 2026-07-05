@@ -150,6 +150,18 @@ module RailsDependencyPruner
       ACTIVE_STORAGE_ACTIONS.select { |key| value[key] == true }
     end
 
+    def job_classes
+      reviewed_entries("jobs", "classes")
+    end
+
+    def mailer_actions
+      reviewed_entries("mailers", "actions")
+    end
+
+    def channel_classes
+      reviewed_entries("channels", "classes")
+    end
+
     def request_entries
       @request_entries ||= normalized_request_entries(payload["requests"])
     end
@@ -300,6 +312,22 @@ module RailsDependencyPruner
         return false if value["review_required"] == true
 
         ACTIVE_STORAGE_ACTIONS.any? { |key| value[key] == true }
+      end
+
+      def reviewed_entries(section, key)
+        value = payload[section]
+        case value
+        when Hash
+          return [] if value["review_required"] == true
+
+          Array(value[key]).map(&:to_s).reject(&:empty?).uniq.sort
+        when Array
+          value.map(&:to_s).reject(&:empty?).uniq.sort
+        when String
+          value.empty? ? [] : [value]
+        else
+          []
+        end
       end
 
       def normalized_request_entries(value)

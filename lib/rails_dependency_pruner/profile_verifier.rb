@@ -69,12 +69,6 @@ module RailsDependencyPruner
         "framework" => "activestorage",
       },
     }.freeze
-    DISABLE_EAGER_LOAD_DECLARED_WORKLOADS = {
-      "jobs" => "app/jobs",
-      "mailers" => "app/mailers",
-      "cable" => "app/channels",
-      "inbound_email" => "app/mailboxes",
-    }.freeze
     CONFIG_NAMESPACE_BY_RAILTIE = {
       "action_mailbox/engine" => "action_mailbox",
       "active_storage/engine" => "active_storage",
@@ -839,15 +833,19 @@ module RailsDependencyPruner
       end
 
       def disable_eager_load_declared_workload_gaps
-        declared_workloads = DISABLE_EAGER_LOAD_DECLARED_WORKLOADS.filter_map do |workload, path|
-          workload if app_path_has_ruby_files?(path)
-        end
-        declared_workloads << "attachments" if active_storage_attachment_static_usage?
-        declared_workloads << "action_text" if action_text_static_usage?
-        declared_workloads << "rake_tasks" if rake_task_static_usage?
-        declared_workloads.concat(mounted_app_request_coverage_gaps)
+        gaps = []
+        gaps.concat(declared_entry_coverage_gaps("jobs", declared_job_classes, coverage_manifest&.job_classes))
+        gaps.concat(declared_entry_coverage_gaps("mailers", declared_mailer_actions, coverage_manifest&.mailer_actions))
+        gaps.concat(declared_entry_coverage_gaps("channels", declared_channel_classes, coverage_manifest&.channel_classes))
+        gaps << "jobs" if declared_job_classes.empty? && app_path_has_ruby_files?("app/jobs") && !coverage_workloads.include?("jobs")
+        gaps << "mailers" if declared_mailer_actions.empty? && app_path_has_ruby_files?("app/mailers") && !coverage_workloads.include?("mailers")
+        gaps << "cable" if declared_channel_classes.empty? && app_path_has_ruby_files?("app/channels") && !coverage_workloads.include?("cable")
+        gaps << "attachments" if active_storage_attachment_static_usage? && !coverage_workloads.include?("attachments")
+        gaps << "action_text" if action_text_static_usage? && !coverage_workloads.include?("action_text")
+        gaps << "rake_tasks" if rake_task_static_usage? && !coverage_workloads.include?("rake_tasks")
+        gaps.concat(mounted_app_request_coverage_gaps)
 
-        declared_workloads.uniq.sort - coverage_workloads
+        gaps.uniq.sort
       end
 
       def active_storage_vips_proof_gaps
@@ -967,6 +965,58 @@ module RailsDependencyPruner
         return false unless root.directory?
 
         Pathname.glob(root.join("**/*.rb").to_s).any?
+      end
+
+      def declared_entry_coverage_gaps(workload, declared_entries, covered_entries)
+        declared_entries = Array(declared_entries).map(&:to_s).reject(&:empty?).uniq.sort
+        return [] if declared_entries.empty?
+
+        covered_entries = Array(covered_entries).map(&:to_s).reject(&:empty?).uniq.to_set
+        declared_entries.reject { |entry| covered_entries.include?(entry) }.map { |entry| "#{workload}.#{entry}" }
+      end
+
+      def declared_job_classes
+        @declared_job_classes ||= class_names_under("app/jobs")
+      end
+
+      def declared_mailer_actions
+        @declared_mailer_actions ||= class_files_under("app/mailers").flat_map do |path|
+          class_name = class_name_in(path)
+          method_names(path).map { |method_name| class_name ? "#{class_name}##{method_name}" : method_name }
+        end.uniq.sort
+      end
+
+      def declared_channel_classes
+        @declared_channel_classes ||= class_names_under("app/channels")
+      end
+
+      def class_names_under(relative_path)
+        class_files_under(relative_path).filter_map { |path| class_name_in(path) }.uniq.sort
+      end
+
+      def class_files_under(relative_path)
+        root = usage.app_root.join(relative_path)
+        return [] unless root.directory?
+
+        Pathname.glob(root.join("**/*.rb").to_s).select(&:file?).sort
+      end
+
+      def class_name_in(path)
+        path.readlines.each do |line|
+          match = line.match(/^\s*class\s+([A-Z][A-Za-z0-9_:]*)/)
+          return match[1] if match
+        end
+        nil
+      end
+
+      def method_names(path)
+        path.readlines.filter_map do |line|
+          match = line.match(/^\s*def\s+([a-z_][A-Za-z0-9_!?=]*)/)
+          next unless match
+
+          name = match[1]
+          name unless name.end_with?("=")
+        end
       end
 
       def rake_task_static_usage?

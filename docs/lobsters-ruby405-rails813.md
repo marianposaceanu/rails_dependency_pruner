@@ -384,6 +384,14 @@ flags false. Artifacts: `tmp/active-storage-action-gate-lobsters-template.yml`
 and `tmp/active-storage-action-gate-mp-template.yml`; max RSS was `53149696`
 bytes for Lobsters and `47497216` bytes for generic_blog_app. No request RSS
 benchmark was run for this milestone.
+Declared first-use entry smoke generated templates after production verification
+started requiring exact job, mailer, and channel coverage for
+`disable_eager_load`. Lobsters produced `10` job classes, `10` mailer actions,
+and `0` channel classes; generic_blog_app produced `0` for all three. Artifacts:
+`tmp/declared-entry-gate-lobsters-template.yml` and
+`tmp/declared-entry-gate-mp-template.yml`; max RSS was `53035008` bytes for
+Lobsters and `47726592` bytes for generic_blog_app. No request RSS benchmark was run
+for this milestone.
 
 ## what eats memory
 
