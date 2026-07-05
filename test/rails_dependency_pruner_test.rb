@@ -2853,6 +2853,158 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_lazy_gem_direct_use_proof
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_direct_use_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/image_processor.rb"), <<~RUBY)
+        class ImageProcessor
+          def self.call(path)
+            Vips::Image.new_from_file(path)
+          end
+        end
+      RUBY
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "ruby-vips",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing lazy gem direct-use proof: ruby-vips requires lazy_gems.ruby-vips reviewed status for Vips::Image at app/models/image_processor.rb:3; got missing"
+      assert_equal(
+        [
+          {
+            "gem" => "ruby-vips",
+            "requirement" => "lazy_gems.ruby-vips",
+            "actual" => nil,
+            "accepted_statuses" => RailsDependencyPruner::CoverageManifest::LAZY_GEM_REVIEW_STATUSES,
+            "matches" => [
+              {
+                "constant" => "Vips::Image",
+                "path" => "app/models/image_processor.rb",
+                "line" => 3,
+              },
+            ],
+          },
+        ],
+        payload.dig("production_risks", "lazy_gem_direct_usage_gaps"),
+      )
+    end
+  end
+
+  def test_verify_production_accepts_reviewed_lazy_gem_direct_use_proof
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_direct_use_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/image_processor.rb"), <<~RUBY)
+        class ImageProcessor
+          def self.call(path)
+            Vips::Image.new_from_file(path)
+          end
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        lazy_gems:
+          ruby-vips:
+            review_required: false
+            status: manual_app_use
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--lazy-gems",
+        "ruby-vips",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "lazy_gem_direct_usage_gaps")
+    end
+  end
+
   def test_verify_production_requires_lazy_constant_policy_for_lazy_gems
     Dir.mktmpdir("rails_dependency_pruner_lazy_constant_policy_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -7724,6 +7876,12 @@ class RailsDependencyPrunerTest < Minitest::Test
         class Avatar < ApplicationRecord
           has_one_attached :image
           has_rich_text :bio
+
+          def analyze
+            Vips::Image.new_from_file("avatar.jpg")
+            Nokogiri::HTML("<p>x</p>")
+            Sentry.capture_message("avatar")
+          end
         end
       RUBY
 
@@ -7763,6 +7921,15 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal %w[assets:precompile db:migrate], payload.dig("rake_tasks", "tasks")
       assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler")
       assert_equal "review", payload.dig("external_integrations", "sentry-rails")
+      assert_equal true, payload.dig("lazy_gems", "nokogiri", "review_required")
+      assert_equal "review", payload.dig("lazy_gems", "nokogiri", "status")
+      assert_equal ["Nokogiri"], payload.dig("lazy_gems", "nokogiri", "constants")
+      assert_equal "app/models/avatar.rb", payload.dig("lazy_gems", "nokogiri", "matches", 0, "path")
+      assert_equal true, payload.dig("lazy_gems", "ruby-vips", "review_required")
+      assert_equal "review", payload.dig("lazy_gems", "ruby-vips", "status")
+      assert_equal ["Vips"], payload.dig("lazy_gems", "ruby-vips", "constants")
+      assert_equal true, payload.dig("lazy_gems", "sentry-rails", "review_required")
+      assert_equal ["Sentry"], payload.dig("lazy_gems", "sentry-rails", "constants")
       assert_equal true, payload.dig("canary", "review_required")
       assert_equal 0, payload.dig("canary", "duration_minutes")
       assert_equal 0, payload.dig("canary", "request_count")
@@ -7915,6 +8082,40 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, manifest.external_integration_reviewed?("rack-mini-profiler")
       assert_equal "no_production_dsn", manifest.external_integration_status("sentry-rails")
       assert_equal true, manifest.external_integration_reviewed?("sentry-rails")
+    end
+  end
+
+  def test_coverage_manifest_requires_reviewed_lazy_gem_status
+    Dir.mktmpdir("rails_dependency_pruner_lazy_gem_review") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        lazy_gems:
+          ruby-vips:
+            review_required: true
+            status: manual_app_use
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_nil manifest.lazy_gem_status("ruby-vips")
+      assert_equal false, manifest.lazy_gem_reviewed?("ruby-vips")
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        lazy_gems:
+          ruby_vips:
+            review_required: false
+            status: manual_app_use
+          nokogiri: review
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal "manual_app_use", manifest.lazy_gem_status("ruby-vips")
+      assert_equal true, manifest.lazy_gem_reviewed?("ruby-vips")
+      assert_equal "review", manifest.lazy_gem_status("nokogiri")
+      assert_equal false, manifest.lazy_gem_reviewed?("nokogiri")
     end
   end
 

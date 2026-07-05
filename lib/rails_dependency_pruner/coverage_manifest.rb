@@ -49,6 +49,13 @@ module RailsDependencyPruner
       "sentry-rails" => %w[sentry],
       "sentry-ruby" => %w[sentry],
     }.freeze
+    LAZY_GEM_REVIEW_STATUSES = %w[
+      covered
+      first_use_covered
+      manual_app_use
+      not_on_boot_path
+      not_on_request_path
+    ].freeze
     DEFAULT_CANARY_MIN_DURATION_SECONDS = 3_600
     DEFAULT_CANARY_MIN_REQUEST_COUNT = 10_000
 
@@ -181,6 +188,29 @@ module RailsDependencyPruner
       EXTERNAL_INTEGRATION_REVIEW_STATUSES.include?(external_integration_status(name))
     end
 
+    def lazy_gem_status(name)
+      value = lazy_gem_value(name)
+      case value
+      when Hash
+        return if value["review_required"] == true
+
+        (
+          value["status"] ||
+          value["coverage"] ||
+          value["production_status"] ||
+          value["value"]
+        ).to_s
+      when nil
+        nil
+      else
+        value.to_s
+      end
+    end
+
+    def lazy_gem_reviewed?(name)
+      LAZY_GEM_REVIEW_STATUSES.include?(lazy_gem_status(name))
+    end
+
     def rollback_tested?
       rollback = payload["rollback"]
       return false unless rollback.is_a?(Hash)
@@ -281,6 +311,21 @@ module RailsDependencyPruner
         keys = [normalized, normalized.tr("-", "_")]
         keys.concat(EXTERNAL_INTEGRATION_ALIASES.fetch(normalized, []))
         keys.uniq
+      end
+
+      def lazy_gem_value(name)
+        lazy_gems = payload["lazy_gems"]
+        return unless lazy_gems.is_a?(Hash)
+
+        lazy_gem_keys(name).each do |key|
+          return lazy_gems[key] if lazy_gems.key?(key)
+        end
+        nil
+      end
+
+      def lazy_gem_keys(name)
+        normalized = name.to_s
+        [normalized, normalized.tr("-", "_")].uniq
       end
 
       def normalize_safety_override(override, today:)

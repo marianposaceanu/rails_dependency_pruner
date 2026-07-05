@@ -59,6 +59,12 @@ rake_tasks:
   review_required: false
   tasks:
     - assets:precompile
+lazy_gems:
+  ruby-vips:
+    review_required: false
+    status: manual_app_use
+    constants:
+      - Vips
 canary:
   review_required: false
   duration_minutes: 60
@@ -75,6 +81,13 @@ rollback:
 Production verification fails when a transform needs a workload that is missing
 or still marked for review. Active Storage declarations alone do not count as
 attachment coverage; at least one reviewed storage action must be true.
+
+If a lazy gem is used directly by app code, the manifest must also review that
+first-use surface under `lazy_gems`. Accepted statuses are `covered`,
+`first_use_covered`, `manual_app_use`, `not_on_boot_path`, and
+`not_on_request_path`. A generated template leaves these entries as
+`review_required: true` until the app owner confirms the request or manual path
+that can load the constant.
 
 ## policy sections
 

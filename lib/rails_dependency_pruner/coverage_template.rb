@@ -9,6 +9,11 @@ module RailsDependencyPruner
   class CoverageTemplate
     DEFAULT_RAILS_ENV = "production"
     DEFAULT_RAKE_TASKS = %w[assets:precompile db:migrate].freeze
+    DIRECT_USAGE_LAZY_GEMS = {
+      "nokogiri" => "nokogiri",
+      "sentry" => "sentry-rails",
+      "vips" => "ruby-vips",
+    }.freeze
 
     attr_reader :app_root, :rails_env
 
@@ -38,6 +43,7 @@ module RailsDependencyPruner
         document["inbound_email"] = review_section("mailboxes" => mailbox_classes) if mailbox_classes.any?
         document["rake_tasks"] = review_section("tasks" => DEFAULT_RAKE_TASKS)
         document["external_integrations"] = external_integrations_section if external_integrations.any?
+        document["lazy_gems"] = lazy_gems_section if lazy_gem_usage.any?
         document["canary"] = review_section(
           "duration_minutes" => 0,
           "request_count" => 0,
@@ -126,6 +132,19 @@ module RailsDependencyPruner
         end
       end
 
+      def lazy_gems_section
+        lazy_gem_usage.to_h do |gem_name, usage|
+          [
+            gem_name,
+            review_section(
+              "status" => "review",
+              "constants" => usage.fetch("constants"),
+              "matches" => usage.fetch("matches"),
+            ),
+          ]
+        end
+      end
+
       def inferred_eager_load
         environment_source[/^\s*config\.eager_load\s*=\s*(true|false)\b/, 1] == "true"
       end
@@ -202,6 +221,18 @@ module RailsDependencyPruner
 
       def external_integrations
         Array(capabilities["integrations"])
+      end
+
+      def lazy_gem_usage
+        @lazy_gem_usage ||= begin
+          usage = capabilities.fetch("direct_gem_usage", {})
+          DIRECT_USAGE_LAZY_GEMS.filter_map do |usage_key, gem_name|
+            payload = usage[usage_key]
+            next unless payload.is_a?(Hash) && payload["present"] == true
+
+            [gem_name, payload]
+          end
+        end
       end
 
       def class_files(relative_root)

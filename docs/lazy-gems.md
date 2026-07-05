@@ -62,6 +62,13 @@ approved lazy gem.
 Runtime loading is limited to exact top-level constants; nested misses such as
 `Reports::Faker` do not trigger a lazy gem load.
 
+When app code references a lazy-gem constant directly, production verification
+also requires a reviewed `lazy_gems` coverage entry. This catches first-use
+paths such as `Vips::Image`, `Nokogiri::HTML`, or `Sentry.capture_message`
+because those calls can load the gem outside Rails boot conventions. Use
+`covered`, `first_use_covered`, `manual_app_use`, `not_on_boot_path`, or
+`not_on_request_path` after reviewing the real workload.
+
 ## measuring
 
 Use ablation to keep only lazy-gem groups that actually save RSS:

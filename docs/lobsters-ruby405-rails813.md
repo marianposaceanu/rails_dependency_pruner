@@ -328,6 +328,32 @@ and `Vips`. Max RSS for that smoke process was `126369792` bytes.
 
 Artifact: `tmp/lobsters-ruby405-rails805-lazy-gem-policy-smoke.json`.
 
+Direct lazy-gem proof smoke, static-only, generated a fresh Lobsters profile for
+`ruby-vips` and verified it with reviewed `lazy_gems.ruby-vips` coverage:
+
+- artifacts: `tmp/lazy-gem-direct-use-lobsters-plan.json`,
+  `tmp/lazy-gem-direct-use-lobsters-profile.json`,
+  `tmp/lazy-gem-direct-use-lobsters-coverage.yml`,
+  `tmp/lazy-gem-direct-use-lobsters-verify.json`,
+  `tmp/lazy-gem-direct-use-lobsters-rollout.json`,
+  `tmp/lazy-gem-direct-use-lobsters.patch`
+- result: production verify passed with no lazy-gem direct-use gaps and no
+  high-risk Vips analyzer gaps
+- max RSS: plan `133152768` bytes, verify `75055104` bytes, rollout
+  `42041344` bytes
+- coverage template artifact:
+  `tmp/lazy-gem-direct-use-lobsters-coverage-template.yml`; max RSS
+  `42352640` bytes
+- template direct-use review entries: `nokogiri`, `sentry-rails`, and
+  `ruby-vips`
+
+Small-app static smoke used `generic_blog_app`, the
+generic blog simple app. Doctor found Rails `8.1.3`, `34` route calls, no direct
+`Vips`, `Nokogiri`, or `Sentry` lazy-gem use, and no integration gems. Max RSS
+was `36077568` bytes for doctor and `36323328` bytes for coverage template. It
+did not run a request RSS benchmark, so the `40%` RSS reduction remains the
+small-app target, not a measured result.
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,

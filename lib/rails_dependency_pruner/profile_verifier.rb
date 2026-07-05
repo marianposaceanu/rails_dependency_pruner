@@ -151,6 +151,9 @@ module RailsDependencyPruner
         external_integration_gaps.each do |gap|
           errors << "production verify missing external integration proof: #{format_external_integration_gap(gap)}"
         end
+        lazy_gem_direct_usage_gaps.each do |gap|
+          errors << "production verify missing lazy gem direct-use proof: #{format_lazy_gem_direct_usage_gap(gap)}"
+        end
         lazy_constant_policy_gaps.each do |gap|
           errors << "production verify missing lazy constant policy: #{format_lazy_constant_policy_gap(gap)}"
         end
@@ -196,6 +199,7 @@ module RailsDependencyPruner
           "unsupported_lazy_constant_policies" => unsupported_lazy_constant_policies,
           "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
           "external_integration_gaps" => external_integration_gaps,
+          "lazy_gem_direct_usage_gaps" => lazy_gem_direct_usage_gaps,
           "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
           "safety_policy_gaps" => safety_policy_gaps,
           "rollback_evidence_gaps" => rollback_evidence_gaps,
@@ -498,6 +502,26 @@ module RailsDependencyPruner
         end.sort_by { |gap| gap.fetch("gem") }
       end
 
+      def lazy_gem_direct_usage_gaps
+        @lazy_gem_direct_usage_gaps ||= Array(extreme_boot["lazy_gems"]).filter_map do |name|
+          policy = profile.payload.dig("lazy_gems", name)
+          next unless lazy_constant_policy?(policy)
+
+          constants = Array(policy["constants"]).map(&:to_s).reject(&:empty?)
+          matches = direct_lazy_gem_static_matches(constants)
+          next if matches.empty?
+          next if coverage_manifest&.lazy_gem_reviewed?(name)
+
+          {
+            "gem" => name,
+            "requirement" => "lazy_gems.#{name}",
+            "actual" => coverage_manifest&.lazy_gem_status(name),
+            "accepted_statuses" => CoverageManifest::LAZY_GEM_REVIEW_STATUSES,
+            "matches" => matches,
+          }
+        end.sort_by { |gap| gap.fetch("gem") }
+      end
+
       def high_risk_transform_gaps
         @high_risk_transform_gaps ||= begin
           gaps = []
@@ -686,6 +710,28 @@ module RailsDependencyPruner
 
       def external_integration_policy?(policy)
         policy.is_a?(Hash) && EXTERNAL_INTEGRATION_GEM_CLASSES.include?(policy["class"].to_s)
+      end
+
+      def lazy_constant_policy?(policy)
+        policy.is_a?(Hash) && Array(policy["strategies"]).map(&:to_s).include?("lazy_constant")
+      end
+
+      def direct_lazy_gem_static_matches(constants)
+        constants = constants.to_set
+        usage.references.filter_map do |reference|
+          path = reference.path.to_s
+          next unless static_path_relevant?(path)
+
+          constant = reference.name.to_s.delete_prefix("::")
+          top_level = constant.split("::").first
+          next unless constants.include?(top_level)
+
+          {
+            "constant" => constant,
+            "path" => path,
+            "line" => reference.line,
+          }
+        end.uniq.sort_by { |match| [match.fetch("path"), match.fetch("line").to_i, match.fetch("constant")] }
       end
 
       def extreme_boot_static_matches
@@ -1126,6 +1172,14 @@ module RailsDependencyPruner
       def format_external_integration_gap(gap)
         actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
         "#{gap.fetch("gem")} requires #{gap.fetch("requirement")} reviewed status; got #{actual}"
+      end
+
+      def format_lazy_gem_direct_usage_gap(gap)
+        actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
+        first_match = gap.fetch("matches").first
+        location = [first_match.fetch("path"), first_match.fetch("line")].join(":")
+
+        "#{gap.fetch("gem")} requires #{gap.fetch("requirement")} reviewed status for #{first_match.fetch("constant")} at #{location}; got #{actual}"
       end
 
       def format_catalog_coverage_gap(gap)
