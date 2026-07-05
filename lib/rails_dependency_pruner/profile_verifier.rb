@@ -531,6 +531,8 @@ module RailsDependencyPruner
             gaps << high_risk_gap("disable_eager_load", "latency_policy", missing) unless missing.empty?
             missing = disable_eager_load_request_measurement_gaps
             gaps << high_risk_gap("disable_eager_load", "request_measurement", missing) unless missing.empty?
+            missing = disable_eager_load_feature_delta_gaps
+            gaps << high_risk_gap("disable_eager_load", "loaded_feature_delta", missing) unless missing.empty?
             missing = disable_eager_load_declared_workload_gaps
             gaps << high_risk_gap("disable_eager_load", "declared_workload_coverage", missing) unless missing.empty?
           end
@@ -844,6 +846,35 @@ module RailsDependencyPruner
         return [] unless disable_eager_load_latency_policy_gaps.empty?
 
         measurement&.fetch("target", nil) == "requests" ? [] : ["measurement.target=requests"]
+      end
+
+      def disable_eager_load_feature_delta_gaps
+        return [] unless disable_eager_load_latency_policy_gaps.empty?
+        return [] unless measurement&.fetch("target", nil) == "requests"
+
+        candidate = memory_policy_candidate_variant
+        required = {
+          "measurement.variants.baseline.loaded_features_median" => measurement.dig("variants", "baseline", "loaded_features_median"),
+          "measurement.variants.baseline.rails_loaded_features_median" => measurement.dig("variants", "baseline", "rails_loaded_features_median"),
+          "measurement.variants.#{candidate}.loaded_features_median" => measurement.dig("variants", candidate, "loaded_features_median"),
+          "measurement.variants.#{candidate}.rails_loaded_features_median" => measurement.dig("variants", candidate, "rails_loaded_features_median"),
+          "measurement.deltas.#{candidate}.loaded_features" => measurement.dig("deltas", candidate, "loaded_features"),
+          "measurement.deltas.#{candidate}.rails_loaded_features" => measurement.dig("deltas", candidate, "rails_loaded_features"),
+          "measurement.deltas.#{candidate}.rails_loaded_features_by_framework" => measurement.dig("deltas", candidate, "rails_loaded_features_by_framework"),
+        }
+
+        required.filter_map do |key, value|
+          key if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+        end
+      end
+
+      def memory_policy_candidate_variant
+        policy = profile.payload["memory_policy"]
+        configured = policy["candidate_variant"].to_s if policy.is_a?(Hash)
+        return configured unless configured.nil? || configured.empty?
+        return "all_approved_transforms" if measurement["ablation"] == true
+
+        %w[boot_prune production shadow].find { |name| measurement.fetch("variants", {}).key?(name) } || "boot_prune"
       end
 
       def disable_eager_load_declared_workload_gaps

@@ -106,6 +106,8 @@ fails production approval when:
 - a request measurement omits reviewed coverage request paths
 - `disable_eager_load` is enabled but the measurement artifact is not
   `target: requests`
+- `disable_eager_load` is enabled but the request measurement omits loaded
+  feature medians or Rails framework loaded-feature deltas
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`
 - total saved RSS is below `min_total_savings_percent`

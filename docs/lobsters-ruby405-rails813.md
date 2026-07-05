@@ -945,6 +945,18 @@ generic_blog_app coverage-template max RSS `48611328` bytes. Artifacts:
 `generic_blog_app/tmp/ablation-unsafe-generic-blog-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app
 `40%` target remains open.
+Loaded-feature-delta verification follow-up rejects `disable_eager_load`
+production approval unless the request measurement includes baseline and
+candidate loaded-feature medians plus candidate Rails framework feature deltas.
+Sequential static smokes still passed: Lobsters doctor max RSS `54083584`
+bytes, Lobsters coverage-template max RSS `54542336` bytes, generic_blog_app
+doctor max RSS `48545792` bytes, and generic_blog_app coverage-template max RSS
+`48676864` bytes. Artifacts: `tmp/loaded-feature-delta-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/loaded-feature-delta-lobsters-template.yml`,
+`tmp/loaded-feature-delta-doctor-generic-blog.json`, and
+`generic_blog_app/tmp/loaded-feature-delta-generic-blog-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app
+`40%` target remains open.
 
 ## what eats memory
 
