@@ -9337,8 +9337,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "Gemfile"), <<~RUBY)
         source "https://rubygems.org"
         gem "bootsnap"
+        gem "good_job"
         gem "honeybadger"
         gem "puma"
+        gem "que"
         gem "rollbar"
         gem "sentry-rails"
         gem "sidekiq"
@@ -9348,8 +9350,10 @@ class RailsDependencyPrunerTest < Minitest::Test
           specs:
             rails (8.1.3)
             bootsnap (1.18.6)
+            good_job (4.12.0)
             honeybadger (5.0.0)
             puma (7.0.4)
+            que (2.2.1)
             rollbar (3.6.2)
             sentry-rails (6.0.0)
             sidekiq (8.0.8)
@@ -9444,7 +9448,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
       assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
       assert_equal %w[honeybadger rollbar sentry-rails], payload.dig("capabilities", "integrations")
-      assert_equal %w[bootsnap puma sidekiq], payload.dig("capabilities", "adapters")
+      assert_equal %w[bootsnap good_job puma que sidekiq], payload.dig("capabilities", "adapters")
+      adapter_policies = payload.dig("capabilities", "adapter_gem_policies")
+      assert_equal %w[bootsnap good_job puma que sidekiq], adapter_policies.map { |entry| entry.fetch("gem") }
+      assert_equal %w[boot_cache job_adapter web_server job_adapter job_adapter], adapter_policies.map { |entry| entry.fetch("class") }
+      assert_equal [%w[boot], %w[jobs], %w[requests], %w[jobs], %w[jobs]], adapter_policies.map { |entry| entry.fetch("coverage_required") }
       assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
       assert_equal "Avatar", payload.dig("capabilities", "active_storage", "declarations", 0, "class")
       assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")

@@ -136,6 +136,10 @@ Artifacts:
 - `tmp/integration-policy-coverage-mp-template.yml`
 - `tmp/integration-policy-coverage-mp-template.stdout`
 - `tmp/integration-policy-coverage-mp-template.time`
+- `tmp/adapter-policy-doctor-lobsters.json`
+- `tmp/adapter-policy-doctor-lobsters.time`
+- `tmp/adapter-policy-doctor-mp.json`
+- `tmp/adapter-policy-doctor-mp.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -227,6 +231,17 @@ Integration policy coverage-template static smoke:
 Generated entries remain `review_required: true`. This was a static
 coverage-template smoke only; no request RSS benchmark was run for
 generic_blog_app, so the `40%` RSS target remains unmeasured.
+
+Adapter policy doctor static smoke:
+
+| app | artifact | adapter policy surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/adapter-policy-doctor-lobsters.json` | `puma:web_server:low`, requests coverage required | `52314112` bytes |
+| generic_blog_app, generic blog simple app | `tmp/adapter-policy-doctor-mp.json` | `puma:web_server:low`, requests coverage required | `47382528` bytes |
+
+Both scans reported `0` parse errors, `0` dynamic constantization risks, and
+`0` initializer dynamic require/load risks. No request RSS benchmark was run for
+generic_blog_app in this milestone.
 
 Gem policy smoke:
 

@@ -51,6 +51,50 @@ module RailsDependencyPruner
       sidekiq
       spring
     ].freeze
+    ADAPTER_POLICIES = {
+      "bootsnap" => {
+        "class" => "boot_cache",
+        "risk" => "medium",
+        "coverage_required" => %w[boot],
+        "production_rule" => "profile fingerprints and canary must cover boot cache behavior",
+      },
+      "delayed_job" => {
+        "class" => "job_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "good_job" => {
+        "class" => "job_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "puma" => {
+        "class" => "web_server",
+        "risk" => "low",
+        "coverage_required" => %w[requests],
+        "production_rule" => "request coverage required for measured production server behavior",
+      },
+      "que" => {
+        "class" => "job_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "sidekiq" => {
+        "class" => "job_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "spring" => {
+        "class" => "development_preloader",
+        "risk" => "medium",
+        "coverage_required" => %w[boot],
+        "production_rule" => "development preloader should be absent from production boot measurements",
+      },
+    }.freeze
     DIRECT_GEM_USAGE = {
       "vips" => {
         "constants" => %w[Vips],
@@ -188,6 +232,7 @@ module RailsDependencyPruner
           "integration_gem_policies" => integration_gem_policies,
           "unclassified_integrations" => unclassified_integrations,
           "adapters" => adapters,
+          "adapter_gem_policies" => adapter_gem_policies,
           "parse_errors" => parse_errors,
         }
       end
@@ -359,6 +404,12 @@ module RailsDependencyPruner
 
       def adapters
         ADAPTER_GEMS.select { |name| gem_names.include?(name) }.sort
+      end
+
+      def adapter_gem_policies
+        adapters.map do |name|
+          ADAPTER_POLICIES.fetch(name).merge("gem" => name)
+        end.sort_by { |entry| entry.fetch("gem") }
       end
 
       def initializers_dynamic_require_load

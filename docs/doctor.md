@@ -29,6 +29,8 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.unclassified_integrations`: known integration gems without a
   production lazy/stub policy
 - `capabilities.adapters`: known server/job/boot adapter gems
+- `capabilities.adapter_gem_policies`: adapter class, risk, coverage sections,
+  and production rule for known adapters
 - `risks.initializers_dynamic_require_load`
 - `risks.dynamic_constantization`
 
