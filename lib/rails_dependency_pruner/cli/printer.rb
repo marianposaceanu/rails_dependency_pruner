@@ -174,6 +174,7 @@ module RailsDependencyPruner
           puts "  Unexpected events: #{summary.fetch("unexpected_events_count")}" if summary.key?("unexpected_events_count")
           puts "  Rails loaded features median: #{summary.fetch("rails_loaded_features_median")}"
           puts "  GC live slots median: #{summary.fetch("gc_heap_live_slots_median")}"
+          puts "  GC total allocated objects median: #{summary.fetch("gc_total_allocated_objects_median")}" if summary.key?("gc_total_allocated_objects_median")
           framework_features = summary.fetch("rails_loaded_features_by_framework_median", {})
           unless framework_features.empty?
             puts "  Rails features by framework:"

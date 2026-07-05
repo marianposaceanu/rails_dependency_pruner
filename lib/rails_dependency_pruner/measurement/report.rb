@@ -3,6 +3,14 @@
 module RailsDependencyPruner
   module Measurement
     class Report
+      GC_STAT_COLUMNS = {
+        "heap_live_slots" => "heap live slots",
+        "total_allocated_objects" => "total allocated objects",
+        "total_freed_objects" => "total freed objects",
+        "old_objects" => "old objects",
+        "malloc_increase_bytes" => "malloc increase bytes",
+      }.freeze
+
       attr_reader :payload
 
       def initialize(payload)
@@ -20,15 +28,17 @@ module RailsDependencyPruner
         append_profile(lines)
         append_variants(lines)
         append_process_memory(lines)
+        append_gc_stats(lines)
         append_request_status_matrix(lines)
         append_framework_features(lines)
         append_deltas(lines)
         append_process_memory_deltas(lines)
+        append_gc_stat_deltas(lines)
         append_framework_deltas(lines)
         append_object_deltas(lines)
         append_object_memory(lines)
         append_object_memory_deltas(lines)
-        lines << "RSS is reported from the measured process. PSS/USS appear on Linux when `/proc/self/smaps_rollup` is available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Object memory appears when `--object-memory` is set. Request timings are in-process Rack mock timings. Compare process memory with loaded-feature and GC-slot deltas before claiming a memory win."
+        lines << "RSS is reported from the measured process. PSS/USS appear on Linux when `/proc/self/smaps_rollup` is available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Object memory appears when `--object-memory` is set. Request timings are in-process Rack mock timings. Compare process memory with loaded-feature and GC-stat deltas before claiming a memory win."
         lines << ""
         lines.join("\n")
       end
@@ -46,6 +56,22 @@ module RailsDependencyPruner
           lines << ""
         end
 
+        def append_gc_stats(lines)
+          columns = gc_stat_columns(payload.fetch("variants", {}), "gc_stat_median")
+          return if columns.empty?
+
+          lines << "## GC Stats"
+          lines << ""
+          lines << "| variant | #{columns.map { |column| GC_STAT_COLUMNS.fetch(column) }.join(" | ")} |"
+          lines << "| --- | #{columns.map { "---:" }.join(" | ")} |"
+          payload.fetch("variants", {}).each do |variant, summary|
+            stats = summary.fetch("gc_stat_median", {})
+            row = [table_cell(variant)] + columns.map { |column| value(stats[column]) }
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
         def append_coverage(lines)
           coverage = payload["coverage"]
           return unless coverage
@@ -55,6 +81,22 @@ module RailsDependencyPruner
           lines << "- Coverage Rails env: `#{coverage.fetch("rails_env")}`" if coverage["rails_env"]
           workloads = Array(coverage["workloads"])
           lines << "- Coverage workloads: #{list(workloads)}" unless workloads.empty?
+          lines << ""
+        end
+
+        def append_gc_stat_deltas(lines)
+          columns = gc_stat_columns(payload.fetch("deltas", {}), "gc_stat")
+          return if columns.empty?
+
+          lines << "## GC Stat Deltas"
+          lines << ""
+          lines << "| variant | #{columns.map { |column| GC_STAT_COLUMNS.fetch(column) }.join(" | ")} |"
+          lines << "| --- | #{columns.map { "---:" }.join(" | ")} |"
+          payload.fetch("deltas", {}).each do |variant, delta|
+            stats = delta.fetch("gc_stat", {})
+            row = [table_cell(variant)] + columns.map { |column| signed(stats[column]) }
+            lines << "| #{row.join(" | ")} |"
+          end
           lines << ""
         end
 
@@ -326,6 +368,13 @@ module RailsDependencyPruner
           return "`none`" if values.empty?
 
           values.map { |value| "`#{value}`" }.join(", ")
+        end
+
+        def gc_stat_columns(entries, key)
+          available = entries.values.flat_map do |entry|
+            entry.fetch(key, {}).keys
+          end
+          GC_STAT_COLUMNS.keys.select { |column| available.include?(column) }
         end
 
         def table_cell(value)

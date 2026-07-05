@@ -22,6 +22,7 @@ module RailsDependencyPruner
 
       def snapshot
         process_memory = process_memory_snapshot
+        gc = gc_stat
         payload = {
           "rss_kb" => process_memory.fetch("rss_kb"),
           "process_memory" => process_memory,
@@ -29,7 +30,8 @@ module RailsDependencyPruner
           "rails_loaded_features" => rails_loaded_features,
           "rails_loaded_features_by_framework" => rails_loaded_features_by_framework,
           "object_counts" => object_counts,
-          "gc_heap_live_slots" => GC.stat[:heap_live_slots],
+          "gc_stat" => gc,
+          "gc_heap_live_slots" => gc.fetch("heap_live_slots"),
         }
         if object_memory?
           payload["object_memsize_by_type"] = object_memsize_by_type
@@ -131,6 +133,10 @@ module RailsDependencyPruner
 
       def object_counts
         ObjectSpace.count_objects.transform_keys(&:to_s)
+      end
+
+      def gc_stat
+        GC.stat.transform_keys(&:to_s)
       end
 
       def object_memsize_by_type

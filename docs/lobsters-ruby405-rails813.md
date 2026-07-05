@@ -853,13 +853,24 @@ generic_blog_app coverage-template max RSS `47972352` bytes. Artifacts:
 `generic_blog_app/tmp/measure-coverage-mp-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
 target remains open.
+GC-stat measurement follow-up added `GC.stat` snapshots, medians, and deltas,
+including `total_allocated_objects`, to measurement JSON and Markdown. Sequential
+static smokes still passed: Lobsters doctor max RSS `53690368` bytes, Lobsters
+coverage-template max RSS `54018048` bytes, generic_blog_app doctor max RSS
+`48332800` bytes, and generic_blog_app coverage-template max RSS `48234496` bytes.
+Artifacts: `tmp/gc-stat-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/gc-stat-lobsters-template.yml`,
+`tmp/gc-stat-doctor-mp.json`, and
+`generic_blog_app/tmp/gc-stat-mp-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
+target remains open.
 
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,
 not exact framework memory ownership. The measurement can prove process RSS,
-loaded Rails feature counts, opt-in ObjectSpace class-size deltas, and GC
-live-slot deltas.
+loaded Rails feature counts, opt-in ObjectSpace class-size deltas, and GC stat
+deltas.
 
 Request-warmed framework deltas:
 

@@ -3,6 +3,13 @@
 module RailsDependencyPruner
   module Measurement
     class AblationReport
+      GC_STAT_COLUMNS = {
+        "heap_live_slots" => "heap live slots",
+        "total_allocated_objects" => "total allocated objects",
+        "old_objects" => "old objects",
+        "malloc_increase_bytes" => "malloc increase bytes",
+      }.freeze
+
       attr_reader :payload
 
       def initialize(payload)
@@ -18,11 +25,12 @@ module RailsDependencyPruner
         append_context(lines)
         append_summary(lines)
         append_process_memory(lines)
+        append_gc_stats(lines)
         append_rails_memory_buckets(lines)
         append_object_buckets(lines)
         append_object_memory_buckets(lines)
         append_transform_sets(lines)
-        lines << "RSS is process memory. PSS/USS appear on Linux when available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Object memory appears when `--object-memory` is set. Rails feature buckets and Ruby object counts are attribution signals, not byte-exact ownership."
+        lines << "RSS is process memory. PSS/USS appear on Linux when available. macOS physical footprint appears when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1` is set. Object memory appears when `--object-memory` is set. Rails feature buckets, Ruby object counts, and GC stats are attribution signals, not byte-exact ownership."
         lines << ""
         lines.join("\n")
       end
@@ -106,6 +114,25 @@ module RailsDependencyPruner
           lines << "| variant | RSS | RSS saved | PSS | PSS saved | USS | USS saved | physical footprint | footprint saved |"
           lines << "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           rows.each do |row|
+            lines << "| #{row.join(" | ")} |"
+          end
+          lines << ""
+        end
+
+        def append_gc_stats(lines)
+          columns = gc_stat_columns
+          return if columns.empty?
+
+          lines << "## GC Stats"
+          lines << ""
+          lines << "Cells show the variant median, with the baseline delta in parentheses when available."
+          lines << ""
+          lines << "| variant | #{columns.map { |column| GC_STAT_COLUMNS.fetch(column) }.join(" | ")} |"
+          lines << "| --- | #{columns.map { "---:" }.join(" | ")} |"
+          payload.fetch("variants", {}).each do |variant, summary|
+            stats = summary.fetch("gc_stat_median", {})
+            delta = delta_for(variant).fetch("gc_stat", {})
+            row = [table_cell(variant)] + columns.map { |column| gc_stat_cell(stats[column], delta[column]) }
             lines << "| #{row.join(" | ")} |"
           end
           lines << ""
@@ -218,6 +245,20 @@ module RailsDependencyPruner
 
         def top_object_reductions(values)
           top_reductions(values.reject { |key, _value| %w[FREE TOTAL].include?(key) })
+        end
+
+        def gc_stat_columns
+          available = payload.fetch("variants", {}).values.flat_map do |summary|
+            summary.fetch("gc_stat_median", {}).keys
+          end
+          GC_STAT_COLUMNS.keys.select { |column| available.include?(column) }
+        end
+
+        def gc_stat_cell(number, delta)
+          return "" if number.nil?
+          return value(number) if delta.nil?
+
+          "#{value(number)} (#{signed(delta)})"
         end
 
         def top_memory_reductions(values)

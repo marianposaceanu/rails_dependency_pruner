@@ -407,6 +407,11 @@ module RailsDependencyPruner
             "object_counts_median" => summarize_numeric_hash(runs, "object_counts"),
             "gc_heap_live_slots_median" => median(runs.map { |run| run.fetch("gc_heap_live_slots") }),
           }
+          gc_stat = summarize_numeric_hash(runs, "gc_stat")
+          unless gc_stat.empty?
+            summary["gc_stat_median"] = gc_stat
+            summary["gc_total_allocated_objects_median"] = gc_stat["total_allocated_objects"] if gc_stat.key?("total_allocated_objects")
+          end
           object_memsize_by_type = summarize_numeric_hash(runs, "object_memsize_by_type")
           object_memsize_by_class = summarize_numeric_hash(runs, "object_memsize_by_class")
           summary["object_memsize_by_type_median"] = object_memsize_by_type unless object_memsize_by_type.empty?
@@ -456,6 +461,11 @@ module RailsDependencyPruner
                 summary.fetch("object_counts_median", {}),
               ),
               "gc_heap_live_slots" => summary.fetch("gc_heap_live_slots_median") - baseline.fetch("gc_heap_live_slots_median"),
+              "gc_stat" => numeric_hash_delta(
+                baseline.fetch("gc_stat_median", {}),
+                summary.fetch("gc_stat_median", {}),
+              ),
+              "gc_total_allocated_objects" => numeric_delta(summary, baseline, "gc_total_allocated_objects_median"),
               "boot_time_ms" => numeric_delta(summary, baseline, "boot_time_ms_median"),
               "first_request_duration_ms" => numeric_delta(summary, baseline, "first_request_duration_ms_median"),
               "request_duration_ms_p95" => numeric_delta(summary, baseline, "request_duration_ms_p95_median"),

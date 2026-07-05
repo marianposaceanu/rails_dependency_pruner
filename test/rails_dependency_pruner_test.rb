@@ -8958,11 +8958,15 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_operator payload.dig("variants", "baseline", "process_memory_median", "rss_kb"), :>, 0
       assert_operator payload.dig("variants", "baseline", "object_memsize_by_class_median", "String"), :>, 0
       assert_operator payload.dig("variants", "baseline", "object_memsize_by_type_median", "T_STRING"), :>, 0
+      assert_operator payload.dig("variants", "baseline", "gc_stat_median", "total_allocated_objects"), :>, 0
+      assert_operator payload.dig("variants", "baseline", "gc_total_allocated_objects_median"), :>, 0
       assert_kind_of Hash, payload.dig("variants", "baseline", "rails_loaded_features_by_framework_median")
       assert payload.dig("deltas", "shadow").key?("rss_kb")
       assert payload.dig("deltas", "shadow", "process_memory").key?("rss_kb")
       assert_kind_of Hash, payload.dig("deltas", "shadow", "object_memsize_by_class")
       assert_kind_of Hash, payload.dig("deltas", "shadow", "object_memsize_by_type")
+      assert_kind_of Hash, payload.dig("deltas", "shadow", "gc_stat")
+      assert payload.dig("deltas", "shadow").key?("gc_total_allocated_objects")
       assert_kind_of Hash, payload.dig("deltas", "shadow", "rails_loaded_features_by_framework")
       assert_equal "sha256:test", payload.dig("profile", "profile_id")
       assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
@@ -8978,6 +8982,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "events | unexpected"
       assert_includes markdown, "## Process Memory"
       assert_includes markdown, "## Process Memory Deltas"
+      assert_includes markdown, "## GC Stats"
+      assert_includes markdown, "## GC Stat Deltas"
+      assert_includes markdown, "total allocated objects"
       assert_includes markdown, "## Ruby Object Memory"
       assert_includes markdown, "## Ruby Object Memory Deltas"
       assert_includes markdown, "physical footprint"
@@ -9126,8 +9133,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "ok", payload.dig("variants", "all_approved_transforms", "status")
       assert_kind_of Hash, payload.dig("variants", "baseline", "object_counts_median")
       assert_operator payload.dig("variants", "baseline", "object_memsize_by_class_median", "String"), :>, 0
+      assert_operator payload.dig("variants", "baseline", "gc_stat_median", "total_allocated_objects"), :>, 0
       assert_kind_of Hash, payload.dig("deltas", "all_approved_transforms", "object_counts")
       assert_kind_of Hash, payload.dig("deltas", "all_approved_transforms", "object_memsize_by_class")
+      assert_kind_of Hash, payload.dig("deltas", "all_approved_transforms", "gc_stat")
       variant_names = payload.fetch("ablation_variants").map { |variant| variant.fetch("name") }
       assert_includes variant_names, "disable_eager_load_only"
       assert_includes variant_names, "lazy_gems_only"
@@ -9143,6 +9152,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "# Rails Dependency Pruner Ablation"
       assert_includes markdown, "- Coverage Rails env: `production`"
       assert_includes markdown, "## Process Memory"
+      assert_includes markdown, "## GC Stats"
       assert_includes markdown, "## Rails Memory Buckets"
       assert_includes markdown, "## Ruby Object Buckets"
       assert_includes markdown, "## Ruby Object Memory Buckets"

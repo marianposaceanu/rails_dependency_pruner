@@ -137,7 +137,7 @@ The report records:
   when `--process-memory-details` is set
 - total loaded features
 - Rails loaded features grouped by framework gem
-- `GC.stat[:heap_live_slots]`
+- `GC.stat` medians and deltas, including `total_allocated_objects`
 - live Ruby object type counts from `ObjectSpace.count_objects`
 - optional ObjectSpace memsize by Ruby object type and class when
   `--object-memory` is set
