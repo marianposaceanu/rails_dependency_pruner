@@ -9365,6 +9365,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         Rails.application.configure do
           config.active_job.queue_adapter = :solid_queue
           config.active_storage.service = :local
+          config.action_mailer.delivery_method = :smtp
         end
       RUBY
       File.write(File.join(app_root, "config/storage.yml"), <<~YAML)
@@ -9382,6 +9383,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "config/initializers/dynamic_require.rb"), <<~RUBY)
         feature = ENV.fetch("BOOT_FEATURE")
         require feature
+      RUBY
+      File.write(File.join(app_root, "config/initializers/email.rb"), <<~RUBY)
+        ActionMailer::Base.smtp_settings = {
+          address: "smtp.example.test"
+        }
       RUBY
       File.write(File.join(app_root, "config/routes.rb"), <<~RUBY)
         Rails.application.routes.draw do
@@ -9508,6 +9514,14 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["Sentry"], payload.dig("capabilities", "direct_gem_usage", "sentry", "constants")
       assert_equal ["CleanupJob"], payload.dig("capabilities", "jobs", "classes")
       assert_equal ["UserMailer"], payload.dig("capabilities", "mailers", "classes")
+      delivery_methods = payload.dig("capabilities", "mailers", "delivery_methods")
+      assert_equal ["smtp"], delivery_methods.map { |entry| entry.fetch("method") }
+      assert_equal ["medium"], delivery_methods.map { |entry| entry.fetch("risk") }
+      assert_equal "config/environments/production.rb", delivery_methods.first.fetch("path")
+      smtp_settings = payload.dig("capabilities", "mailers", "smtp_settings")
+      assert_equal ["mailer_smtp_settings"], smtp_settings.map { |entry| entry.fetch("class") }
+      assert_equal ["medium"], smtp_settings.map { |entry| entry.fetch("risk") }
+      assert_equal "config/initializers/email.rb", smtp_settings.first.fetch("path")
       assert_equal ["NotificationsChannel"], payload.dig("capabilities", "channels", "classes")
       assert_equal %w[maintenance:sweep reports:daily], payload.dig("capabilities", "rake_tasks", "tasks").map { |entry| entry.fetch("name") }
       assert_equal "lib/tasks/maintenance.rake", payload.dig("capabilities", "rake_tasks", "tasks", 0, "path")
@@ -9530,6 +9544,7 @@ class RailsDependencyPrunerTest < Minitest::Test
           config.eager_load = true
           config.active_job.queue_adapter = :solid_queue
           config.active_storage.service = :local
+          config.action_mailer.delivery_method = :smtp
         end
       RUBY
       File.write(File.join(app_root, "config/routes.rb"), <<~RUBY)
@@ -9550,6 +9565,12 @@ class RailsDependencyPrunerTest < Minitest::Test
           root: <%= Rails.root.join("storage") %>
       YAML
       FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
+      FileUtils.mkdir_p(File.join(app_root, "config/initializers"))
+      File.write(File.join(app_root, "config/initializers/email.rb"), <<~RUBY)
+        ActionMailer::Base.smtp_settings = {
+          address: "smtp.example.test"
+        }
+      RUBY
       File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
         namespace :maintenance do
           task :sweep do
@@ -9636,6 +9657,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["jobs"], payload.dig("jobs", "queue_adapters", 0, "coverage_required")
       assert_equal "config/environments/production.rb", payload.dig("jobs", "queue_adapters", 0, "path")
       assert_equal ["UserMailer#welcome"], payload.dig("mailers", "actions")
+      assert_equal "smtp", payload.dig("mailers", "delivery_methods", 0, "method")
+      assert_equal "medium", payload.dig("mailers", "delivery_methods", 0, "risk")
+      assert_equal "config/environments/production.rb", payload.dig("mailers", "delivery_methods", 0, "path")
+      assert_equal "mailer_smtp_settings", payload.dig("mailers", "smtp_settings", 0, "class")
+      assert_equal "config/initializers/email.rb", payload.dig("mailers", "smtp_settings", 0, "path")
       assert_equal ["NotificationsChannel"], payload.dig("channels", "classes")
       assert_equal "redis", payload.dig("channels", "cable_adapters", 0, "adapter")
       assert_equal "redis", payload.dig("channels", "cable_adapters", 0, "gem")

@@ -46,6 +46,13 @@ mailers:
   review_required: false
   actions:
     - UserMailer#welcome
+  delivery_methods:
+    - environment: production
+      method: smtp
+      risk: medium
+  smtp_settings:
+    - path: config/initializers/email.rb
+      risk: medium
 channels:
   review_required: false
   classes:
@@ -143,6 +150,9 @@ attachment coverage; at least one reviewed storage action must be true.
 Generated `jobs.queue_adapters` entries show configured
 `config.active_job.queue_adapter` values. They are review context for job
 coverage and do not replace exact job class coverage.
+Generated `mailers.delivery_methods` and `mailers.smtp_settings` entries show
+mail delivery configuration. They are review context for mailer coverage and do
+not replace exact mailer action coverage.
 Generated `channels.cable_adapters` entries show `config/cable.yml` adapters.
 They are review context for Action Cable coverage and do not replace exact
 channel class coverage.

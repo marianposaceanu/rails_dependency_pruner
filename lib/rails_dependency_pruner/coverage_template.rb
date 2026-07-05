@@ -36,7 +36,7 @@ module RailsDependencyPruner
         document["routes"] = routes_section if route_files.any?
         document["requests"] = requests_section if request_entries.any?
         document["jobs"] = jobs_section if job_classes.any? || queue_adapter_entries.any?
-        document["mailers"] = review_section("actions" => mailer_actions) if mailer_actions.any?
+        document["mailers"] = mailers_section if mailer_actions.any? || mailer_delivery_method_entries.any? || mailer_smtp_setting_entries.any?
         document["channels"] = channels_section if channel_classes.any? || cable_adapter_entries.any?
         document["active_storage"] = active_storage_section
         document["action_text"] = action_text_section
@@ -98,6 +98,13 @@ module RailsDependencyPruner
       def channels_section
         values = { "classes" => channel_classes }
         values["cable_adapters"] = cable_adapter_entries if cable_adapter_entries.any?
+        review_section(values)
+      end
+
+      def mailers_section
+        values = { "actions" => mailer_actions }
+        values["delivery_methods"] = mailer_delivery_method_entries if mailer_delivery_method_entries.any?
+        values["smtp_settings"] = mailer_smtp_setting_entries if mailer_smtp_setting_entries.any?
         review_section(values)
       end
 
@@ -301,6 +308,33 @@ module RailsDependencyPruner
 
       def mailer_files
         Array(capabilities.dig("mailers", "files")).map { |path| app_root.join(path) }
+      end
+
+      def mailer_delivery_method_entries
+        Array(capabilities.dig("mailers", "delivery_methods")).map do |entry|
+          {
+            "environment" => entry["environment"],
+            "method" => entry["method"],
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "path" => entry["path"],
+            "line" => entry["line"],
+          }.compact
+        end
+      end
+
+      def mailer_smtp_setting_entries
+        Array(capabilities.dig("mailers", "smtp_settings")).map do |entry|
+          {
+            "environment" => entry["environment"],
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "path" => entry["path"],
+            "line" => entry["line"],
+          }.compact
+        end
       end
 
       def channel_classes

@@ -170,6 +170,16 @@ Artifacts:
 - `tmp/storage-service-coverage-mp-template.yml`
 - `tmp/storage-service-coverage-mp-template.stdout`
 - `tmp/storage-service-coverage-mp-template.time`
+- `tmp/mailer-delivery-doctor-lobsters.json`
+- `tmp/mailer-delivery-doctor-lobsters.time`
+- `tmp/mailer-delivery-doctor-mp.json`
+- `tmp/mailer-delivery-doctor-mp.time`
+- `tmp/mailer-delivery-coverage-lobsters-template.yml`
+- `tmp/mailer-delivery-coverage-lobsters-template.stdout`
+- `tmp/mailer-delivery-coverage-lobsters-template.time`
+- `tmp/mailer-delivery-coverage-mp-template.yml`
+- `tmp/mailer-delivery-coverage-mp-template.stdout`
+- `tmp/mailer-delivery-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -337,6 +347,28 @@ Storage service coverage-template static smoke:
 Generated storage service entries remain review context. They do not count as
 upload, analysis, variant, preview, representation, or attachment-read coverage.
 No request RSS benchmark was run for generic_blog_app in this milestone.
+
+Mailer delivery doctor static smoke:
+
+| app | artifact | mailer delivery surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/mailer-delivery-doctor-lobsters.json` | `8` mailer classes; `letter_opener` development, `test` test, SMTP settings initializer | `52838400` bytes |
+| generic_blog_app, generic blog simple app | `tmp/mailer-delivery-doctor-mp.json` | no mailer classes; `test` test delivery method | `48054272` bytes |
+
+Both scans reported `0` parse errors, `0` dynamic constantization risks, and
+`0` initializer dynamic require/load risks.
+
+Mailer delivery coverage-template static smoke:
+
+| app | artifact | generated mailer delivery entries | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/mailer-delivery-coverage-lobsters-template.yml` | `10` mailer actions; `letter_opener`, `test`, and SMTP settings | `54034432` bytes |
+| generic_blog_app, generic blog simple app | `tmp/mailer-delivery-coverage-mp-template.yml` | no mailer actions; `test` test delivery method | `47611904` bytes |
+
+Generated mailer delivery entries remain review context while
+`mailers.review_required: true`; exact mailer action coverage is still required
+before approval. No request RSS benchmark was run for generic_blog_app in this
+milestone.
 
 Gem policy smoke:
 

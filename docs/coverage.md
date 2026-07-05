@@ -32,6 +32,8 @@ Typical review steps:
   entries were covered
 - review generated `jobs.queue_adapters` entries against the production Active
   Job backend; they do not replace exact job class coverage
+- review generated mailer delivery entries against the production delivery
+  backend; they do not replace exact mailer action coverage
 - review generated `channels.cable_adapters` entries against the production
   Action Cable backend; they do not replace exact channel class coverage
 - review generated Active Storage service entries against the production

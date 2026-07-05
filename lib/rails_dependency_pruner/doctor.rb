@@ -379,7 +379,10 @@ module RailsDependencyPruner
       end
 
       def mailers
-        class_inventory("app/mailers", /<\s*ApplicationMailer\b|<\s*ActionMailer::Base\b|^\s*mail\b/)
+        class_inventory("app/mailers", /<\s*ApplicationMailer\b|<\s*ActionMailer::Base\b|^\s*mail\b/).merge(
+          "delivery_methods" => action_mailer_delivery_methods,
+          "smtp_settings" => action_mailer_smtp_settings,
+        )
       end
 
       def channels
@@ -682,6 +685,43 @@ module RailsDependencyPruner
 
       def environment_name_for(path)
         path.to_s[%r{\Aconfig/environments/([^/]+)\.rb\z}, 1]
+      end
+
+      def action_mailer_delivery_methods
+        grep_ruby(/\b(?:config\.action_mailer|ActionMailer::Base)\.delivery_method\s*=/).filter_map do |match|
+          source = match.fetch("source")
+          next if source.start_with?("#")
+
+          method = source[/\.delivery_method\s*=\s*:([A-Za-z0-9_]+)/, 1] ||
+            source[/\.delivery_method\s*=\s*["']([^"']+)["']/, 1]
+          next unless method
+
+          match.merge(
+            "environment" => environment_name_for(match.fetch("path")),
+            "method" => method,
+            "class" => "mailer_delivery_method",
+            "risk" => mailer_delivery_risk(method),
+            "coverage_required" => %w[mailers],
+          ).compact
+        end
+      end
+
+      def action_mailer_smtp_settings
+        grep_ruby(/\b(?:config\.action_mailer|ActionMailer::Base)\.smtp_settings\s*=/).filter_map do |match|
+          source = match.fetch("source")
+          next if source.start_with?("#")
+
+          match.merge(
+            "environment" => environment_name_for(match.fetch("path")),
+            "class" => "mailer_smtp_settings",
+            "risk" => "medium",
+            "coverage_required" => %w[mailers],
+          ).compact
+        end
+      end
+
+      def mailer_delivery_risk(method)
+        %w[test file letter_opener].include?(method.to_s) ? "low" : "medium"
       end
 
       def initializers_dynamic_require_load
