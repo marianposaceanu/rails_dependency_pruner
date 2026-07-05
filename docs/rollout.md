@@ -55,6 +55,9 @@ RAILS_DEPENDENCY_PRUNER_PROFILE_ID=sha256:... \
 bundle exec puma
 ```
 
+The profile approval and id checks run while loading the early boot shim, before
+later app boot code can mutate Rails state.
+
 ## gates
 
 Do not roll forward unless:

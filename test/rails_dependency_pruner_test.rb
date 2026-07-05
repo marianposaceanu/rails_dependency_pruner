@@ -5833,6 +5833,42 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_early_boot_stale_profile_fails_before_boot_mutates_state
+    Dir.mktmpdir("rails_dependency_pruner_early_stale_before_boot") do |dir|
+      profile_path = File.join(dir, "profile.json")
+      mutation_path = File.join(dir, "boot-mutated")
+      File.write(profile_path, JSON.pretty_generate(
+        "schema_version" => 2,
+        "profile_id" => "sha256:stale",
+        "mode" => "production",
+        "safety" => {
+          "production_allowed" => true,
+        },
+        "pruning" => {
+          "disabled_require_paths" => [],
+        },
+      ))
+
+      _stdout, stderr, status = Open3.capture3(
+        {
+          "RAILS_DEPENDENCY_PRUNER_PROFILE" => profile_path,
+          "RAILS_DEPENDENCY_PRUNER_MODE" => "production",
+        },
+        RUBY,
+        "-I#{ROOT.join("lib")}",
+        "-e",
+        <<~RUBY
+          require "rails_dependency_pruner/early_boot"
+          File.write(#{mutation_path.dump}, "mutated")
+        RUBY
+      )
+
+      refute status.success?
+      assert_includes stderr, "production mode requires matching profile_id"
+      refute File.exist?(mutation_path)
+    end
+  end
+
   def test_early_boot_production_mode_requires_profile_id_environment
     Dir.mktmpdir("rails_dependency_pruner_early_profile_id_env") do |dir|
       profile_path = File.join(dir, "profile.json")
