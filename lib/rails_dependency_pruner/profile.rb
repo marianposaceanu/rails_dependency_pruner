@@ -252,7 +252,7 @@ module RailsDependencyPruner
       CanonicalJson.dump(payload)
     end
 
-    def approve_production!(approved_by: nil, report: nil, approved_at: Time.now.utc.iso8601)
+    def approve_production!(approved_by: nil, report: nil, measurement: nil, approved_at: Time.now.utc.iso8601)
       payload["safety"] ||= {}
       payload["safety"]["production_allowed"] = true
       payload["safety"]["approved_at"] = approved_at
@@ -260,8 +260,54 @@ module RailsDependencyPruner
       payload["safety"]["verifier_version"] = RailsDependencyPruner::VERSION
       payload["safety"]["errors"] = Array(report && report["errors"])
       payload["safety"]["warnings"] = Array(report && report["warnings"])
+      annotate_transform_measurements!(report: report, measurement: measurement)
       ProfileSchema.set_profile_id(payload, digest)
       self
+    end
+
+    def annotate_transform_measurements!(report:, measurement:)
+      annotate_disable_eager_load_measurement!(report: report, measurement: measurement)
+    end
+
+    def annotate_disable_eager_load_measurement!(report:, measurement:)
+      return unless payload.dig("extreme_boot", "disable_eager_load") == true
+
+      transform = Array(payload["transforms"]).find { |entry| entry["id"] == "disable_eager_load" }
+      return unless transform
+
+      summary = report&.dig("production_risks", "memory_policy", "measurement")
+      return unless summary.is_a?(Hash) && summary.key?("saved_kb")
+
+      candidate = summary["candidate_variant"].to_s
+      candidate = "boot_prune" if candidate.empty?
+      latency = summary["latency"] || {}
+
+      transform["measurement_target"] = measurement && measurement["target"]
+      transform["measurement_candidate_variant"] = candidate
+      transform["measured_saving_kb"] = summary["saved_kb"]
+      transform["first_request_latency_ms_delta"] = latency.dig("first_request", "delta_ms")
+      transform["p95_latency_ms_delta"] = latency.dig("request_p95", "delta_ms") || latency.dig("warmed_p95", "delta_ms")
+      transform["p99_latency_ms_delta"] = latency.dig("request_p99", "delta_ms") || latency.dig("warmed_p99", "delta_ms")
+      transform["unexpected_autoloads"] = measurement_unexpected_event_count(measurement&.dig("variants", candidate))
+    end
+
+    def measurement_unexpected_event_count(payload)
+      return 0 unless payload.is_a?(Hash)
+
+      [
+        numeric_value(payload["unexpected_events_count"]),
+        numeric_value(payload.dig("runtime_event_summary", "unexpected_events_count")),
+        Array(payload["unexpected_events"]).length,
+      ].compact.map(&:to_i).max || 0
+    end
+
+    def numeric_value(value)
+      return value if value.is_a?(Numeric)
+      return if value.nil? || value.to_s.empty?
+
+      Float(value)
+    rescue ArgumentError, TypeError
+      nil
     end
 
     def digest

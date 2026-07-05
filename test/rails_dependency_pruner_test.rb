@@ -2061,6 +2061,106 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_approve_records_disable_eager_load_measurement_proof
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_measurement_proof") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+            "unexpected_events_count" => 0,
+          },
+        },
+      )
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "approve",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--approved-by",
+        "release-owner",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+      assert_equal true, JSON.parse(stdout).fetch("profile_approved")
+
+      approved = JSON.parse(File.read(profile_path))
+      transform = approved.fetch("transforms").find { |entry| entry.fetch("id") == "disable_eager_load" }
+      assert_equal "requests", transform.fetch("measurement_target")
+      assert_equal "boot_prune", transform.fetch("measurement_candidate_variant")
+      assert_equal 20_000, transform.fetch("measured_saving_kb")
+      assert_equal 10.0, transform.fetch("first_request_latency_ms_delta")
+      assert_in_delta 0.3, transform.fetch("p95_latency_ms_delta"), 0.0001
+      assert_equal 1.0, transform.fetch("p99_latency_ms_delta")
+      assert_equal 0, transform.fetch("unexpected_autoloads")
+    end
+  end
+
   def test_verify_production_requires_request_measurement_for_disable_eager_load
     Dir.mktmpdir("rails_dependency_pruner_eager_load_request_measurement_verify") do |dir|
       app_root = File.join(dir, "app")

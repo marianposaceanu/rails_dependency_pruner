@@ -38,6 +38,11 @@ metadata. After `approve` succeeds, the profile records:
 Approval metadata changes the profile digest, so the approved profile gets a new
 `profile_id`. Semantic profile diffs ignore approval metadata.
 
+For approved `disable_eager_load` profiles, the transform entry also records
+the verified request-measurement proof: measurement target, candidate variant,
+saved KB, first request latency delta, p95 and p99 latency deltas, and
+unexpected autoload count.
+
 ## transform contract
 
 Each transform entry must carry the production contract from the registry:

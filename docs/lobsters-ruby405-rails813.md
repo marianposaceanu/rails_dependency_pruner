@@ -969,6 +969,18 @@ doctor max RSS `48005120` bytes, and generic_blog_app coverage-template max RSS
 `generic_blog_app/tmp/request-events-generic-blog-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app
 `40%` target remains open.
+Approval-proof follow-up records verified `disable_eager_load` measurement
+fields in the approved transform entry: target, candidate variant, saved KB,
+latency deltas, and unexpected autoload count. Sequential static smokes still
+passed: Lobsters doctor max RSS `54263808` bytes, Lobsters coverage-template
+max RSS `54165504` bytes, generic_blog_app doctor max RSS `48103424` bytes,
+and generic_blog_app coverage-template max RSS `48644096` bytes. Artifacts:
+`tmp/approval-proof-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/approval-proof-lobsters-template.yml`,
+`tmp/approval-proof-doctor-generic-blog.json`, and
+`generic_blog_app/tmp/approval-proof-generic-blog-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app
+`40%` target remains open.
 
 ## what eats memory
 

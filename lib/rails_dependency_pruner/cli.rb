@@ -178,18 +178,19 @@ module RailsDependencyPruner
           runtime_evidence_paths: options.fetch(:runtime_evidence_paths),
           coverage_path: options[:coverage_path],
         )
+        measurement = measurement_payload(options[:measurement_path])
         report = ProfileVerifier.new(
           profile: profile,
           context: context,
           index: index,
           usage: usage,
           production: options.fetch(:production),
-          measurement: measurement_payload(options[:measurement_path]),
+          measurement: measurement,
         ).verify
         if options.fetch(:approve_production)
           report["profile_approved"] = false
           if report.fetch("verified")
-            profile.approve_production!(approved_by: options[:approved_by], report: report)
+            profile.approve_production!(approved_by: options[:approved_by], report: report, measurement: measurement)
             profile.write(options.fetch(:profile_path))
             report["profile_approved"] = true
             report["profile"]["profile_id"] = profile.profile_id
