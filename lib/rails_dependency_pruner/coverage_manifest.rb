@@ -150,6 +150,14 @@ module RailsDependencyPruner
       ACTIVE_STORAGE_ACTIONS.select { |key| value[key] == true }
     end
 
+    def active_storage_declarations
+      value = payload["active_storage"]
+      return [] unless value.is_a?(Hash)
+      return [] if value["review_required"] == true
+
+      Array(value["declarations"]).filter_map { |entry| normalized_declaration_entry(entry) }.uniq.sort
+    end
+
     def job_classes
       reviewed_entries("jobs", "classes")
     end

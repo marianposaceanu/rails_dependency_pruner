@@ -408,6 +408,14 @@ verification started requiring exact rich-text declaration coverage for
 `tmp/action-text-gate-mp-template.yml`; max RSS was `52969472` bytes for
 Lobsters and `48119808` bytes for generic_blog_app. No request RSS benchmark was run
 for this milestone.
+Active Storage declaration gate smoke generated templates after production
+verification started requiring exact attachment declaration coverage for
+`disable_eager_load`. Lobsters and generic_blog_app both reported
+`active_storage.declarations_expected: false` with `0` declarations. Artifacts:
+`tmp/active-storage-declaration-gate-lobsters-template.yml` and
+`tmp/active-storage-declaration-gate-mp-template.yml`; max RSS was `53575680`
+bytes for Lobsters and `47595520` bytes for generic_blog_app. No request RSS
+benchmark was run for this milestone.
 
 ## what eats memory
 

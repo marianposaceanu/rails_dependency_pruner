@@ -28,7 +28,7 @@ Typical review steps:
 - add storage, Action Text, inbound email, job, mailer, and channel coverage
   when those flows exist in production
 - keep generated job classes, mailer actions, channel classes, mailboxes, and
-  rich-text declarations only when the exact entries were covered
+  storage or rich-text declarations only when the exact entries were covered
 - replace external integration `review` placeholders with a reviewed production
   status before lazying or stubbing integration gems
 - keep `rake_tasks` to the production tasks covered by the release process;
@@ -57,6 +57,9 @@ channel classes, inbound email mailboxes, and rich-text declarations must be
 covered by exact manifest entries such as `jobs.CleanupJob`,
 `mailers.UserMailer#welcome`, `channels.NotificationsChannel`,
 `inbound_email.ApplicationMailbox`, and `action_text.Avatar#bio`.
+Active Storage attachments are exact too, such as `attachments.Avatar#image`,
+and still require at least one reviewed storage action to prove the broader
+`attachments` workload.
 When `disable_eager_load` is enabled, app-defined rake tasks also require
 reviewed `rake_tasks` coverage because task constants may move from boot to
 first use.

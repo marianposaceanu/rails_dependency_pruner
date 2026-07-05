@@ -2660,6 +2660,254 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_declared_active_storage_coverage_for_disable_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_attachment_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          review_required: false
+          paths:
+            - method: GET
+              path: /privacy
+              expected_status: 200
+        active_storage:
+          review_required: false
+          declarations_expected: true
+          declarations: []
+          upload: true
+          analyze: false
+          variant: false
+          preview: false
+          representation: false
+          attachment_read: false
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 10000
+          unexpected_events_count: 0
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      File.write(measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      ))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires attachments.Avatar#image"
+      assert_equal(
+        {
+          "transform_id" => "disable_eager_load",
+          "requirement" => "declared_workload_coverage",
+          "missing_requirements" => ["attachments.Avatar#image"],
+        },
+        payload.dig("production_risks", "high_risk_transform_gaps", 0),
+      )
+    end
+  end
+
+  def test_verify_production_allows_disable_eager_load_with_declared_active_storage_coverage
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_attachment_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          review_required: false
+          paths:
+            - method: GET
+              path: /privacy
+              expected_status: 200
+        active_storage:
+          review_required: false
+          declarations_expected: true
+          declarations:
+            - class: Avatar
+              kind: has_one_attached
+              name: image
+          upload: true
+          analyze: false
+          variant: false
+          preview: false
+          representation: false
+          attachment_read: false
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 10000
+          unexpected_events_count: 0
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      File.write(measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout + stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "high_risk_transform_gaps")
+    end
+  end
+
   def test_verify_production_requires_declared_rake_task_coverage_for_disable_eager_load
     Dir.mktmpdir("rails_dependency_pruner_eager_load_rake_task_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -9028,6 +9276,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal %w[honeybadger rollbar sentry-rails], payload.dig("capabilities", "integrations")
       assert_equal %w[bootsnap puma sidekiq], payload.dig("capabilities", "adapters")
       assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
+      assert_equal "Avatar", payload.dig("capabilities", "active_storage", "declarations", 0, "class")
       assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")
       assert_equal 1, payload.dig("capabilities", "action_text", "declarations_count")
       assert_equal "Avatar", payload.dig("capabilities", "action_text", "declarations", 0, "class")
@@ -9153,6 +9402,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["NotificationsChannel"], payload.dig("channels", "classes")
       assert_equal ["ApplicationMailbox"], payload.dig("inbound_email", "mailboxes")
       assert_equal true, payload.dig("active_storage", "declarations_expected")
+      assert_equal "Avatar", payload.dig("active_storage", "declarations", 0, "class")
       assert_equal "image", payload.dig("active_storage", "declarations", 0, "name")
       assert_equal false, payload.dig("active_storage", "attachment_read")
       assert_equal true, payload.dig("action_text", "rich_text_expected")
@@ -9268,6 +9518,10 @@ class RailsDependencyPrunerTest < Minitest::Test
             - ApplicationMailbox
         active_storage:
           review_required: false
+          declarations:
+            - class: Avatar
+              kind: has_one_attached
+              name: image
           upload: true
         action_text:
           review_required: false
@@ -9284,6 +9538,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes workloads, "attachments"
       assert_includes workloads, "action_text"
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal ["Avatar#image"], manifest.active_storage_declarations
       assert_equal ["CleanupJob"], manifest.job_classes
       assert_equal ["UserMailer#welcome"], manifest.mailer_actions
       assert_equal ["NotificationsChannel"], manifest.channel_classes

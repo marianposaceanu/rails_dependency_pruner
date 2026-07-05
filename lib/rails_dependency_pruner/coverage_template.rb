@@ -96,6 +96,7 @@ module RailsDependencyPruner
           "declarations_expected" => declarations.any?,
           "declarations" => declarations.map do |entry|
             {
+              "class" => entry["class"],
               "kind" => entry["kind"],
               "name" => entry["name"],
               "path" => entry["path"],

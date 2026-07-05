@@ -275,6 +275,7 @@ module RailsDependencyPruner
       def active_storage
         declarations = grep_ruby(/\b(has_one_attached|has_many_attached)\b/).map do |match|
           match.merge(
+            "class" => class_name_near(match.fetch("path"), match.fetch("line")),
             "kind" => match.fetch("source")[/\b(has_one_attached|has_many_attached)\b/, 1],
             "name" => match.fetch("source")[/\bhas_(?:one|many)_attached\s+[:"']?([A-Za-z0-9_]+)/, 1],
           ).compact

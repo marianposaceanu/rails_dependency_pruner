@@ -839,6 +839,7 @@ module RailsDependencyPruner
         gaps.concat(declared_entry_coverage_gaps("channels", declared_channel_classes, coverage_manifest&.channel_classes))
         gaps.concat(declared_entry_coverage_gaps("inbound_email", declared_mailbox_classes, coverage_manifest&.inbound_email_mailboxes))
         gaps.concat(declared_entry_coverage_gaps("action_text", declared_action_text_declarations, coverage_manifest&.action_text_declarations))
+        gaps.concat(declared_entry_coverage_gaps("attachments", declared_active_storage_declarations, coverage_manifest&.active_storage_declarations))
         gaps << "jobs" if declared_job_classes.empty? && app_path_has_ruby_files?("app/jobs") && !coverage_workloads.include?("jobs")
         gaps << "mailers" if declared_mailer_actions.empty? && app_path_has_ruby_files?("app/mailers") && !coverage_workloads.include?("mailers")
         gaps << "cable" if declared_channel_classes.empty? && app_path_has_ruby_files?("app/channels") && !coverage_workloads.include?("cable")
@@ -1002,6 +1003,19 @@ module RailsDependencyPruner
           relative = path.relative_path_from(usage.app_root).to_s
           path.readlines.filter_map.with_index(1) do |line, line_number|
             name = line[/\bhas_rich_text\s+[:"']?([A-Za-z0-9_]+)/, 1]
+            next if name.to_s.empty?
+
+            owner = class_name_near(path, line_number)
+            owner ? "#{owner}##{name}" : "#{relative}:#{name}"
+          end
+        end.uniq.sort
+      end
+
+      def declared_active_storage_declarations
+        @declared_active_storage_declarations ||= class_files_under("app").flat_map do |path|
+          relative = path.relative_path_from(usage.app_root).to_s
+          path.readlines.filter_map.with_index(1) do |line, line_number|
+            name = line[/\bhas_(?:one|many)_attached\s+[:"']?([A-Za-z0-9_]+)/, 1]
             next if name.to_s.empty?
 
             owner = class_name_near(path, line_number)
