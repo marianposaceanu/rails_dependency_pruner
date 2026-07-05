@@ -3770,6 +3770,7 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       patch = File.read(patch_path)
       assert_includes patch, "-require \"active_job/railtie\""
+      assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie; proof: explanations.activejob)"
       assert_includes patch, "+# require \"active_job/railtie\""
 
       assert_equal boot_plan.fetch("required_frameworks"), profile.dig("boot_plan", "required_frameworks")
@@ -5789,7 +5790,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes patch, "-require \"rails/all\""
       assert_includes patch, "+require \"rails\""
       assert_includes patch, "+require \"active_record/railtie\""
-      assert_includes patch, "+# require \"active_job/railtie\" # pruned by rails_dependency_pruner"
+      assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie)"
+      assert_includes patch, "+# require \"active_job/railtie\""
       assert_includes File.read(application_path), "require \"rails/all\""
     end
   end
@@ -5832,6 +5834,7 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       patch = File.read(patch_path)
       assert_includes patch, "-require \"active_job/railtie\""
+      assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie)"
       assert_includes patch, "+# require \"active_job/railtie\""
       assert_includes File.read(application_path), "require \"active_job/railtie\""
     end
@@ -5893,6 +5896,12 @@ class RailsDependencyPrunerTest < Minitest::Test
           "lazy_gems" => [],
           "config_namespace_stubs" => [],
         },
+        "explanations" => {
+          "activejob" => {
+            "decision" => "disable_framework",
+            "railtie" => "active_job/railtie",
+          },
+        },
       )
       RailsDependencyPruner::Profile.new(profile_payload).write(profile_path)
       patch_path = File.join(dir, "rollout.patch")
@@ -5924,7 +5933,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       patch = File.read(patch_path)
       assert_includes patch, "-require \"rails/all\""
       assert_includes patch, "+require \"active_record/railtie\""
-      assert_includes patch, "+# require \"active_job/railtie\" # pruned by rails_dependency_pruner"
+      assert_includes patch, "+# rails_dependency_pruner: pruned active_job/railtie (transforms: disable_framework:activejob, prune_railtie:active_job/railtie; proof: explanations.activejob)"
+      assert_includes patch, "+# require \"active_job/railtie\""
       assert_includes patch, "+require \"rails_dependency_pruner/early_boot\" if ENV[\"RAILS_DEPENDENCY_PRUNER_EARLY\"] == \"1\""
       assert_includes patch, "+  # Roll back early boot with RAILS_DEPENDENCY_PRUNER_DISABLE=1."
       assert_includes patch, "+  config.rails_dependency_pruner.enabled = ENV[\"RAILS_DEPENDENCY_PRUNER_ENABLED\"] == \"1\""

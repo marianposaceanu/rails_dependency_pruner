@@ -316,7 +316,11 @@ module RailsDependencyPruner
         profile.write(options.fetch(:profile_path))
 
         if options[:patch_path]
-          Apply::BootPlanPatch.new(app_root: options.fetch(:app_root), boot_plan: boot_plan).write(options[:patch_path])
+          Apply::BootPlanPatch.new(
+            app_root: options.fetch(:app_root),
+            boot_plan: boot_plan,
+            explanations: explanations,
+          ).write(options[:patch_path])
         end
 
         report = {
@@ -360,13 +364,17 @@ module RailsDependencyPruner
 
       def run_apply_boot_plan(usage: "apply boot-plan")
         options = options_parser.apply_boot_plan(usage: usage)
-        Profile.load(options.fetch(:profile_path))
+        profile = Profile.load(options.fetch(:profile_path))
 
         planner = build_planner(options)
         boot_plan = BootPrunePlanner.new(planner).plan
 
         if options[:write_patch]
-          Apply::BootPlanPatch.new(app_root: options.fetch(:app_root), boot_plan: boot_plan).write(options[:write_patch])
+          Apply::BootPlanPatch.new(
+            app_root: options.fetch(:app_root),
+            boot_plan: boot_plan,
+            explanations: profile.payload["explanations"],
+          ).write(options[:write_patch])
         end
 
         if options.fetch(:json)

@@ -69,7 +69,11 @@ module RailsDependencyPruner
         def boot_plan_patch_source
           return nil unless boot_plan
 
-          source = BootPlanPatch.new(app_root: app_root, boot_plan: boot_plan).source
+          source = BootPlanPatch.new(
+            app_root: app_root,
+            boot_plan: boot_plan,
+            explanations: profile.payload["explanations"],
+          ).source
           return nil if source.include?("no boot-plan patch generated")
 
           source

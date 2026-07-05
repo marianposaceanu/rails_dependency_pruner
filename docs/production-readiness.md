@@ -35,6 +35,8 @@ Generated workload sections still need review before production approval.
 The generated production config is gated by
 `RAILS_DEPENDENCY_PRUNER_ENABLED=1`; early boot can also be bypassed with
 `RAILS_DEPENDENCY_PRUNER_DISABLE=1`.
+Pruned railtie comments include the transform ids and, when the profile has
+per-framework explanations, the profile proof key that justified the transform.
 
 ## production gates
 
