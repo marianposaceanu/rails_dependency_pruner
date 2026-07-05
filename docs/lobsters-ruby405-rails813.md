@@ -140,6 +140,10 @@ Artifacts:
 - `tmp/adapter-policy-doctor-lobsters.time`
 - `tmp/adapter-policy-doctor-mp.json`
 - `tmp/adapter-policy-doctor-mp.time`
+- `tmp/queue-adapter-doctor-lobsters.json`
+- `tmp/queue-adapter-doctor-lobsters.time`
+- `tmp/queue-adapter-doctor-mp.json`
+- `tmp/queue-adapter-doctor-mp.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -238,6 +242,17 @@ Adapter policy doctor static smoke:
 | --- | --- | --- | ---: |
 | Lobsters | `tmp/adapter-policy-doctor-lobsters.json` | `puma:web_server:low`, requests coverage required | `52314112` bytes |
 | generic_blog_app, generic blog simple app | `tmp/adapter-policy-doctor-mp.json` | `puma:web_server:low`, requests coverage required | `47382528` bytes |
+
+Both scans reported `0` parse errors, `0` dynamic constantization risks, and
+`0` initializer dynamic require/load risks. No request RSS benchmark was run for
+generic_blog_app in this milestone.
+
+Queue adapter doctor static smoke:
+
+| app | artifact | queue adapter surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/queue-adapter-doctor-lobsters.json` | `puma:web_server:low`; `solid_queue:job_adapter:medium`; configured `solid_queue` in development and production | `53248000` bytes |
+| generic_blog_app, generic blog simple app | `tmp/queue-adapter-doctor-mp.json` | `puma:web_server:low`; no configured Active Job queue adapter | `47628288` bytes |
 
 Both scans reported `0` parse errors, `0` dynamic constantization risks, and
 `0` initializer dynamic require/load risks. No request RSS benchmark was run for

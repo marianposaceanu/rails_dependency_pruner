@@ -49,8 +49,36 @@ module RailsDependencyPruner
       puma
       que
       sidekiq
+      solid_queue
       spring
     ].freeze
+    QUEUE_ADAPTER_GEMS = {
+      "delayed_job" => "delayed_job",
+      "good_job" => "good_job",
+      "que" => "que",
+      "sidekiq" => "sidekiq",
+      "solid_queue" => "solid_queue",
+    }.freeze
+    BUILT_IN_QUEUE_ADAPTER_POLICIES = {
+      "async" => {
+        "class" => "rails_builtin_job_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "inline" => {
+        "class" => "rails_builtin_job_adapter",
+        "risk" => "low",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "test" => {
+        "class" => "rails_builtin_job_adapter",
+        "risk" => "low",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "test adapter should be absent from production boot measurements",
+      },
+    }.freeze
     ADAPTER_POLICIES = {
       "bootsnap" => {
         "class" => "boot_cache",
@@ -83,6 +111,12 @@ module RailsDependencyPruner
         "production_rule" => "job coverage required before approving eager-load changes",
       },
       "sidekiq" => {
+        "class" => "job_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[jobs],
+        "production_rule" => "job coverage required before approving eager-load changes",
+      },
+      "solid_queue" => {
         "class" => "job_adapter",
         "risk" => "medium",
         "coverage_required" => %w[jobs],
@@ -233,6 +267,7 @@ module RailsDependencyPruner
           "unclassified_integrations" => unclassified_integrations,
           "adapters" => adapters,
           "adapter_gem_policies" => adapter_gem_policies,
+          "active_job_queue_adapters" => active_job_queue_adapters,
           "parse_errors" => parse_errors,
         }
       end
@@ -410,6 +445,52 @@ module RailsDependencyPruner
         adapters.map do |name|
           ADAPTER_POLICIES.fetch(name).merge("gem" => name)
         end.sort_by { |entry| entry.fetch("gem") }
+      end
+
+      def active_job_queue_adapters
+        queue_adapter_matches.map do |match|
+          adapter = normalize_queue_adapter(match.fetch("adapter"))
+          policy = queue_adapter_policy(adapter)
+          match.merge(
+            "adapter" => adapter,
+            "gem" => QUEUE_ADAPTER_GEMS[adapter],
+            "class" => policy["class"],
+            "risk" => policy["risk"],
+            "coverage_required" => policy["coverage_required"],
+            "production_rule" => policy["production_rule"],
+          ).compact
+        end.uniq { |entry| [entry.fetch("adapter"), entry.fetch("path"), entry.fetch("line")] }
+      end
+
+      def queue_adapter_matches
+        grep_ruby(/\bconfig\.active_job\.queue_adapter\s*=/).filter_map do |match|
+          source = match.fetch("source")
+          next if source.start_with?("#")
+
+          adapter = source[/\bconfig\.active_job\.queue_adapter\s*=\s*:([A-Za-z0-9_]+)/, 1] ||
+            source[/\bconfig\.active_job\.queue_adapter\s*=\s*["']([^"']+)["']/, 1]
+          next unless adapter
+
+          match.merge("adapter" => adapter)
+        end
+      end
+
+      def normalize_queue_adapter(adapter)
+        adapter.to_s.tr("-", "_")
+      end
+
+      def queue_adapter_policy(adapter)
+        gem = QUEUE_ADAPTER_GEMS[adapter]
+        return ADAPTER_POLICIES.fetch(gem) if gem && ADAPTER_POLICIES.key?(gem)
+
+        BUILT_IN_QUEUE_ADAPTER_POLICIES.fetch(adapter) do
+          {
+            "class" => "custom_job_adapter",
+            "risk" => "medium",
+            "coverage_required" => %w[jobs],
+            "production_rule" => "job coverage required before approving eager-load changes",
+          }
+        end
       end
 
       def initializers_dynamic_require_load

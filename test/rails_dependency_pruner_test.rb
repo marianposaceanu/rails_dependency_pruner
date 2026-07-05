@@ -9344,6 +9344,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         gem "rollbar"
         gem "sentry-rails"
         gem "sidekiq"
+        gem "solid_queue"
       RUBY
       File.write(File.join(app_root, "Gemfile.lock"), <<~LOCK)
         GEM
@@ -9357,7 +9358,14 @@ class RailsDependencyPrunerTest < Minitest::Test
             rollbar (3.6.2)
             sentry-rails (6.0.0)
             sidekiq (8.0.8)
+            solid_queue (1.2.1)
       LOCK
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.active_job.queue_adapter = :solid_queue
+        end
+      RUBY
       FileUtils.mkdir_p(File.join(app_root, "config/initializers"))
       File.write(File.join(app_root, "config/initializers/dynamic_require.rb"), <<~RUBY)
         feature = ENV.fetch("BOOT_FEATURE")
@@ -9448,11 +9456,15 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
       assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
       assert_equal %w[honeybadger rollbar sentry-rails], payload.dig("capabilities", "integrations")
-      assert_equal %w[bootsnap good_job puma que sidekiq], payload.dig("capabilities", "adapters")
+      assert_equal %w[bootsnap good_job puma que sidekiq solid_queue], payload.dig("capabilities", "adapters")
       adapter_policies = payload.dig("capabilities", "adapter_gem_policies")
-      assert_equal %w[bootsnap good_job puma que sidekiq], adapter_policies.map { |entry| entry.fetch("gem") }
-      assert_equal %w[boot_cache job_adapter web_server job_adapter job_adapter], adapter_policies.map { |entry| entry.fetch("class") }
-      assert_equal [%w[boot], %w[jobs], %w[requests], %w[jobs], %w[jobs]], adapter_policies.map { |entry| entry.fetch("coverage_required") }
+      assert_equal %w[bootsnap good_job puma que sidekiq solid_queue], adapter_policies.map { |entry| entry.fetch("gem") }
+      assert_equal %w[boot_cache job_adapter web_server job_adapter job_adapter job_adapter], adapter_policies.map { |entry| entry.fetch("class") }
+      assert_equal [%w[boot], %w[jobs], %w[requests], %w[jobs], %w[jobs], %w[jobs]], adapter_policies.map { |entry| entry.fetch("coverage_required") }
+      assert_equal ["solid_queue"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("adapter") }
+      assert_equal ["solid_queue"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("gem") }
+      assert_equal ["job_adapter"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("class") }
+      assert_equal "config/environments/production.rb", payload.dig("capabilities", "active_job_queue_adapters", 0, "path")
       assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
       assert_equal "Avatar", payload.dig("capabilities", "active_storage", "declarations", 0, "class")
       assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")
