@@ -20,6 +20,8 @@ The report keeps the existing `recommendations` list and adds:
   environment names and channel coverage requirements
 - `capabilities.rake_tasks`: tasks from `Rakefile` and `lib/tasks/**/*.rake`
 - `capabilities.active_storage`: `has_one_attached` and `has_many_attached`
+  declarations plus configured storage services from
+  `config.active_storage.service` and `config/storage.yml`
 - `capabilities.action_text`: `has_rich_text`
 - `capabilities.direct_gem_usage`: direct `Vips`, `Nokogiri`, `Sentry`,
   `Honeybadger`, and `Rollbar` API use

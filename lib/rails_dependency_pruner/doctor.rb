@@ -427,6 +427,8 @@ module RailsDependencyPruner
         {
           "declarations" => declarations,
           "declarations_count" => declarations.length,
+          "configured_services" => active_storage_configured_services,
+          "service_definitions" => active_storage_service_definitions,
         }
       end
 
@@ -594,6 +596,92 @@ module RailsDependencyPruner
 
       def normalize_adapter_name(adapter)
         adapter.to_s.tr("-", "_")
+      end
+
+      def active_storage_configured_services
+        grep_ruby(/\bconfig\.active_storage\.service\s*=/).filter_map do |match|
+          source = match.fetch("source")
+          next if source.start_with?("#")
+
+          service_name = source[/\bconfig\.active_storage\.service\s*=\s*:([A-Za-z0-9_]+)/, 1] ||
+            source[/\bconfig\.active_storage\.service\s*=\s*["']([^"']+)["']/, 1]
+          next unless service_name
+
+          definition = active_storage_service_definition_map[service_name]
+          match.merge(
+            "environment" => environment_name_for(match.fetch("path")),
+            "service" => service_name,
+            "adapter" => definition && definition["adapter"],
+            "class" => "storage_service",
+            "risk" => storage_service_risk(definition && definition["adapter"]),
+            "coverage_required" => %w[active_storage],
+            "definition_path" => definition && definition["path"],
+            "definition_line" => definition && definition["line"],
+          ).compact
+        end
+      end
+
+      def active_storage_service_definitions
+        storage_config.map do |name, config|
+          next unless config.is_a?(Hash)
+
+          adapter = config["service"].to_s
+          next if adapter.empty?
+
+          {
+            "name" => name.to_s,
+            "adapter" => adapter,
+            "class" => "storage_service",
+            "risk" => storage_service_risk(adapter),
+            "coverage_required" => %w[active_storage],
+            "path" => "config/storage.yml",
+            "line" => storage_service_lines[name.to_s],
+          }.compact
+        end.compact.sort_by { |entry| entry.fetch("name") }
+      end
+
+      def active_storage_service_definition_map
+        @active_storage_service_definition_map ||= active_storage_service_definitions.to_h do |entry|
+          [
+            entry.fetch("name"),
+            {
+              "adapter" => entry["adapter"],
+              "path" => entry["path"],
+              "line" => entry["line"],
+            }.compact,
+          ]
+        end
+      end
+
+      def storage_config
+        path = app_root.join("config/storage.yml")
+        return {} unless path.file?
+
+        YAML.safe_load(path.read, aliases: true) || {}
+      rescue Psych::Exception
+        {}
+      end
+
+      def storage_service_lines
+        @storage_service_lines ||= begin
+          path = app_root.join("config/storage.yml")
+          if path.file?
+            path.readlines.each_with_object({}).with_index(1) do |(line, result), line_number|
+              match = line.match(/\A([A-Za-z0-9_]+):\s*(?:#.*)?\z/)
+              result[match[1]] = line_number if match
+            end
+          else
+            {}
+          end
+        end
+      end
+
+      def storage_service_risk(adapter)
+        adapter.to_s == "Disk" ? "low" : "medium"
+      end
+
+      def environment_name_for(path)
+        path.to_s[%r{\Aconfig/environments/([^/]+)\.rb\z}, 1]
       end
 
       def initializers_dynamic_require_load

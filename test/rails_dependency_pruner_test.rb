@@ -9364,8 +9364,14 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
         Rails.application.configure do
           config.active_job.queue_adapter = :solid_queue
+          config.active_storage.service = :local
         end
       RUBY
+      File.write(File.join(app_root, "config/storage.yml"), <<~YAML)
+        local:
+          service: Disk
+          root: <%= Rails.root.join("storage") %>
+      YAML
       File.write(File.join(app_root, "config/cable.yml"), <<~YAML)
         development:
           adapter: async
@@ -9481,6 +9487,17 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
       assert_equal "Avatar", payload.dig("capabilities", "active_storage", "declarations", 0, "class")
       assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")
+      storage_services = payload.dig("capabilities", "active_storage", "configured_services")
+      assert_equal ["production"], storage_services.map { |entry| entry.fetch("environment") }
+      assert_equal ["local"], storage_services.map { |entry| entry.fetch("service") }
+      assert_equal ["Disk"], storage_services.map { |entry| entry.fetch("adapter") }
+      assert_equal ["low"], storage_services.map { |entry| entry.fetch("risk") }
+      assert_equal "config/environments/production.rb", storage_services.first.fetch("path")
+      storage_definitions = payload.dig("capabilities", "active_storage", "service_definitions")
+      assert_equal ["local"], storage_definitions.map { |entry| entry.fetch("name") }
+      assert_equal ["Disk"], storage_definitions.map { |entry| entry.fetch("adapter") }
+      assert_equal ["low"], storage_definitions.map { |entry| entry.fetch("risk") }
+      assert_equal "config/storage.yml", storage_definitions.first.fetch("path")
       assert_equal 1, payload.dig("capabilities", "action_text", "declarations_count")
       assert_equal "Avatar", payload.dig("capabilities", "action_text", "declarations", 0, "class")
       assert_equal true, payload.dig("capabilities", "direct_gem_usage", "vips", "present")
@@ -9512,6 +9529,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         Rails.application.configure do
           config.eager_load = true
           config.active_job.queue_adapter = :solid_queue
+          config.active_storage.service = :local
         end
       RUBY
       File.write(File.join(app_root, "config/routes.rb"), <<~RUBY)
@@ -9525,6 +9543,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "config/cable.yml"), <<~YAML)
         production:
           adapter: redis
+      YAML
+      File.write(File.join(app_root, "config/storage.yml"), <<~YAML)
+        local:
+          service: Disk
+          root: <%= Rails.root.join("storage") %>
       YAML
       FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
       File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
@@ -9620,6 +9643,11 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["channels"], payload.dig("channels", "cable_adapters", 0, "coverage_required")
       assert_equal ["ApplicationMailbox"], payload.dig("inbound_email", "mailboxes")
       assert_equal true, payload.dig("active_storage", "declarations_expected")
+      assert_equal "local", payload.dig("active_storage", "configured_services", 0, "service")
+      assert_equal "Disk", payload.dig("active_storage", "configured_services", 0, "adapter")
+      assert_equal "config/environments/production.rb", payload.dig("active_storage", "configured_services", 0, "path")
+      assert_equal "local", payload.dig("active_storage", "service_definitions", 0, "name")
+      assert_equal "Disk", payload.dig("active_storage", "service_definitions", 0, "adapter")
       assert_equal "Avatar", payload.dig("active_storage", "declarations", 0, "class")
       assert_equal "image", payload.dig("active_storage", "declarations", 0, "name")
       assert_equal false, payload.dig("active_storage", "attachment_read")

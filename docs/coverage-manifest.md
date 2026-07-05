@@ -63,6 +63,15 @@ inbound_email:
 active_storage:
   review_required: false
   declarations_expected: false
+  configured_services:
+    - environment: production
+      service: local
+      adapter: Disk
+      risk: low
+  service_definitions:
+    - name: local
+      adapter: Disk
+      risk: low
   declarations:
     - class: Avatar
       kind: has_one_attached
@@ -137,6 +146,10 @@ coverage and do not replace exact job class coverage.
 Generated `channels.cable_adapters` entries show `config/cable.yml` adapters.
 They are review context for Action Cable coverage and do not replace exact
 channel class coverage.
+Generated `active_storage.configured_services` and `service_definitions`
+entries show the configured storage backend. They are review context for Active
+Storage coverage and do not replace upload, analysis, variant, preview,
+representation, or attachment-read coverage.
 
 If a lazy gem is used directly by app code, the manifest must also review that
 first-use surface under `lazy_gems`. Accepted statuses are `covered`,

@@ -160,6 +160,16 @@ Artifacts:
 - `tmp/cable-adapter-coverage-mp-template.yml`
 - `tmp/cable-adapter-coverage-mp-template.stdout`
 - `tmp/cable-adapter-coverage-mp-template.time`
+- `tmp/storage-service-doctor-lobsters.json`
+- `tmp/storage-service-doctor-lobsters.time`
+- `tmp/storage-service-doctor-mp.json`
+- `tmp/storage-service-doctor-mp.time`
+- `tmp/storage-service-coverage-lobsters-template.yml`
+- `tmp/storage-service-coverage-lobsters-template.stdout`
+- `tmp/storage-service-coverage-lobsters-template.time`
+- `tmp/storage-service-coverage-mp-template.yml`
+- `tmp/storage-service-coverage-mp-template.stdout`
+- `tmp/storage-service-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -306,6 +316,27 @@ Generated `channels.cable_adapters` entries remain review context while
 `channels.review_required: true`; exact channel class coverage is still required
 before approval. No request RSS benchmark was run for generic_blog_app in this
 milestone.
+
+Storage service doctor static smoke:
+
+| app | artifact | storage service surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/storage-service-doctor-lobsters.json` | configured `local:Disk` in development, production, and test | `52674560` bytes |
+| generic_blog_app, generic blog simple app | `tmp/storage-service-doctor-mp.json` | `local:Disk` and `test:Disk` definitions; no configured service assignment | `48021504` bytes |
+
+Both scans reported `0` parse errors, `0` dynamic constantization risks, and
+`0` initializer dynamic require/load risks.
+
+Storage service coverage-template static smoke:
+
+| app | artifact | generated storage service entries | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/storage-service-coverage-lobsters-template.yml` | configured `local:Disk` in development, production, and test; no attachment declarations | `52953088` bytes |
+| generic_blog_app, generic blog simple app | `tmp/storage-service-coverage-mp-template.yml` | `local:Disk` and `test:Disk` definitions; no configured service assignment or attachment declarations | `47726592` bytes |
+
+Generated storage service entries remain review context. They do not count as
+upload, analysis, variant, preview, representation, or attachment-read coverage.
+No request RSS benchmark was run for generic_blog_app in this milestone.
 
 Gem policy smoke:
 

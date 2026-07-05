@@ -106,6 +106,8 @@ module RailsDependencyPruner
         {
           "review_required" => declarations.any?,
           "declarations_expected" => declarations.any?,
+          "configured_services" => active_storage_configured_services,
+          "service_definitions" => active_storage_service_definitions,
           "declarations" => declarations.map do |entry|
             {
               "class" => entry["class"],
@@ -242,6 +244,37 @@ module RailsDependencyPruner
 
       def job_classes
         Array(capabilities.dig("jobs", "classes"))
+      end
+
+      def active_storage_configured_services
+        Array(capabilities.dig("active_storage", "configured_services")).map do |entry|
+          {
+            "environment" => entry["environment"],
+            "service" => entry["service"],
+            "adapter" => entry["adapter"],
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "path" => entry["path"],
+            "line" => entry["line"],
+            "definition_path" => entry["definition_path"],
+            "definition_line" => entry["definition_line"],
+          }.compact
+        end
+      end
+
+      def active_storage_service_definitions
+        Array(capabilities.dig("active_storage", "service_definitions")).map do |entry|
+          {
+            "name" => entry["name"],
+            "adapter" => entry["adapter"],
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "path" => entry["path"],
+            "line" => entry["line"],
+          }.compact
+        end
       end
 
       def queue_adapter_entries
