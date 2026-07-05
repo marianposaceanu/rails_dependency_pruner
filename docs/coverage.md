@@ -23,6 +23,8 @@ Typical review steps:
 
 - replace guessed request entries with the paths and statuses actually exercised
 - review mounted Rack app and engine paths generated from route `mount` calls
+- review generated `requests.web_servers` entries against the production web
+  server topology; they do not replace exact request path coverage
 - set reviewed workload sections to `review_required: false`
 - remove sections that are not covered
 - add storage, Action Text, inbound email, job, mailer, and channel coverage

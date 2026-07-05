@@ -793,6 +793,17 @@ Artifacts: `tmp/puma-topology-doctor-lobsters.json`,
 `tmp/puma-topology-doctor-mp.json`, and
 `tmp/puma-topology-coverage-mp-template.yml`. No request RSS benchmark was run
 for this milestone.
+Web-server coverage-template follow-up now carries Puma topology into
+`requests.web_servers` as review context. Lobsters generated `20` request
+paths plus clustered Puma, `preload_app!`, `tmp_restart` and `solid_queue`
+plugins; doctor and template max RSS were `52592640` and `54018048` bytes. The
+generic_blog_app generic blog app generated `19` request paths plus clustered Puma
+and `preload_app!`; doctor and template max RSS were `47759360` and `47742976`
+bytes. Artifacts: `tmp/web-server-coverage-template-doctor-lobsters.json`,
+`tmp/web-server-coverage-template-lobsters-template.yml`,
+`tmp/web-server-coverage-template-doctor-mp.json`, and
+`tmp/web-server-coverage-template-mp-template.yml`. No request RSS benchmark was
+run for this milestone.
 
 ## what eats memory
 

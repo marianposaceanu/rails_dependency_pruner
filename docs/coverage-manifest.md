@@ -33,6 +33,12 @@ requests:
     - method: GET
       path: /health
       expected_status: 200
+  web_servers:
+    - server: puma
+      mode: clustered
+      clustered: true
+      coverage_required:
+        - requests
 jobs:
   review_required: false
   classes:
@@ -157,6 +163,9 @@ attachment coverage; at least one reviewed storage action must be true.
 Generated `jobs.queue_adapters` entries show configured
 `config.active_job.queue_adapter` values. They are review context for job
 coverage and do not replace exact job class coverage.
+Generated `requests.web_servers` entries show static web server topology, such
+as Puma single or clustered mode. They are review context for request coverage
+and do not replace exact request path coverage.
 Generated `mailers.delivery_methods` and `mailers.smtp_settings` entries show
 mail delivery configuration. They are review context for mailer coverage and do
 not replace exact mailer action coverage.

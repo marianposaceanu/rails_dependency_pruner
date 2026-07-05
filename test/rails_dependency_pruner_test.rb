@@ -9707,6 +9707,12 @@ class RailsDependencyPrunerTest < Minitest::Test
         production:
           adapter: redis
       YAML
+      File.write(File.join(app_root, "config/puma.rb"), <<~RUBY)
+        workers 2
+        threads 3, 5
+        preload_app!
+        plugin :tmp_restart
+      RUBY
       File.write(File.join(app_root, "config/storage.yml"), <<~YAML)
         local:
           service: Disk
@@ -9730,6 +9736,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(File.join(app_root, "Gemfile"), <<~RUBY)
         source "https://rubygems.org"
         gem "rack-mini-profiler"
+        gem "puma"
         gem "sentry-rails"
         gem "sentry-ruby"
         gem "solid_queue"
@@ -9799,6 +9806,17 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes request_paths, ["GET", "/settings"]
       assert_includes request_paths, ["POST", "/comments"]
       assert_includes request_paths, ["GET", "/admin"]
+      web_servers = payload.dig("requests", "web_servers")
+      assert_equal ["puma"], web_servers.map { |entry| entry.fetch("server") }
+      assert_equal ["clustered"], web_servers.map { |entry| entry.fetch("mode") }
+      assert_equal [true], web_servers.map { |entry| entry.fetch("clustered") }
+      assert_equal 2, web_servers.dig(0, "workers", "value")
+      assert_equal "2", web_servers.dig(0, "workers", "raw")
+      assert_equal 3, web_servers.dig(0, "threads", "value")
+      assert_equal "3, 5", web_servers.dig(0, "threads", "raw")
+      assert_equal true, web_servers.dig(0, "preload_app", "value")
+      assert_equal ["tmp_restart"], web_servers.dig(0, "plugins").map { |entry| entry.fetch("name") }
+      assert_equal ["requests"], web_servers.dig(0, "coverage_required")
       assert_equal ["CleanupJob"], payload.dig("jobs", "classes")
       assert_equal "solid_queue", payload.dig("jobs", "queue_adapters", 0, "adapter")
       assert_equal "solid_queue", payload.dig("jobs", "queue_adapters", 0, "gem")

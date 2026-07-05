@@ -84,9 +84,9 @@ module RailsDependencyPruner
       end
 
       def requests_section
-        review_section(
-          "paths" => request_entries,
-        )
+        values = { "paths" => request_entries }
+        values["web_servers"] = web_server_entries if web_server_entries.any?
+        review_section(values)
       end
 
       def jobs_section
@@ -251,6 +251,56 @@ module RailsDependencyPruner
 
       def job_classes
         Array(capabilities.dig("jobs", "classes"))
+      end
+
+      def web_server_entries
+        Array(capabilities["web_servers"]).map do |entry|
+          {
+            "server" => entry["server"],
+            "gem" => entry["gem"],
+            "present" => entry["present"],
+            "config_path" => entry["config_path"],
+            "mode" => entry["mode"],
+            "clustered" => entry["clustered"],
+            "workers" => puma_setting_entry(entry["workers"]),
+            "threads" => puma_setting_entry(entry["threads"]),
+            "preload_app" => puma_flag_entry(entry["preload_app"]),
+            "plugins" => Array(entry["plugins"]).map { |plugin| puma_plugin_entry(plugin) },
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "production_rule" => entry["production_rule"],
+          }.compact
+        end
+      end
+
+      def puma_setting_entry(entry)
+        return unless entry.is_a?(Hash)
+
+        {
+          "value" => entry["value"],
+          "raw" => entry["raw"],
+          "path" => entry["path"],
+          "line" => entry["line"],
+        }.compact
+      end
+
+      def puma_flag_entry(entry)
+        return unless entry.is_a?(Hash)
+
+        {
+          "value" => entry["value"],
+          "path" => entry["path"],
+          "line" => entry["line"],
+        }.compact
+      end
+
+      def puma_plugin_entry(entry)
+        {
+          "name" => entry["name"],
+          "path" => entry["path"],
+          "line" => entry["line"],
+        }.compact
       end
 
       def active_storage_configured_services
