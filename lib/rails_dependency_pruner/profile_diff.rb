@@ -30,6 +30,7 @@ module RailsDependencyPruner
       unexpected_event_policy
       lazy_constants
       memory_policy
+      safety_policy
       safety
       summary
     ].freeze

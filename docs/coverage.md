@@ -42,6 +42,11 @@ catalog. For example, Active Storage catalog evidence requires the normalized
 For v2 manifests, production verification also requires reviewed rollback
 evidence through `rollback.disable_env_tested: true`.
 
+Coverage can include a `safety_policy` section, but generated profiles still
+fail closed. Production verification rejects policy entries that weaken the
+default rejection behavior for dynamic loads, missing coverage, unexpected
+events, stale fingerprints, or unclassified and high-risk transforms.
+
 High-risk overrides are explicit and temporary:
 
 ```yaml

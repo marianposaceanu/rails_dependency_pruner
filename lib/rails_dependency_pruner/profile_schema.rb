@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "safety_policy"
+
 module RailsDependencyPruner
   module ProfileSchema
     module_function
@@ -53,6 +55,7 @@ module RailsDependencyPruner
       migrated["expected_events"] ||= []
       migrated["unexpected_event_policy"] ||= "fail_boot"
       migrated["lazy_constants"] ||= {}
+      migrated["safety_policy"] ||= SafetyPolicy.defaults
       migrated
     end
   end

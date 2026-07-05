@@ -104,6 +104,13 @@ module RailsDependencyPruner
       policy
     end
 
+    def safety_policy
+      policy = payload["safety_policy"]
+      return {} unless policy.is_a?(Hash)
+
+      policy
+    end
+
     def active_storage_actions
       value = payload["active_storage"]
       return [] unless value.is_a?(Hash)

@@ -11,6 +11,7 @@ require_relative "profile_context"
 require_relative "profile_validator"
 require_relative "gem_policy_registry"
 require_relative "transform_registry"
+require_relative "safety_policy"
 
 module RailsDependencyPruner
   class Profile
@@ -120,6 +121,7 @@ module RailsDependencyPruner
         "extreme_boot" => extreme_boot_payload,
         "lazy_gems" => lazy_gem_policies,
         "lazy_constants" => lazy_constants_for(lazy_gem_policies),
+        "safety_policy" => context.safety_policy_context,
         "safety" => {
           "always_keep" => [],
           "manual_keep" => [],

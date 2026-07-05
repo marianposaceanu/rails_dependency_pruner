@@ -7,6 +7,7 @@ require_relative "boot_plan"
 require_relative "coverage_manifest"
 require_relative "memory_policy"
 require_relative "runtime_framework_matcher"
+require_relative "safety_policy"
 require_relative "transform_registry"
 
 module RailsDependencyPruner
@@ -135,6 +136,9 @@ module RailsDependencyPruner
         lazy_constant_policy_gaps.each do |gap|
           errors << "production verify missing lazy constant policy: #{format_lazy_constant_policy_gap(gap)}"
         end
+        safety_policy_gaps.each do |gap|
+          errors << "production verify weak safety policy: #{format_safety_policy_gap(gap)}"
+        end
         rollback_evidence_gaps.each do |gap|
           errors << "production verify missing rollback proof: #{format_rollback_evidence_gap(gap)}"
         end
@@ -170,6 +174,7 @@ module RailsDependencyPruner
           "unsupported_lazy_gems" => unsupported_lazy_gems,
           "structured_lazy_gem_policy_gaps" => structured_lazy_gem_policy_gaps,
           "lazy_constant_policy_gaps" => lazy_constant_policy_gaps,
+          "safety_policy_gaps" => safety_policy_gaps,
           "rollback_evidence_gaps" => rollback_evidence_gaps,
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
@@ -471,6 +476,17 @@ module RailsDependencyPruner
                 "env_var" => "RAILS_DEPENDENCY_PRUNER_DISABLE",
               },
             ]
+          end
+        end
+      end
+
+      def safety_policy_gaps
+        @safety_policy_gaps ||= begin
+          policy = profile.payload["safety_policy"]
+          if policy.nil? && profile.schema_version.to_i < 3
+            []
+          else
+            SafetyPolicy.gaps(policy)
           end
         end
       end
@@ -911,6 +927,10 @@ module RailsDependencyPruner
 
       def format_rollback_evidence_gap(gap)
         "#{gap.fetch("requirement")} must be true for #{gap.fetch("env_var")}"
+      end
+
+      def format_safety_policy_gap(gap)
+        "#{gap.fetch("key")} expected #{gap.fetch("expected")}, got #{gap.fetch("actual")}"
       end
   end
 end

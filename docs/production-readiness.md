@@ -52,6 +52,7 @@ A profile is ready only when:
 - first request, p95, and p99 latency regressions satisfy the app policy
 - request-target measurements keep the same status matrix as baseline and have
   no request errors or unexpected runtime events
+- `safety_policy` keeps the generated fail-closed defaults
 - the approved profile records `approved_at`, `approved_by`, verifier version,
   and verifier errors/warnings
 

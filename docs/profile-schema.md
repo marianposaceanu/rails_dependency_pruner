@@ -14,6 +14,7 @@ readiness fields:
 - `lazy_gems`: structured lazy-gem policies copied from the registry
 - `lazy_constants`: optional phase policy for lazy top-level constants
 - `memory_policy`: optional RSS savings gates copied from the coverage manifest
+- `safety_policy`: required fail-closed production safety defaults
 
 `analysis.feature_catalog` records the Rails feature catalog name, Rails minor
 version, and catalog digest used by the static scanner.
@@ -110,6 +111,24 @@ Supported gates:
 Production verification also uses these gates as proof for high-risk transforms.
 For `disable_eager_load`, the policy must include first request, p95, and p99
 latency regression limits.
+
+## safety policy
+
+Schema v3 profiles carry a `safety_policy` contract. Generated profiles start
+with fail-closed defaults:
+
+- unknown dynamic `require` or `load`: `reject`
+- dynamic constantization that can touch pruned namespaces:
+  `reject_if_pruned_namespace_possible`
+- truncated runtime evidence: `reject`
+- missing related coverage: `reject_for_related_transform`
+- unclassified lazy gems: `reject`
+- high-risk transforms without proof: `reject`
+- unexpected boot events: `reject`
+- unexpected request events in canary: `reject`
+- stale fingerprints and missing profile ids: `reject`
+
+Production verification rejects profiles whose policy weakens those defaults.
 
 ## runtime events
 

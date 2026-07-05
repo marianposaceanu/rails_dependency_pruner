@@ -842,6 +842,8 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal [], migrated.fetch("expected_events")
     assert_equal "fail_boot", migrated.fetch("unexpected_event_policy")
     assert_equal({}, migrated.fetch("lazy_constants"))
+    assert_equal "reject", migrated.dig("safety_policy", "unknown_dynamic_require")
+    assert_equal "reject_if_pruned_namespace_possible", migrated.dig("safety_policy", "unknown_dynamic_constantize")
   end
 
   def test_profile_digest_preserves_legacy_v2_shape
@@ -988,6 +990,43 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal true, payload.fetch("changed")
       assert payload.fetch("context_changes").any? { |change| change.fetch("key") == "lazy_constants" }
+    end
+  end
+
+  def test_profile_diff_reports_safety_policy_changes
+    Dir.mktmpdir("rails_dependency_pruner_profile_diff_safety_policy") do |dir|
+      old_profile = File.join(dir, "old.json")
+      new_profile = File.join(dir, "new.json")
+      payload = {
+        "schema_version" => 3,
+        "safety_policy" => RailsDependencyPruner::SafetyPolicy.defaults,
+        "pruning" => {
+          "disabled_constants" => [],
+          "disabled_require_paths" => [],
+        },
+      }
+      weakened = Marshal.load(Marshal.dump(payload))
+      weakened["safety_policy"]["unknown_dynamic_require"] = "report"
+      File.write(old_profile, JSON.pretty_generate(payload))
+      File.write(new_profile, JSON.pretty_generate(weakened))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "diff",
+        "--old",
+        old_profile,
+        "--new",
+        new_profile,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("changed")
+      assert payload.fetch("context_changes").any? { |change| change.fetch("key") == "safety_policy" }
     end
   end
 
@@ -2703,6 +2742,9 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_match(/\Asha256:/, payload.dig("evidence", "coverage_manifest_digest"))
       assert_equal payload.dig("evidence", "coverage_manifest_digest"), payload.dig("fingerprints", "coverage_manifest_sha256")
       assert_equal %w[boot jobs mailers rake_tasks routes], payload.dig("evidence", "workloads")
+      assert_equal "reject", payload.dig("safety_policy", "unknown_dynamic_require")
+      assert_equal "reject", payload.dig("safety_policy", "runtime_evidence_truncated")
+      assert_equal "reject_if_pruned_namespace_possible", payload.dig("safety_policy", "unknown_dynamic_constantize")
 
       file_payload = JSON.parse(File.read(profile_path))
       assert_equal payload.fetch("profile_id"), file_payload.fetch("profile_id")
@@ -2750,6 +2792,62 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       refute validate_status.success?
       assert JSON.parse(validate_stdout).fetch("errors").any? { |error| error.include?("coverage_manifest_digest mismatch") }
+    end
+  end
+
+  def test_verify_production_rejects_weakened_safety_policy
+    Dir.mktmpdir("rails_dependency_pruner_safety_policy_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        safety_policy:
+          unknown_dynamic_require: report
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+      profile = JSON.parse(File.read(profile_path))
+      assert_equal "report", profile.dig("safety_policy", "unknown_dynamic_require")
+      assert_equal "reject", profile.dig("safety_policy", "runtime_evidence_truncated")
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify weak safety policy: unknown_dynamic_require expected reject, got report"
+      assert_equal [
+        {
+          "key" => "unknown_dynamic_require",
+          "expected" => "reject",
+          "actual" => "report",
+        },
+      ], payload.dig("production_risks", "safety_policy_gaps")
     end
   end
 

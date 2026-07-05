@@ -62,6 +62,12 @@ Request-status and event-policy smoke, one run:
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | requests | `232672 KB` | `123344 KB` | `109328 KB` (`106.8 MiB`, `47.0%`) | `2` | `0` | passed for `/privacy`, `/login`, `/404` |
 
+Safety-policy profile smoke, one run:
+
+| target | baseline RSS | boot_prune RSS | saved RSS | events | unexpected | request status gate |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| requests | `253264 KB` | `123248 KB` | `130016 KB` (`127.0 MiB`, `51.3%`) | `2` | `0` | passed for `/privacy`, `/login`, `/404` |
+
 The strict-profile request smoke hit `/privacy` and `/login` with `200`, and
 `/404` with `404`. The first request is slower because deferred boot work moves
 into that request. Warmed p95 moved by `+19.6 ms` in this one-run smoke.
@@ -106,6 +112,9 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-coverage-template.yml`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
+- `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
+- `tmp/lobsters-ruby405-safety-policy-measurement-smoke.json`
+- `tmp/lobsters-ruby405-safety-policy-measurement-smoke.md`
 
 Static capability scan:
 

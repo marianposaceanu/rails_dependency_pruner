@@ -11,6 +11,7 @@ require_relative "version"
 require_relative "coverage_manifest"
 require_relative "feature_catalog"
 require_relative "fingerprint"
+require_relative "safety_policy"
 
 module RailsDependencyPruner
   class ProfileContext
@@ -147,6 +148,10 @@ module RailsDependencyPruner
 
     def memory_policy_context
       coverage_manifest&.memory_policy || {}
+    end
+
+    def safety_policy_context
+      SafetyPolicy.normalize(coverage_manifest&.safety_policy || {})
     end
 
     def feature_catalog_context
