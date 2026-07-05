@@ -2,6 +2,7 @@
 
 require "pathname"
 require "rbconfig"
+require "yaml"
 
 require "prism"
 
@@ -77,6 +78,42 @@ module RailsDependencyPruner
         "risk" => "low",
         "coverage_required" => %w[jobs],
         "production_rule" => "test adapter should be absent from production boot measurements",
+      },
+    }.freeze
+    CABLE_ADAPTER_GEMS = {
+      "redis" => "redis",
+      "solid_cable" => "solid_cable",
+    }.freeze
+    CABLE_ADAPTER_POLICIES = {
+      "async" => {
+        "class" => "rails_builtin_cable_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[channels],
+        "production_rule" => "channel coverage required before approving Action Cable boot changes",
+      },
+      "test" => {
+        "class" => "rails_builtin_cable_adapter",
+        "risk" => "low",
+        "coverage_required" => %w[channels],
+        "production_rule" => "test adapter should be absent from production boot measurements",
+      },
+      "redis" => {
+        "class" => "cable_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[channels],
+        "production_rule" => "channel coverage required before approving Action Cable boot changes",
+      },
+      "solid_cable" => {
+        "class" => "cable_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[channels],
+        "production_rule" => "channel coverage required before approving Action Cable boot changes",
+      },
+      "postgresql" => {
+        "class" => "cable_adapter",
+        "risk" => "medium",
+        "coverage_required" => %w[channels],
+        "production_rule" => "channel coverage required before approving Action Cable boot changes",
       },
     }.freeze
     ADAPTER_POLICIES = {
@@ -257,6 +294,7 @@ module RailsDependencyPruner
           "jobs" => jobs,
           "mailers" => mailers,
           "channels" => channels,
+          "action_cable_adapters" => action_cable_adapters,
           "active_storage" => active_storage,
           "action_text" => action_text,
           "rake_tasks" => rake_tasks,
@@ -346,6 +384,28 @@ module RailsDependencyPruner
 
       def channels
         class_inventory("app/channels", /<\s*ApplicationCable::Channel\b|<\s*ActionCable::Channel::Base\b|\bstream_from\b/)
+      end
+
+      def action_cable_adapters
+        cable_config.filter_map do |environment, config|
+          next unless config.is_a?(Hash)
+
+          adapter = normalize_adapter_name(config["adapter"])
+          next if adapter.empty?
+
+          policy = cable_adapter_policy(adapter)
+          {
+            "environment" => environment.to_s,
+            "adapter" => adapter,
+            "gem" => CABLE_ADAPTER_GEMS[adapter],
+            "class" => policy["class"],
+            "risk" => policy["risk"],
+            "coverage_required" => Array(policy["coverage_required"]).map(&:to_s),
+            "path" => "config/cable.yml",
+            "line" => cable_adapter_lines[[environment.to_s, adapter]],
+            "production_rule" => policy["production_rule"],
+          }.compact
+        end
       end
 
       def rake_tasks
@@ -491,6 +551,49 @@ module RailsDependencyPruner
             "production_rule" => "job coverage required before approving eager-load changes",
           }
         end
+      end
+
+      def cable_config
+        path = app_root.join("config/cable.yml")
+        return {} unless path.file?
+
+        YAML.safe_load(path.read, aliases: true) || {}
+      rescue Psych::Exception
+        {}
+      end
+
+      def cable_adapter_lines
+        @cable_adapter_lines ||= begin
+          path = app_root.join("config/cable.yml")
+          if path.file?
+            environment = nil
+            path.readlines.each_with_object({}).with_index(1) do |(line, result), line_number|
+              stripped = line.strip
+              if (match = line.match(/\A([A-Za-z0-9_]+):\s*(?:#.*)?\z/))
+                environment = match[1]
+              elsif environment && (match = stripped.match(/\Aadapter:\s*([A-Za-z0-9_-]+)/))
+                result[[environment, normalize_adapter_name(match[1])]] = line_number
+              end
+            end
+          else
+            {}
+          end
+        end
+      end
+
+      def cable_adapter_policy(adapter)
+        CABLE_ADAPTER_POLICIES.fetch(adapter) do
+          {
+            "class" => "custom_cable_adapter",
+            "risk" => "medium",
+            "coverage_required" => %w[channels],
+            "production_rule" => "channel coverage required before approving Action Cable boot changes",
+          }
+        end
+      end
+
+      def normalize_adapter_name(adapter)
+        adapter.to_s.tr("-", "_")
       end
 
       def initializers_dynamic_require_load

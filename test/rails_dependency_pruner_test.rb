@@ -9366,6 +9366,12 @@ class RailsDependencyPrunerTest < Minitest::Test
           config.active_job.queue_adapter = :solid_queue
         end
       RUBY
+      File.write(File.join(app_root, "config/cable.yml"), <<~YAML)
+        development:
+          adapter: async
+        production:
+          adapter: redis
+      YAML
       FileUtils.mkdir_p(File.join(app_root, "config/initializers"))
       File.write(File.join(app_root, "config/initializers/dynamic_require.rb"), <<~RUBY)
         feature = ENV.fetch("BOOT_FEATURE")
@@ -9465,6 +9471,13 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["solid_queue"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("gem") }
       assert_equal ["job_adapter"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("class") }
       assert_equal "config/environments/production.rb", payload.dig("capabilities", "active_job_queue_adapters", 0, "path")
+      cable_adapters = payload.dig("capabilities", "action_cable_adapters")
+      assert_equal %w[development production], cable_adapters.map { |entry| entry.fetch("environment") }
+      assert_equal %w[async redis], cable_adapters.map { |entry| entry.fetch("adapter") }
+      assert_equal [nil, "redis"], cable_adapters.map { |entry| entry["gem"] }
+      assert_equal %w[rails_builtin_cable_adapter cable_adapter], cable_adapters.map { |entry| entry.fetch("class") }
+      assert_equal [%w[channels], %w[channels]], cable_adapters.map { |entry| entry.fetch("coverage_required") }
+      assert_equal "config/cable.yml", cable_adapters.first.fetch("path")
       assert_equal 1, payload.dig("capabilities", "active_storage", "declarations_count")
       assert_equal "Avatar", payload.dig("capabilities", "active_storage", "declarations", 0, "class")
       assert_equal "has_one_attached", payload.dig("capabilities", "active_storage", "declarations", 0, "kind")
@@ -9509,6 +9522,10 @@ class RailsDependencyPrunerTest < Minitest::Test
           mount AdminApp, at: "/admin"
         end
       RUBY
+      File.write(File.join(app_root, "config/cable.yml"), <<~YAML)
+        production:
+          adapter: redis
+      YAML
       FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
       File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
         namespace :maintenance do
@@ -9597,6 +9614,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "config/environments/production.rb", payload.dig("jobs", "queue_adapters", 0, "path")
       assert_equal ["UserMailer#welcome"], payload.dig("mailers", "actions")
       assert_equal ["NotificationsChannel"], payload.dig("channels", "classes")
+      assert_equal "redis", payload.dig("channels", "cable_adapters", 0, "adapter")
+      assert_equal "redis", payload.dig("channels", "cable_adapters", 0, "gem")
+      assert_equal "cable_adapter", payload.dig("channels", "cable_adapters", 0, "class")
+      assert_equal ["channels"], payload.dig("channels", "cable_adapters", 0, "coverage_required")
       assert_equal ["ApplicationMailbox"], payload.dig("inbound_email", "mailboxes")
       assert_equal true, payload.dig("active_storage", "declarations_expected")
       assert_equal "Avatar", payload.dig("active_storage", "declarations", 0, "class")

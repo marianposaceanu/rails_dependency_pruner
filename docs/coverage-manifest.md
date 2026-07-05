@@ -50,6 +50,12 @@ channels:
   review_required: false
   classes:
     - NotificationsChannel
+  cable_adapters:
+    - environment: production
+      adapter: redis
+      gem: redis
+      class: cable_adapter
+      risk: medium
 inbound_email:
   review_required: false
   mailboxes:
@@ -128,6 +134,9 @@ attachment coverage; at least one reviewed storage action must be true.
 Generated `jobs.queue_adapters` entries show configured
 `config.active_job.queue_adapter` values. They are review context for job
 coverage and do not replace exact job class coverage.
+Generated `channels.cable_adapters` entries show `config/cable.yml` adapters.
+They are review context for Action Cable coverage and do not replace exact
+channel class coverage.
 
 If a lazy gem is used directly by app code, the manifest must also review that
 first-use surface under `lazy_gems`. Accepted statuses are `covered`,

@@ -37,7 +37,7 @@ module RailsDependencyPruner
         document["requests"] = requests_section if request_entries.any?
         document["jobs"] = jobs_section if job_classes.any? || queue_adapter_entries.any?
         document["mailers"] = review_section("actions" => mailer_actions) if mailer_actions.any?
-        document["channels"] = review_section("classes" => channel_classes) if channel_classes.any?
+        document["channels"] = channels_section if channel_classes.any? || cable_adapter_entries.any?
         document["active_storage"] = active_storage_section
         document["action_text"] = action_text_section
         document["inbound_email"] = review_section("mailboxes" => mailbox_classes) if mailbox_classes.any?
@@ -92,6 +92,12 @@ module RailsDependencyPruner
       def jobs_section
         values = { "classes" => job_classes }
         values["queue_adapters"] = queue_adapter_entries if queue_adapter_entries.any?
+        review_section(values)
+      end
+
+      def channels_section
+        values = { "classes" => channel_classes }
+        values["cable_adapters"] = cable_adapter_entries if cable_adapter_entries.any?
         review_section(values)
       end
 
@@ -266,6 +272,22 @@ module RailsDependencyPruner
 
       def channel_classes
         Array(capabilities.dig("channels", "classes"))
+      end
+
+      def cable_adapter_entries
+        Array(capabilities["action_cable_adapters"]).map do |entry|
+          {
+            "environment" => entry["environment"],
+            "adapter" => entry["adapter"],
+            "gem" => entry["gem"],
+            "class" => entry["class"],
+            "risk" => entry["risk"],
+            "coverage_required" => Array(entry["coverage_required"]).map(&:to_s),
+            "path" => entry["path"],
+            "line" => entry["line"],
+            "production_rule" => entry["production_rule"],
+          }.compact
+        end
       end
 
       def mailbox_classes

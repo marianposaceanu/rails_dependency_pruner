@@ -32,6 +32,8 @@ Typical review steps:
   entries were covered
 - review generated `jobs.queue_adapters` entries against the production Active
   Job backend; they do not replace exact job class coverage
+- review generated `channels.cable_adapters` entries against the production
+  Action Cable backend; they do not replace exact channel class coverage
 - replace external integration `review` placeholders with a reviewed production
   status before lazying or stubbing integration gems; generated placeholders
   include policy class, risk, strategies, and unclassified markers for review

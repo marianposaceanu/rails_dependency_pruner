@@ -150,6 +150,16 @@ Artifacts:
 - `tmp/queue-adapter-coverage-mp-template.yml`
 - `tmp/queue-adapter-coverage-mp-template.stdout`
 - `tmp/queue-adapter-coverage-mp-template.time`
+- `tmp/cable-adapter-doctor-lobsters.json`
+- `tmp/cable-adapter-doctor-lobsters.time`
+- `tmp/cable-adapter-doctor-mp.json`
+- `tmp/cable-adapter-doctor-mp.time`
+- `tmp/cable-adapter-coverage-lobsters-template.yml`
+- `tmp/cable-adapter-coverage-lobsters-template.stdout`
+- `tmp/cable-adapter-coverage-lobsters-template.time`
+- `tmp/cable-adapter-coverage-mp-template.yml`
+- `tmp/cable-adapter-coverage-mp-template.stdout`
+- `tmp/cable-adapter-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -170,7 +180,7 @@ Static capability scan:
 | mounted Rack apps | `MissionControl::Jobs::Engine` |
 | jobs / mailers / channels | `10` / `8` / `0` |
 | integrations | `rack-mini-profiler`, `sentry-rails`, `sentry-ruby` |
-| adapters | `puma` |
+| adapters | `puma`, `solid_queue` |
 | dynamic initializer require/load risks | `0` |
 | dynamic constantization risks | `0` |
 | parse errors | `0` |
@@ -274,6 +284,28 @@ Queue adapter coverage-template static smoke:
 Generated `jobs.queue_adapters` entries remain review context while
 `jobs.review_required: true`; exact job class coverage is still required before
 approval. No request RSS benchmark was run for generic_blog_app in this milestone.
+
+Cable adapter doctor static smoke:
+
+| app | artifact | cable adapter surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/cable-adapter-doctor-lobsters.json` | `async` in development/test; `redis` in production | `52822016` bytes |
+| generic_blog_app, generic blog simple app | `tmp/cable-adapter-doctor-mp.json` | `async` in development/production; `test` in test | `47644672` bytes |
+
+Both scans reported `0` parse errors, `0` dynamic constantization risks, and
+`0` initializer dynamic require/load risks.
+
+Cable adapter coverage-template static smoke:
+
+| app | artifact | generated cable adapter entries | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/cable-adapter-coverage-lobsters-template.yml` | no channel classes; `async`, `async`, `redis` adapters | `53182464` bytes |
+| generic_blog_app, generic blog simple app | `tmp/cable-adapter-coverage-mp-template.yml` | no channel classes; `async`, `test`, `async` adapters | `47562752` bytes |
+
+Generated `channels.cable_adapters` entries remain review context while
+`channels.review_required: true`; exact channel class coverage is still required
+before approval. No request RSS benchmark was run for generic_blog_app in this
+milestone.
 
 Gem policy smoke:
 

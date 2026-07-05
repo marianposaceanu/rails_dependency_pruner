@@ -16,6 +16,8 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.middleware`: `config.middleware.*` calls
 - `capabilities.routes`: route files and route DSL call sites
 - `capabilities.jobs`, `mailers`, `channels`
+- `capabilities.action_cable_adapters`: `config/cable.yml` adapter values with
+  environment names and channel coverage requirements
 - `capabilities.rake_tasks`: tasks from `Rakefile` and `lib/tasks/**/*.rake`
 - `capabilities.active_storage`: `has_one_attached` and `has_many_attached`
 - `capabilities.action_text`: `has_rich_text`
