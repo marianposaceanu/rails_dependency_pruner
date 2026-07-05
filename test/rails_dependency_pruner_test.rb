@@ -1296,6 +1296,59 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_rejects_missing_action_text_coverage_workload
+    Dir.mktmpdir("rails_dependency_pruner_action_text_coverage_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        frameworks: "actionpack,activerecord,actiontext",
+      )
+
+      profile = JSON.parse(File.read(profile_path))
+      assert_includes profile.dig("pruning", "disabled_frameworks"), "actiontext"
+      refute_includes profile.dig("evidence", "workloads"), "action_text"
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord,actiontext",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert_includes payload.fetch("errors"), "production verify missing coverage workload for disabled framework: actiontext requires action_text"
+      assert_equal(
+        {
+          "framework" => "actiontext",
+          "required_workloads" => ["action_text"],
+          "missing_workloads" => ["action_text"],
+        },
+        payload.dig("production_risks", "coverage_workload_gaps", 0),
+      )
+    end
+  end
+
   def test_verify_production_rejects_missing_extreme_boot_coverage_workloads
     Dir.mktmpdir("rails_dependency_pruner_extreme_coverage_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -6410,6 +6463,18 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes workloads, "jobs"
       assert_includes workloads, "cable"
       assert_includes workloads, "attachments"
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        action_text:
+          review_required: false
+          rich_text_expected: false
+          declarations: []
+      YAML
+
+      workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
+      assert_includes workloads, "action_text"
     end
   end
 

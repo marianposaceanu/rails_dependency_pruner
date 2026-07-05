@@ -237,6 +237,10 @@ active_storage:
   preview: false
   representation: false
   attachment_read: false
+action_text:
+  review_required: false
+  rich_text_expected: false
+  declarations: []
 rake_tasks:
   review_required: false
   tasks:

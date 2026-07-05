@@ -43,7 +43,8 @@ A profile is ready only when:
 - `approve` exits with verifier errors `0`
 - the coverage digest in the profile matches the reviewed manifest
 - source, environment, bundle, runtime evidence, and profile fingerprints match
-- request, job, mail, storage, cable, and task coverage covers the transforms
+- request, job, mail, storage, Action Text, cable, and task coverage covers the
+  transforms
 - lazy gems are classified in `config/rails_dependency_pruner/gem_policies.yml`
 - canary event evidence passed through `--runtime-evidence` has no unexpected
   boot or request events

@@ -24,8 +24,8 @@ Typical review steps:
 - replace guessed request entries with the paths and statuses actually exercised
 - set reviewed workload sections to `review_required: false`
 - remove sections that are not covered
-- add storage, inbound email, job, mailer, and channel coverage when those flows
-  exist in production
+- add storage, Action Text, inbound email, job, mailer, and channel coverage
+  when those flows exist in production
 - keep `rake_tasks` to the production tasks covered by the release process
 - set `rollback.review_required: false` and `rollback.disable_env_tested: true`
   only after testing `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
@@ -39,6 +39,8 @@ A declaration inventory by itself is not attachment coverage.
 Production verification also checks coverage required by the Rails feature
 catalog. For example, Active Storage catalog evidence requires the normalized
 `attachments` workload before an Active Storage railtie skip can be approved.
+Action Text pruning requires reviewed `action_text` coverage, even when the
+review says rich-text declarations are not expected in production.
 For v2 manifests, production verification also requires reviewed rollback
 evidence through `rollback.disable_env_tested: true`.
 

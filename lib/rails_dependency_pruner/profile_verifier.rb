@@ -18,6 +18,7 @@ module RailsDependencyPruner
       "actioncable" => %w[cable],
       "actionmailbox" => %w[routes],
       "actionmailer" => %w[mailers],
+      "actiontext" => %w[action_text],
       "activejob" => %w[jobs],
       "activestorage" => %w[routes],
     }.freeze
