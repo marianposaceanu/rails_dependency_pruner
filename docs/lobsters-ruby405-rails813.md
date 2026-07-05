@@ -753,6 +753,21 @@ verification started requiring exact attachment declaration coverage for
 `tmp/active-storage-declaration-gate-mp-template.yml`; max RSS was `53575680`
 bytes for Lobsters and `47595520` bytes for generic_blog_app. No request RSS
 benchmark was run for this milestone.
+Configured adapter matrix follow-up added a checked-in fixture for config-only
+job, mailer, storage, and cable adapter settings. Lobsters doctor reported
+`puma:web_server:requests`, `solid_queue:job_adapter:jobs`, `solid_queue`
+queue adapters, `redis` production cable, Disk storage, and
+`letter_opener`/`test` mail delivery; max RSS was `53493760` bytes. The
+coverage template preserved the same adapter context with max RSS `53133312`
+bytes. The generic_blog_app generic blog app doctor reported `puma` only, no
+configured job queue adapter, `async` production cable, no configured storage
+service, and `test` mail delivery; max RSS was `47693824` bytes. Its coverage
+template used max RSS `47857664` bytes. Artifacts:
+`tmp/configured-adapters-matrix-doctor-lobsters.json`,
+`tmp/configured-adapters-matrix-coverage-lobsters-template.yml`,
+`tmp/configured-adapters-matrix-doctor-mp.json`, and
+`tmp/configured-adapters-matrix-coverage-mp-template.yml`. No request RSS
+benchmark was run for this milestone.
 
 ## what eats memory
 

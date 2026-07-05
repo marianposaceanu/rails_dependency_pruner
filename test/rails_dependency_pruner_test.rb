@@ -159,6 +159,46 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_empty payload.dig("capabilities", "parse_errors")
   end
 
+  def test_reference_configured_adapters_fixture_reports_config_surface
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "doctor",
+      "--app",
+      REFERENCE_APPS_ROOT.join("configured_adapters").to_s,
+      "--json",
+      chdir: ROOT.to_s,
+    )
+
+    assert status.success?, stderr
+
+    payload = JSON.parse(stdout)
+    assert_equal %w[bootsnap puma sidekiq solid_queue], payload.dig("capabilities", "adapters")
+    adapter_policies = payload.dig("capabilities", "adapter_gem_policies")
+    assert_equal %w[boot_cache web_server job_adapter job_adapter], adapter_policies.map { |entry| entry.fetch("class") }
+    assert_equal [%w[boot], %w[requests], %w[jobs], %w[jobs]], adapter_policies.map { |entry| entry.fetch("coverage_required") }
+
+    queue_adapters = payload.dig("capabilities", "active_job_queue_adapters")
+    assert_equal ["sidekiq"], queue_adapters.map { |entry| entry.fetch("adapter") }
+    assert_equal ["sidekiq"], queue_adapters.map { |entry| entry.fetch("gem") }
+    assert_equal ["config/application.rb"], queue_adapters.map { |entry| entry.fetch("path") }
+
+    cable_adapters = payload.dig("capabilities", "action_cable_adapters")
+    assert_equal ["redis"], cable_adapters.map { |entry| entry.fetch("adapter") }
+    assert_equal ["redis"], cable_adapters.map { |entry| entry.fetch("gem") }
+    assert_equal ["config/cable.yml"], cable_adapters.map { |entry| entry.fetch("path") }
+
+    delivery_methods = payload.dig("capabilities", "mailers", "delivery_methods")
+    assert_equal ["smtp"], delivery_methods.map { |entry| entry.fetch("method") }
+    assert_equal ["config/application.rb"], delivery_methods.map { |entry| entry.fetch("path") }
+
+    storage_services = payload.dig("capabilities", "active_storage", "configured_services")
+    assert_equal ["local"], storage_services.map { |entry| entry.fetch("service") }
+    assert_equal ["Disk"], storage_services.map { |entry| entry.fetch("adapter") }
+    assert_equal ["config/application.rb"], storage_services.map { |entry| entry.fetch("path") }
+    assert_empty payload.dig("capabilities", "parse_errors")
+  end
+
   def test_app_literal_require_keeps_rails_file_constants
     Dir.mktmpdir("rails_dependency_pruner_static_require") do |dir|
       app_root = File.join(dir, "app")

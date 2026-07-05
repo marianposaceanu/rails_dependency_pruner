@@ -159,6 +159,22 @@ apps:
       - activemodel
       - activerecord
       - activestorage
+  configured_adapters:
+    description: Rails config selects job, mailer, storage, and cable adapters
+    expected_required:
+      - actioncable
+      - actionmailer
+      - actionpack
+      - actionview
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
+      - activesupport
+      - railties
+    expected_pruned:
+      - actionmailbox
+      - actiontext
   engine_mount:
     description: mounted Rack or engine route
     expected_required:

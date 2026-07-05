@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+gem "bootsnap"
+gem "puma"
+gem "sidekiq"
+gem "solid_queue"

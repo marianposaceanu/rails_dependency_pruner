@@ -26,6 +26,7 @@ The checked-in fixture matrix covers planner decisions for:
 - Action Text
 - Action Cable channel and mount
 - mounted Rack or engine route
+- config-only job, mailer, storage, and cable adapter settings
 - Sentry, Honeybadger, Rollbar, and Rack Mini Profiler integration signals
 - third-party integration policy classes for `sentry-rails`, `sentry-ruby`,
   `honeybadger`, `rollbar`, and `rack-mini-profiler`
