@@ -49,6 +49,7 @@ module RailsDependencyPruner
       railtie_integration
       sdk_integration
     ].freeze
+    MEASUREMENT_TARGETS = %w[application environment requests].freeze
     EXTREME_BOOT_STATIC_RULES = {
       "action_mailbox/engine" => {
         "paths" => %w[app/mailboxes],
@@ -1276,6 +1277,9 @@ module RailsDependencyPruner
             []
           else
             gaps = []
+            target_gap = measurement_target_gap
+            gaps << target_gap if target_gap
+
             expected_profile_id = profile.profile_id
             actual_profile_id = measurement_profile_id
             if expected_profile_id && (actual_profile_id.to_s.empty? || actual_profile_id != expected_profile_id)
@@ -1315,6 +1319,17 @@ module RailsDependencyPruner
       def measurement_profile_id
         measurement.dig("source_profile", "profile_id") ||
           measurement.dig("profile", "profile_id")
+      end
+
+      def measurement_target_gap
+        actual_target = measurement["target"].to_s
+        return if MEASUREMENT_TARGETS.include?(actual_target)
+
+        {
+          "requirement" => "measurement.target",
+          "expected" => MEASUREMENT_TARGETS,
+          "actual" => actual_target.empty? ? nil : actual_target,
+        }
       end
 
       def measurement_coverage_workload_gaps(expected_coverage_digest, actual_coverage_digest)
@@ -1359,12 +1374,7 @@ module RailsDependencyPruner
       end
 
       def measurement_request_workload?
-        target = measurement["target"].to_s
-        return true if target == "requests"
-        return false unless target.empty?
-
-        Array(measurement["request_paths"]).any? ||
-          Array(measurement.dig("coverage", "workloads")).map(&:to_s).include?("requests")
+        measurement["target"] == "requests"
       end
 
       def coverage_manifest_workloads
@@ -1525,6 +1535,11 @@ module RailsDependencyPruner
       end
 
       def format_measurement_context_gap(gap)
+        if gap["requirement"] == "measurement.target"
+          actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
+          return "measurement.target expected #{Array(gap.fetch("expected")).join(", ")}, got #{actual}"
+        end
+
         if gap["requirement"] == "measurement.coverage.workloads"
           return "measurement.coverage.workloads missing reviewed workloads #{Array(gap["missing"]).join(", ")}"
         end

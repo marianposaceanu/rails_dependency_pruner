@@ -6185,10 +6185,16 @@ class RailsDependencyPrunerTest < Minitest::Test
       refute missing_context_status.success?
 
       missing_context_payload = JSON.parse(missing_context_stdout)
+      assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.target expected application, environment, requests, got missing"
       assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.profile_id expected #{profile_id}, got missing"
       assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.coverage.digest expected #{coverage_digest}, got missing"
       assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.coverage.rails_env expected production, got missing"
       assert_equal [
+        {
+          "requirement" => "measurement.target",
+          "expected" => ["application", "environment", "requests"],
+          "actual" => nil,
+        },
         {
           "requirement" => "measurement.profile_id",
           "expected" => profile_id,
@@ -6306,6 +6312,62 @@ class RailsDependencyPrunerTest < Minitest::Test
           "missing" => ["boot", "routes"],
         },
       ], incomplete_workloads_payload.dig("production_risks", "measurement_context_gaps")
+
+      missing_target_measurement_path = File.join(dir, "missing-target-measurement.json")
+      File.write(missing_target_measurement_path, JSON.pretty_generate(
+        "profile" => {
+          "profile_id" => profile_id,
+        },
+        "coverage" => {
+          "digest" => coverage_digest,
+          "rails_env" => "production",
+          "workloads" => ["boot", "requests", "routes"],
+        },
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+          },
+        },
+      ))
+
+      missing_target_stdout, _missing_target_stderr, missing_target_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        missing_target_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute missing_target_status.success?
+
+      missing_target_payload = JSON.parse(missing_target_stdout)
+      assert_includes missing_target_payload.fetch("errors"),
+        "production verify measurement context mismatch: measurement.target expected application, environment, requests, got missing"
+      assert_equal [
+        {
+          "requirement" => "measurement.target",
+          "expected" => ["application", "environment", "requests"],
+          "actual" => nil,
+        },
+      ], missing_target_payload.dig("production_risks", "measurement_context_gaps")
 
       incomplete_measurement_path = File.join(dir, "incomplete-measurement.json")
       write_measurement_report(

@@ -89,9 +89,9 @@ When `memory_policy` is present, production approval must receive a measurement
 or ablation JSON file through `--measurement`. The verifier compares the
 baseline RSS with `boot_prune` for regular measurements, or with
 `all_approved_transforms` for ablations.
-The measurement must also name the same profile id, coverage digest, Rails env,
-and reviewed workload names as the profile; request measurements must cover the
-reviewed request paths.
+The measurement must also declare a target and name the same profile id,
+coverage digest, Rails env, and reviewed workload names as the profile; request
+measurements must cover the reviewed request paths.
 
 Supported gates:
 

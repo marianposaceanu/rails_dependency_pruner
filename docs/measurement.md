@@ -101,8 +101,8 @@ regular measurement reports, the default candidate is `boot_prune`. The policy
 fails production approval when:
 
 - the measurement artifact is missing
-- the measurement artifact omits or declares a different profile id, coverage
-  digest, Rails env, or reviewed workload names
+- the measurement artifact omits target, profile id, coverage digest, Rails env,
+  or reviewed workload names, or declares a different value
 - a request measurement omits reviewed coverage request paths
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`
