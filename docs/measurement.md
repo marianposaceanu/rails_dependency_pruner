@@ -102,7 +102,7 @@ fails production approval when:
 
 - the measurement artifact is missing
 - the measurement artifact omits or declares a different profile id, coverage
-  digest, or Rails env
+  digest, Rails env, or reviewed workload names
 - a request measurement omits reviewed coverage request paths
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`

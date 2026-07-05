@@ -1305,6 +1305,7 @@ module RailsDependencyPruner
                 "actual" => actual_rails_env,
               }
             end
+            gaps.concat(measurement_coverage_workload_gaps(expected_coverage_digest, actual_coverage_digest))
             gaps.concat(measurement_request_path_gaps(expected_coverage_digest, actual_coverage_digest))
             gaps
           end
@@ -1314,6 +1315,26 @@ module RailsDependencyPruner
       def measurement_profile_id
         measurement.dig("source_profile", "profile_id") ||
           measurement.dig("profile", "profile_id")
+      end
+
+      def measurement_coverage_workload_gaps(expected_coverage_digest, actual_coverage_digest)
+        return [] unless expected_coverage_digest && actual_coverage_digest == expected_coverage_digest
+
+        expected_workloads = coverage_manifest_workloads
+        return [] if expected_workloads.empty?
+
+        actual_workloads = measurement_coverage_workloads
+        missing_workloads = expected_workloads - actual_workloads
+        return [] if missing_workloads.empty?
+
+        [
+          {
+            "requirement" => "measurement.coverage.workloads",
+            "expected" => expected_workloads,
+            "actual" => actual_workloads,
+            "missing" => missing_workloads,
+          },
+        ]
       end
 
       def measurement_request_path_gaps(expected_coverage_digest, actual_coverage_digest)
@@ -1344,6 +1365,18 @@ module RailsDependencyPruner
 
         Array(measurement["request_paths"]).any? ||
           Array(measurement.dig("coverage", "workloads")).map(&:to_s).include?("requests")
+      end
+
+      def coverage_manifest_workloads
+        Array(coverage_manifest&.workloads).map(&:to_s).uniq.sort
+      end
+
+      def measurement_coverage_workloads
+        Array(measurement.dig("coverage", "workloads"))
+          .map { |workload| CoverageManifest.normalize_workload_key(workload) }
+          .reject(&:empty?)
+          .uniq
+          .sort
       end
 
       def coverage_manifest_request_paths
@@ -1492,6 +1525,10 @@ module RailsDependencyPruner
       end
 
       def format_measurement_context_gap(gap)
+        if gap["requirement"] == "measurement.coverage.workloads"
+          return "measurement.coverage.workloads missing reviewed workloads #{Array(gap["missing"]).join(", ")}"
+        end
+
         if gap["requirement"] == "measurement.request_paths"
           return "measurement.request_paths missing reviewed paths #{Array(gap["missing"]).join(", ")}"
         end

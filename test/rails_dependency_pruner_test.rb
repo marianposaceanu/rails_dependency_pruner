@@ -6249,6 +6249,64 @@ class RailsDependencyPrunerTest < Minitest::Test
         },
       ], stale_payload.dig("production_risks", "measurement_context_gaps")
 
+      incomplete_workloads_measurement_path = File.join(dir, "incomplete-workloads-measurement.json")
+      File.write(incomplete_workloads_measurement_path, JSON.pretty_generate(
+        "target" => "environment",
+        "profile" => {
+          "profile_id" => profile_id,
+        },
+        "coverage" => {
+          "digest" => coverage_digest,
+          "rails_env" => "production",
+          "workloads" => ["requests"],
+        },
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+          },
+        },
+      ))
+
+      incomplete_workloads_stdout, _incomplete_workloads_stderr, incomplete_workloads_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        incomplete_workloads_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute incomplete_workloads_status.success?
+
+      incomplete_workloads_payload = JSON.parse(incomplete_workloads_stdout)
+      assert_includes incomplete_workloads_payload.fetch("errors"),
+        "production verify measurement context mismatch: measurement.coverage.workloads missing reviewed workloads boot, routes"
+      assert_equal [
+        {
+          "requirement" => "measurement.coverage.workloads",
+          "expected" => ["boot", "requests", "routes"],
+          "actual" => ["requests"],
+          "missing" => ["boot", "routes"],
+        },
+      ], incomplete_workloads_payload.dig("production_risks", "measurement_context_gaps")
+
       incomplete_measurement_path = File.join(dir, "incomplete-measurement.json")
       write_measurement_report(
         path: incomplete_measurement_path,
@@ -6303,7 +6361,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         "coverage" => {
           "digest" => coverage_digest,
           "rails_env" => "production",
-          "workloads" => ["requests"],
+          "workloads" => ["boot", "requests", "routes"],
         },
         "variants" => {
           "baseline" => {
@@ -11028,7 +11086,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       File.write(path, JSON.pretty_generate(report))
     end
 
-    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil, request_paths: ["/"])
+    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil, request_paths: ["/"], coverage_workloads: %w[boot requests routes])
       request_status_matrix = request_paths.to_h do |request_path|
         [
           request_path,
@@ -11060,7 +11118,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         report["coverage"] = {
           "digest" => coverage_digest,
           "rails_env" => "production",
-          "workloads" => ["requests"],
+          "workloads" => coverage_workloads,
         }
       end
       File.write(path, JSON.pretty_generate(report))

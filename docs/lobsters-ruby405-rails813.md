@@ -898,6 +898,17 @@ Artifacts: `tmp/measurement-identity-doctor-lobsters.json`,
 `generic_blog_app/tmp/measurement-identity-mp-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
 target remains open.
+Measurement-workload verification follow-up rejects coverage-bound production
+measurements that omit reviewed workload names. Sequential static smokes still
+passed: Lobsters doctor max RSS `53673984` bytes, Lobsters coverage-template max
+RSS `54460416` bytes, generic_blog_app doctor max RSS `48365568` bytes, and
+generic_blog_app coverage-template max RSS `48922624` bytes. Artifacts:
+`tmp/measurement-workloads-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/measurement-workloads-lobsters-template.yml`,
+`tmp/measurement-workloads-doctor-generic-blog.json`, and
+`generic_blog_app/tmp/measurement-workloads-generic-blog-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app
+`40%` target remains open.
 
 ## what eats memory
 
