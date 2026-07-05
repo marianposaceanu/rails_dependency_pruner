@@ -150,6 +150,20 @@ module RailsDependencyPruner
       ACTIVE_STORAGE_ACTIONS.select { |key| value[key] == true }
     end
 
+    def request_entries
+      @request_entries ||= normalized_request_entries(payload["requests"])
+    end
+
+    def request_covered?(method:, path:)
+      method = method.to_s.upcase
+      path = normalize_request_path(path)
+
+      request_entries.any? do |entry|
+        entry.fetch("path") == path &&
+          (entry.fetch("method") == method || entry.fetch("method") == "ANY")
+      end
+    end
+
     def high_risk_override(transform_id, today: Date.today)
       overrides = payload["high_risk_overrides"]
       return unless overrides.is_a?(Hash)
@@ -286,6 +300,52 @@ module RailsDependencyPruner
         return false if value["review_required"] == true
 
         ACTIVE_STORAGE_ACTIONS.any? { |key| value[key] == true }
+      end
+
+      def normalized_request_entries(value)
+        case value
+        when Hash
+          return [] if value["review_required"] == true
+
+          if value["method"] || value["path"]
+            [normalized_request_entry(value)].compact
+          else
+            normalized_request_entries(value["paths"] || value["requests"])
+          end
+        when Array
+          value.flat_map { |entry| normalized_request_entries(entry) }
+        when String
+          [normalized_request_string(value)].compact
+        else
+          []
+        end
+      end
+
+      def normalized_request_entry(value)
+        path = normalize_request_path(value["path"])
+        return if path.empty?
+
+        {
+          "method" => value.fetch("method", "GET").to_s.upcase,
+          "path" => path,
+        }
+      end
+
+      def normalized_request_string(value)
+        match = value.to_s.strip.match(/\A([A-Za-z]+)\s+(\S+)/)
+        return unless match
+
+        {
+          "method" => match[1].upcase,
+          "path" => normalize_request_path(match[2]),
+        }
+      end
+
+      def normalize_request_path(path)
+        path = path.to_s.strip
+        return path if path.empty? || path.start_with?("/")
+
+        "/#{path}"
       end
 
       def normalize_workload_key(key)

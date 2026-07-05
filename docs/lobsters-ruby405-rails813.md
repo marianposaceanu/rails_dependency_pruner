@@ -360,6 +360,11 @@ Mounted-app coverage smoke generated a Lobsters starter request entry for
 `tmp/mount-path-coverage-lobsters-template.yml`; max RSS `42778624` bytes.
 The same static template smoke on `generic_blog_app`
 found no mounted Rack apps; max RSS `36421632` bytes.
+The follow-up approval-gate smoke kept that `GET /jobs` request after
+production verification started requiring mounted app request coverage for
+`disable_eager_load`; artifact `tmp/mount-request-gate-lobsters-template.yml`,
+max RSS `42844160` bytes. The generic_blog_app template still had no mounted Rack
+apps; max RSS `36618240` bytes.
 
 Rake-task coverage smoke found six Lobsters app tasks:
 `backfill_notifications`, `build`, `data_stats`, `fake_data`, `privacy_wipe`,

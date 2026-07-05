@@ -840,6 +840,7 @@ module RailsDependencyPruner
         declared_workloads << "attachments" if active_storage_attachment_static_usage?
         declared_workloads << "action_text" if action_text_static_usage?
         declared_workloads << "rake_tasks" if rake_task_static_usage?
+        declared_workloads.concat(mounted_app_request_coverage_gaps)
 
         declared_workloads.uniq.sort - coverage_workloads
       end
@@ -970,6 +971,44 @@ module RailsDependencyPruner
 
       def rake_task_file_declares_task?(path)
         path.readlines.any? { |line| line.match?(/\A\s*(?:namespace|task)\b/) }
+      end
+
+      def mounted_app_request_coverage_gaps
+        mounted_app_routes.filter_map do |route|
+          requirement = "requests.GET #{route.fetch("path")}"
+          next if coverage_manifest&.request_covered?(method: "GET", path: route.fetch("path"))
+
+          requirement
+        end
+      end
+
+      def mounted_app_routes
+        @mounted_app_routes ||= route_files.flat_map do |path|
+          relative = path.relative_path_from(usage.app_root).to_s
+          path.readlines.filter_map.with_index(1) do |line, line_number|
+            next unless line.match?(/\bmount\b/)
+
+            mount_path = mounted_app_path(line)
+            next if mount_path.to_s.empty?
+
+            {
+              "path" => mount_path,
+              "source" => "#{relative}:#{line_number}",
+            }
+          end
+        end.uniq { |route| route.fetch("path") }.sort_by { |route| route.fetch("path") }
+      end
+
+      def route_files
+        @route_files ||= Pathname.glob(usage.app_root.join("config/routes{.rb,/**/*.rb}").to_s).select(&:file?).sort
+      end
+
+      def mounted_app_path(source)
+        path = source[/,\s*at:\s*["']([^"']+)["']/, 1] ||
+          source[/=>\s*["']([^"']+)["']/, 1]
+        return if path.to_s.empty?
+
+        path.start_with?("/") ? path : "/#{path}"
       end
 
       def path_matches(railtie, paths)
