@@ -382,6 +382,7 @@ Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.
 Schema v3 fingerprints are described in `docs/profile-schema.md`.
 Production profile transform ids are described in `docs/transform-registry.md`.
+Rails and app-shape support is listed in `docs/rails-version-support.md`.
 
 ## limits
 

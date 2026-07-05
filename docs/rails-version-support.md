@@ -1,0 +1,39 @@
+# Rails version support
+
+The gem currently targets Rails `8.x` apps on Ruby `>= 3.2`.
+
+## supported now
+
+| surface | status |
+| --- | --- |
+| Ruby | gemspec allows `>= 3.2`; local production-readiness work uses Ruby `4.0.5` |
+| Rails | gemspec allows `>= 8.0`, `< 9.0` |
+| catalogs | versioned catalogs exist for Rails `8.0` and `8.1` |
+| platform | local benchmark evidence is Darwin arm64 |
+| large app benchmark | Lobsters copy under `tmp/lobsters-ruby405-rails813` |
+| small app target | `generic_blog_app`, generic blog app |
+
+## app shapes covered by static fixtures
+
+The checked-in fixture matrix covers planner decisions for:
+
+- minimal controller and Active Record model
+- Active Record only
+- Action Mailer
+- Active Storage attachment declarations
+- Action Cable channel and mount
+- mounted Rack or engine route
+
+These fixtures are static source shapes, not bootable apps. Lobsters and
+`generic_blog_app` remain the real RSS benchmark targets.
+
+## not production-supported yet
+
+- Rails `7.2` catalogs
+- Linux x86_64 and Linux arm64 release measurements
+- Puma clustered, Falcon, and Passenger matrices
+- Action Text and third-party observability fixture apps beyond static scanning
+
+Production approval is still app-specific. A supported Rails version only means
+the catalog and gem dependency range exist; approval still requires coverage,
+runtime evidence, measurement gates, reviewed rollback, and a rollout patch.

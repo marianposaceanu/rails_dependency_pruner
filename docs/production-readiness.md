@@ -2,6 +2,7 @@
 
 Production use is app-specific. Build a deterministic profile, prove it against
 coverage and runtime evidence, measure it, then ship only a reviewed patch.
+Rails and app-shape support is tracked in `rails-version-support.md`.
 
 ## flow
 
