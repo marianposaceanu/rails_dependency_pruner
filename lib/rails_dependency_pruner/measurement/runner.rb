@@ -347,6 +347,7 @@ module RailsDependencyPruner
             "rss_kb_median" => median(runs.map { |run| run.fetch("rss_kb") }),
             "rss_kb_min" => runs.map { |run| run.fetch("rss_kb") }.min,
             "rss_kb_max" => runs.map { |run| run.fetch("rss_kb") }.max,
+            "process_memory_median" => summarize_numeric_hash(runs, "process_memory"),
             "loaded_features_median" => median(runs.map { |run| run.fetch("loaded_features") }),
             "rails_loaded_features_median" => median(runs.map { |run| run.fetch("rails_loaded_features") }),
             "rails_loaded_features_by_framework_median" => summarize_framework_features(runs),
@@ -386,6 +387,10 @@ module RailsDependencyPruner
               "rails_loaded_features_by_framework" => framework_feature_delta(
                 baseline.fetch("rails_loaded_features_by_framework_median", {}),
                 summary.fetch("rails_loaded_features_by_framework_median", {}),
+              ),
+              "process_memory" => numeric_hash_delta(
+                baseline.fetch("process_memory_median", {}),
+                summary.fetch("process_memory_median", {}),
               ),
               "object_counts" => numeric_hash_delta(
                 baseline.fetch("object_counts_median", {}),

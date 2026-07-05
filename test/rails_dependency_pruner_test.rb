@@ -5333,8 +5333,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "ok", payload.dig("variants", "baseline", "status")
       assert_equal "ok", payload.dig("variants", "shadow", "status")
       assert_operator payload.dig("variants", "baseline", "rss_kb_median"), :>, 0
+      assert_operator payload.dig("variants", "baseline", "process_memory_median", "rss_kb"), :>, 0
       assert_kind_of Hash, payload.dig("variants", "baseline", "rails_loaded_features_by_framework_median")
       assert payload.dig("deltas", "shadow").key?("rss_kb")
+      assert payload.dig("deltas", "shadow", "process_memory").key?("rss_kb")
       assert_kind_of Hash, payload.dig("deltas", "shadow", "rails_loaded_features_by_framework")
       assert_equal "sha256:test", payload.dig("profile", "profile_id")
       assert_equal ["active_job/railtie"], payload.dig("profile", "disabled_railties")
@@ -5351,6 +5353,29 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "## Rails Features By Framework"
       assert_includes markdown, "## Rails Feature Deltas By Framework"
     end
+  end
+
+  def test_memory_probe_parses_process_memory_details
+    smaps = <<~TEXT
+      Rss:                2048 kB
+      Pss:                1536 kB
+      Private_Clean:       256 kB
+      Private_Dirty:       512 kB
+    TEXT
+
+    linux = RailsDependencyPruner::Measurement::MemoryProbe.parse_linux_smaps_rollup(smaps)
+    assert_equal 1536, linux.fetch("pss_kb")
+    assert_equal 256, linux.fetch("private_clean_kb")
+    assert_equal 512, linux.fetch("private_dirty_kb")
+    assert_equal 768, linux.fetch("uss_kb")
+
+    vmmap = <<~TEXT
+      Physical footprint:         2368K
+      Physical footprint (peak):  2464K
+    TEXT
+
+    assert_equal 2368, RailsDependencyPruner::Measurement::MemoryProbe.parse_macos_physical_footprint_kb(vmmap)
+    assert_equal 1536, RailsDependencyPruner::Measurement::MemoryProbe.parse_memory_size_kb("1.5M")
   end
 
   def test_measure_ablation_reports_transform_buckets

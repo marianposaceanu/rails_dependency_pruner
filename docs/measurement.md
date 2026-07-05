@@ -98,6 +98,9 @@ low-risk transforms that do not save RSS will fail that gate.
 The report records:
 
 - process RSS from the measured child process
+- structured `process_memory` for each run, with RSS everywhere, Linux PSS/USS
+  from `/proc/self/smaps_rollup` when present, and macOS physical footprint
+  when `RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS=1`
 - total loaded features
 - Rails loaded features grouped by framework gem
 - `GC.stat[:heap_live_slots]`

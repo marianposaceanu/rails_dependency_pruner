@@ -245,6 +245,8 @@ Runtime event manifest smoke:
   artifact without booting Rails; max RSS `20398080` bytes
 - reference-matrix static planner smoke scanned Lobsters with Rails `8.1.3`,
   kept every framework except Action Text, and used max RSS `46612480` bytes
+- process-memory detail smoke on the same static scan reported RSS `44608 KB`
+  and macOS physical footprint `35226 KB`; max RSS `45957120` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
@@ -255,7 +257,8 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-rails813-telemetry-counters-smoke.json`,
   `tmp/lobsters-ruby405-rails813-telemetry-counters-smoke.ndjson`,
   `tmp/lobsters-ruby405-rails813-runtime-counter-summary-smoke.json`,
-  `tmp/lobsters-ruby405-reference-matrix-static-smoke.json`
+  `tmp/lobsters-ruby405-reference-matrix-static-smoke.json`,
+  `tmp/lobsters-ruby405-process-memory-details-smoke.json`
 
 The current strict-profile smoke above uses the no-`svg-graph` profile. The
 older full-profile RSS rows are still useful as historical context, but do not
