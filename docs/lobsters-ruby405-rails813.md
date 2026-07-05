@@ -110,6 +110,12 @@ Artifacts:
 - `tmp/lobsters-ruby405-rails813-doctor.json`
 - `tmp/lobsters-ruby405-rails805-doctor-direct-gem-smoke.json`
 - `tmp/lobsters-ruby405-rails813-coverage-template.yml`
+- `tmp/rake-task-entry-gate-lobsters-template.yml`
+- `tmp/rake-task-entry-gate-lobsters-template.stdout`
+- `tmp/rake-task-entry-gate-lobsters-template.time`
+- `tmp/rake-task-entry-gate-mp-template.yml`
+- `tmp/rake-task-entry-gate-mp-template.stdout`
+- `tmp/rake-task-entry-gate-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -144,8 +150,21 @@ Coverage template smoke:
 - inferred jobs / mailer actions / channels: `10` / `10` / `0`
 - Active Storage declarations: `false`
 - Action Text declarations: `false`
+- inferred rake tasks: `8`
 - integrations: `rack-mini-profiler`, `sentry-rails`, `sentry-ruby`
 - inferred workload sections are marked `review_required: true`
+
+Rake task entry gate static smoke:
+
+| app | artifact | exact task entries | max RSS |
+| --- | --- | ---: | ---: |
+| Lobsters | `tmp/rake-task-entry-gate-lobsters-template.yml` | `8` | `53248000` bytes |
+| generic_blog_app, generic blog simple app | `tmp/rake-task-entry-gate-mp-template.yml` | `4` | `48021504` bytes |
+
+The generic_blog_app template found `assets:precompile`, `db:migrate`,
+`admin:user:create`, and `semantic_search:reindex`. This was a static
+coverage-template smoke only; the `40%` RSS reduction target for that app still
+needs a production request measurement.
 
 Gem policy smoke:
 

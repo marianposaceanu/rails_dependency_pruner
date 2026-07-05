@@ -840,13 +840,14 @@ module RailsDependencyPruner
         gaps.concat(declared_entry_coverage_gaps("inbound_email", declared_mailbox_classes, coverage_manifest&.inbound_email_mailboxes))
         gaps.concat(declared_entry_coverage_gaps("action_text", declared_action_text_declarations, coverage_manifest&.action_text_declarations))
         gaps.concat(declared_entry_coverage_gaps("attachments", declared_active_storage_declarations, coverage_manifest&.active_storage_declarations))
+        gaps.concat(declared_entry_coverage_gaps("rake_tasks", declared_rake_tasks, coverage_manifest&.rake_tasks))
         gaps << "jobs" if declared_job_classes.empty? && app_path_has_ruby_files?("app/jobs") && !coverage_workloads.include?("jobs")
         gaps << "mailers" if declared_mailer_actions.empty? && app_path_has_ruby_files?("app/mailers") && !coverage_workloads.include?("mailers")
         gaps << "cable" if declared_channel_classes.empty? && app_path_has_ruby_files?("app/channels") && !coverage_workloads.include?("cable")
         gaps << "inbound_email" if declared_mailbox_classes.empty? && app_path_has_ruby_files?("app/mailboxes") && !coverage_workloads.include?("inbound_email")
         gaps << "attachments" if active_storage_attachment_static_usage? && !coverage_workloads.include?("attachments")
         gaps << "action_text" if declared_action_text_declarations.empty? && action_text_static_usage? && !coverage_workloads.include?("action_text")
-        gaps << "rake_tasks" if rake_task_static_usage? && !coverage_workloads.include?("rake_tasks")
+        gaps << "rake_tasks" if declared_rake_tasks.empty? && rake_task_static_usage? && !coverage_workloads.include?("rake_tasks")
         gaps.concat(mounted_app_request_coverage_gaps)
 
         gaps.uniq.sort
@@ -1024,6 +1025,10 @@ module RailsDependencyPruner
         end.uniq.sort
       end
 
+      def declared_rake_tasks
+        @declared_rake_tasks ||= rake_task_files.flat_map { |path| rake_tasks_in(path) }.uniq.sort
+      end
+
       def class_names_under(relative_path)
         class_files_under(relative_path).filter_map { |path| class_name_in(path) }.uniq.sort
       end
@@ -1074,6 +1079,46 @@ module RailsDependencyPruner
 
       def rake_task_file_declares_task?(path)
         path.readlines.any? { |line| line.match?(/\A\s*(?:namespace|task)\b/) }
+      end
+
+      def rake_tasks_in(path)
+        namespace_stack = []
+        depth = 0
+
+        path.readlines.filter_map do |line|
+          source = line.strip
+          namespace = rake_namespace_name(source)
+          namespace_stack << { "name" => namespace, "depth" => depth } if namespace
+
+          task_name = rake_task_name(source)
+          task = if task_name
+            if task_name.include?(":") || namespace_stack.empty?
+              task_name
+            else
+              "#{namespace_stack.map { |entry| entry.fetch("name") }.join(":")}:#{task_name}"
+            end
+          end
+
+          depth = rake_depth_after(source, depth)
+          namespace_stack.pop while namespace_stack.any? && namespace_stack.last.fetch("depth") >= depth
+          task
+        end
+      end
+
+      def rake_namespace_name(source)
+        match = source.match(/\A\s*namespace\s+(?::([A-Za-z0-9_]+)|["']([^"']+)["'])/)
+        match && (match[1] || match[2])
+      end
+
+      def rake_task_name(source)
+        match = source.match(/\A\s*task\s+(?::([A-Za-z0-9_]+)|["']([^"']+)["']|([A-Za-z0-9_]+)\s*:)/)
+        match && (match[1] || match[2] || match[3])
+      end
+
+      def rake_depth_after(source, depth)
+        next_depth = depth + source.scan(/\bdo\b/).length
+        next_depth -= 1 if source.match?(/\Aend\b/)
+        [next_depth, 0].max
       end
 
       def mounted_app_request_coverage_gaps

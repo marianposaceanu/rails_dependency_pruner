@@ -72,6 +72,7 @@ rake_tasks:
   review_required: false
   tasks:
     - assets:precompile
+    - maintenance:sweep
 lazy_gems:
   ruby-vips:
     review_required: false
@@ -93,10 +94,12 @@ rollback:
 
 For `disable_eager_load`, job classes, mailer actions, channel classes,
 mailboxes, Active Storage attachments, and Action Text rich-text declarations
-are matched by exact entry. A reviewed `jobs` section that omits `ReportJob`
-does not cover first use of `ReportJob`; an `active_storage` section that omits
-`Avatar#image` does not cover that attachment, and an `action_text` section that
-omits `Avatar#bio` does not cover that rich-text field.
+and rake tasks are matched by exact entry. A reviewed `jobs` section that omits
+`ReportJob` does not cover first use of `ReportJob`; an `active_storage`
+section that omits `Avatar#image` does not cover that attachment, an
+`action_text` section that omits `Avatar#bio` does not cover that rich-text
+field, and a `rake_tasks` section that omits `maintenance:sweep` does not cover
+that task.
 
 Production verification fails when a transform needs a workload that is missing
 or still marked for review. Active Storage declarations alone do not count as

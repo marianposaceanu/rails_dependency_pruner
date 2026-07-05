@@ -182,6 +182,10 @@ module RailsDependencyPruner
       Array(value["declarations"]).filter_map { |entry| normalized_declaration_entry(entry) }.uniq.sort
     end
 
+    def rake_tasks
+      reviewed_entries("rake_tasks", "tasks")
+    end
+
     def request_entries
       @request_entries ||= normalized_request_entries(payload["requests"])
     end

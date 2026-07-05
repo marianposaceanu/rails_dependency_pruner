@@ -3001,12 +3001,136 @@ class RailsDependencyPrunerTest < Minitest::Test
       refute status.success?
 
       payload = JSON.parse(stdout)
-      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires rake_tasks"
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires rake_tasks.maintenance:sweep"
       assert_equal(
         {
           "transform_id" => "disable_eager_load",
           "requirement" => "declared_workload_coverage",
-          "missing_requirements" => ["rake_tasks"],
+          "missing_requirements" => ["rake_tasks.maintenance:sweep"],
+        },
+        payload.dig("production_risks", "high_risk_transform_gaps", 0),
+      )
+    end
+  end
+
+  def test_verify_production_requires_each_declared_rake_task_for_disable_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_rake_task_partial_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
+      File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
+        namespace :maintenance do
+          task :sweep do
+          end
+        end
+
+        task cleanup: :environment
+      RAKE
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          review_required: false
+          paths:
+            - method: GET
+              path: /privacy
+              expected_status: 200
+        rake_tasks:
+          review_required: false
+          tasks:
+            - maintenance:sweep
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 10000
+          unexpected_events_count: 0
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      File.write(measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      ))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires rake_tasks.cleanup"
+      assert_equal(
+        {
+          "transform_id" => "disable_eager_load",
+          "requirement" => "declared_workload_coverage",
+          "missing_requirements" => ["rake_tasks.cleanup"],
         },
         payload.dig("production_risks", "high_risk_transform_gaps", 0),
       )
@@ -9529,6 +9653,10 @@ class RailsDependencyPrunerTest < Minitest::Test
           declarations:
             - class: Avatar
               name: bio
+        rake_tasks:
+          review_required: false
+          tasks:
+            - maintenance:sweep
       YAML
 
       workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
@@ -9537,6 +9665,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes workloads, "cable"
       assert_includes workloads, "attachments"
       assert_includes workloads, "action_text"
+      assert_includes workloads, "rake_tasks"
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
       assert_equal ["Avatar#image"], manifest.active_storage_declarations
       assert_equal ["CleanupJob"], manifest.job_classes
@@ -9544,6 +9673,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["NotificationsChannel"], manifest.channel_classes
       assert_equal ["ApplicationMailbox"], manifest.inbound_email_mailboxes
       assert_equal ["Avatar#bio"], manifest.action_text_declarations
+      assert_equal ["maintenance:sweep"], manifest.rake_tasks
 
       File.write(manifest_path, <<~YAML)
         version: 2
@@ -9558,13 +9688,19 @@ class RailsDependencyPrunerTest < Minitest::Test
           declarations:
             - class: Avatar
               name: bio
+        rake_tasks:
+          review_required: true
+          tasks:
+            - maintenance:sweep
       YAML
 
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
       workloads = manifest.workloads
       refute_includes workloads, "action_text"
+      refute_includes workloads, "rake_tasks"
       assert_empty manifest.job_classes
       assert_empty manifest.action_text_declarations
+      assert_empty manifest.rake_tasks
     end
   end
 

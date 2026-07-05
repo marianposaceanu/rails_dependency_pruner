@@ -27,8 +27,9 @@ Typical review steps:
 - remove sections that are not covered
 - add storage, Action Text, inbound email, job, mailer, and channel coverage
   when those flows exist in production
-- keep generated job classes, mailer actions, channel classes, mailboxes, and
-  storage or rich-text declarations only when the exact entries were covered
+- keep generated job classes, mailer actions, channel classes, mailboxes,
+  storage or rich-text declarations, and rake task names only when the exact
+  entries were covered
 - replace external integration `review` placeholders with a reviewed production
   status before lazying or stubbing integration gems
 - keep `rake_tasks` to the production tasks covered by the release process;
@@ -61,8 +62,8 @@ Active Storage attachments are exact too, such as `attachments.Avatar#image`,
 and still require at least one reviewed storage action to prove the broader
 `attachments` workload.
 When `disable_eager_load` is enabled, app-defined rake tasks also require
-reviewed `rake_tasks` coverage because task constants may move from boot to
-first use.
+reviewed exact entries such as `rake_tasks.maintenance:sweep` because task
+constants may move from boot to first use.
 Mounted Rack apps and engines require reviewed request coverage for each mount
 path when `disable_eager_load` is enabled.
 Lazy or stubbed middleware and Railtie integration gems, such as
