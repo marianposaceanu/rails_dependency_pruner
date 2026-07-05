@@ -31,7 +31,8 @@ The report keeps the existing `recommendations` list and adds:
   in the bundle or directly used by app code
 - `capabilities.integrations`: known observability/profiler gems
 - `capabilities.integration_gem_policies`: policy classes for integration gems,
-  such as `railtie_integration` and `middleware_integration`
+  such as `railtie_integration` and `middleware_integration`; currently covers
+  Sentry, Honeybadger, Rollbar, and Rack Mini Profiler
 - `capabilities.unclassified_integrations`: known integration gems without a
   production lazy/stub policy
 - `capabilities.adapters`: known server/job/boot adapter gems

@@ -186,6 +186,16 @@ Artifacts:
 - `tmp/context-workload-coverage-mp-template.yml`
 - `tmp/context-workload-coverage-mp-template.stdout`
 - `tmp/context-workload-coverage-mp-template.time`
+- `tmp/observability-policy-doctor-lobsters.json`
+- `tmp/observability-policy-doctor-lobsters.time`
+- `tmp/observability-policy-doctor-mp.json`
+- `tmp/observability-policy-doctor-mp.time`
+- `tmp/observability-policy-coverage-lobsters-template.yml`
+- `tmp/observability-policy-coverage-lobsters-template.stdout`
+- `tmp/observability-policy-coverage-lobsters-template.time`
+- `tmp/observability-policy-coverage-mp-template.yml`
+- `tmp/observability-policy-coverage-mp-template.stdout`
+- `tmp/observability-policy-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -277,6 +287,24 @@ Integration policy coverage-template static smoke:
 Generated entries remain `review_required: true`. This was a static
 coverage-template smoke only; no request RSS benchmark was run for
 generic_blog_app, so the `40%` RSS target remains unmeasured.
+
+Observability policy registry static smoke:
+
+| app | artifact | integration policy surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/observability-policy-doctor-lobsters.json` | `rack-mini-profiler:middleware_integration:medium`, `sentry-rails:railtie_integration:high`; unclassified `sentry-ruby` | `53870592` bytes |
+| generic_blog_app, generic blog simple app | `tmp/observability-policy-doctor-mp.json` | no integration gems detected | `47972352` bytes |
+
+Coverage-template follow-up:
+
+| app | artifact | generated integration entries | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/observability-policy-coverage-lobsters-template.yml` | `rack-mini-profiler:middleware_integration:medium`, `sentry-rails:railtie_integration:high`, `sentry-ruby:unclassified` | `53395456` bytes |
+| generic_blog_app, generic blog simple app | `tmp/observability-policy-coverage-mp-template.yml` | none | `48201728` bytes |
+
+Honeybadger and Rollbar are now classified as high-risk Railtie integrations in
+the policy registry. They did not appear in these two apps. No request RSS
+benchmark was run for generic_blog_app in this milestone.
 
 Adapter policy doctor static smoke:
 

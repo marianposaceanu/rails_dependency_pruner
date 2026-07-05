@@ -46,6 +46,15 @@ htmlentities:
   constants:
     - HTMLEntities
   production_rule: require workload coverage for first use
+honeybadger:
+  class: railtie_integration
+  risk: high
+  strategies:
+    - disabled_in_profile
+  require: honeybadger
+  constants:
+    - Honeybadger
+  production_rule: require no production Honeybadger boot integration
 memory_profiler:
   class: pure_library
   risk: low
@@ -109,6 +118,15 @@ rqrcode:
   constants:
     - RQRCode
   production_rule: require workload coverage for QR generation
+rollbar:
+  class: railtie_integration
+  risk: high
+  strategies:
+    - disabled_in_profile
+  require: rollbar
+  constants:
+    - Rollbar
+  production_rule: require no production Rollbar boot integration
 ruby-vips:
   class: native_heavy_library
   risk: high

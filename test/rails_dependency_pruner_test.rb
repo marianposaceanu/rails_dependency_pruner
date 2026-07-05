@@ -121,12 +121,12 @@ class RailsDependencyPrunerTest < Minitest::Test
     payload = JSON.parse(stdout)
     assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails], payload.dig("capabilities", "integrations")
     integration_policies = payload.dig("capabilities", "integration_gem_policies")
-    assert_equal %w[rack-mini-profiler sentry-rails], integration_policies.map { |entry| entry.fetch("gem") }
-    assert_equal %w[middleware_integration railtie_integration], integration_policies.map { |entry| entry.fetch("class") }
-    assert_equal %w[medium high], integration_policies.map { |entry| entry.fetch("risk") }
-    assert_equal [["noop_shim"], ["disabled_in_profile"]], integration_policies.map { |entry| entry.fetch("strategies") }
-    assert_equal [true, true], integration_policies.map { |entry| entry.fetch("external_integration_required") }
-    assert_equal %w[honeybadger rollbar], payload.dig("capabilities", "unclassified_integrations")
+    assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails], integration_policies.map { |entry| entry.fetch("gem") }
+    assert_equal %w[railtie_integration middleware_integration railtie_integration railtie_integration], integration_policies.map { |entry| entry.fetch("class") }
+    assert_equal %w[high medium high high], integration_policies.map { |entry| entry.fetch("risk") }
+    assert_equal [["disabled_in_profile"], ["noop_shim"], ["disabled_in_profile"], ["disabled_in_profile"]], integration_policies.map { |entry| entry.fetch("strategies") }
+    assert_equal [true, true, true, true], integration_policies.map { |entry| entry.fetch("external_integration_required") }
+    assert_empty payload.dig("capabilities", "unclassified_integrations")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "sentry", "present")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "honeybadger", "present")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "rollbar", "present")
@@ -4356,7 +4356,7 @@ class RailsDependencyPrunerTest < Minitest::Test
         "--profile",
         profile_path,
         "--lazy-gems",
-        "sentry-rails",
+        "honeybadger,rollbar,sentry-rails",
         chdir: ROOT.to_s,
       )
       assert build_status.success?, build_stderr
@@ -4383,9 +4383,23 @@ class RailsDependencyPrunerTest < Minitest::Test
       refute status.success?
 
       payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing external integration proof: honeybadger requires external_integrations.honeybadger reviewed status; got missing"
+      assert_includes payload.fetch("errors"), "production verify missing external integration proof: rollbar requires external_integrations.rollbar reviewed status; got missing"
       assert_includes payload.fetch("errors"), "production verify missing external integration proof: sentry-rails requires external_integrations.sentry-rails reviewed status; got missing"
       assert_equal(
         [
+          {
+            "gem" => "honeybadger",
+            "requirement" => "external_integrations.honeybadger",
+            "actual" => nil,
+            "accepted_statuses" => RailsDependencyPruner::CoverageManifest::EXTERNAL_INTEGRATION_REVIEW_STATUSES,
+          },
+          {
+            "gem" => "rollbar",
+            "requirement" => "external_integrations.rollbar",
+            "actual" => nil,
+            "accepted_statuses" => RailsDependencyPruner::CoverageManifest::EXTERNAL_INTEGRATION_REVIEW_STATUSES,
+          },
           {
             "gem" => "sentry-rails",
             "requirement" => "external_integrations.sentry-rails",
@@ -9474,6 +9488,12 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, payload.dig("capabilities", "configured_frameworks", "rails_all")
       assert_equal ["rails/all"], payload.dig("capabilities", "loaded_railties")
       assert_equal %w[honeybadger rollbar sentry-rails], payload.dig("capabilities", "integrations")
+      integration_policies = payload.dig("capabilities", "integration_gem_policies")
+      assert_equal %w[honeybadger rollbar sentry-rails], integration_policies.map { |entry| entry.fetch("gem") }
+      assert_equal %w[railtie_integration railtie_integration railtie_integration], integration_policies.map { |entry| entry.fetch("class") }
+      assert_equal %w[high high high], integration_policies.map { |entry| entry.fetch("risk") }
+      assert_equal [["disabled_in_profile"], ["disabled_in_profile"], ["disabled_in_profile"]], integration_policies.map { |entry| entry.fetch("strategies") }
+      assert_empty payload.dig("capabilities", "unclassified_integrations")
       assert_equal %w[bootsnap good_job puma que sidekiq solid_queue], payload.dig("capabilities", "adapters")
       adapter_policies = payload.dig("capabilities", "adapter_gem_policies")
       assert_equal %w[bootsnap good_job puma que sidekiq solid_queue], adapter_policies.map { |entry| entry.fetch("gem") }
