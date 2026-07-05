@@ -44,6 +44,10 @@ A declaration inventory by itself is not attachment coverage.
 Production verification also checks coverage required by the Rails feature
 catalog. For example, Active Storage catalog evidence requires the normalized
 `attachments` workload before an Active Storage railtie skip can be approved.
+When the app declares Active Storage attachments, skipping `active_storage/engine`
+also requires reviewed upload, analyze, variant, preview, representation, and
+attachment-read coverage. A single `attachments` workload marker is not enough
+for that railtie skip.
 Action Text pruning requires reviewed `action_text` coverage, even when the
 review says rich-text declarations are not expected in production.
 When `disable_eager_load` is enabled, app-defined rake tasks also require

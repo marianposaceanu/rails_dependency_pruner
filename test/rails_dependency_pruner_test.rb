@@ -2519,6 +2519,191 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_full_active_storage_action_coverage_for_storage_railtie_skip
+    Dir.mktmpdir("rails_dependency_pruner_storage_action_coverage_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        active_storage:
+          review_required: false
+          declarations_expected: true
+          upload: true
+          analyze: false
+          variant: false
+          preview: false
+          representation: false
+          attachment_read: false
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 10000
+          unexpected_events_count: 0
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--skip-railties",
+        "active_storage/engine",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: skip_railtie:active_storage/engine requires active_storage.analyze, active_storage.variant, active_storage.preview, active_storage.representation, active_storage.attachment_read"
+      assert_equal(
+        {
+          "transform_id" => "skip_railtie:active_storage/engine",
+          "requirement" => "active_storage_action_coverage",
+          "missing_requirements" => %w[
+            active_storage.analyze
+            active_storage.variant
+            active_storage.preview
+            active_storage.representation
+            active_storage.attachment_read
+          ],
+        },
+        payload.dig("production_risks", "high_risk_transform_gaps", 0),
+      )
+    end
+  end
+
+  def test_verify_production_does_not_report_active_storage_action_gap_with_full_storage_railtie_skip_coverage
+    Dir.mktmpdir("rails_dependency_pruner_storage_action_coverage_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/avatar.rb"), <<~RUBY)
+        class Avatar < ApplicationRecord
+          has_one_attached :image
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        active_storage:
+          review_required: false
+          declarations_expected: true
+          upload: true
+          analyze: true
+          variant: true
+          preview: true
+          representation: true
+          attachment_read: true
+        canary:
+          review_required: false
+          duration_minutes: 60
+          request_count: 10000
+          unexpected_events_count: 0
+        rollback:
+          review_required: false
+          disable_env_tested: true
+          env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--skip-railties",
+        "active_storage/engine",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_empty payload.dig("production_risks", "high_risk_transform_gaps")
+      assert payload.dig("production_risks", "extreme_boot_static_matches").any? { |match| match.fetch("railtie") == "active_storage/engine" }
+    end
+  end
+
   def test_verify_production_requires_attachment_coverage_for_vips_lazy_gem_with_attachments
     Dir.mktmpdir("rails_dependency_pruner_vips_attachment_coverage_verify") do |dir|
       app_root = File.join(dir, "app")

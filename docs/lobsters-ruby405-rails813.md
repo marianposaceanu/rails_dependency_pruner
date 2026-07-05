@@ -376,6 +376,14 @@ The follow-up approval-gate smoke used the same task lists after production
 verification started requiring reviewed `rake_tasks` coverage for
 `disable_eager_load`; max RSS was `42582016` bytes for Lobsters template and
 `36814848` bytes for the generic_blog_app template.
+Active Storage action-gate smoke generated templates after production
+verification started requiring full storage action coverage for
+`active_storage/engine` skips with attachment declarations. Lobsters and
+generic_blog_app both reported no attachment declarations and all storage action
+flags false. Artifacts: `tmp/active-storage-action-gate-lobsters-template.yml`
+and `tmp/active-storage-action-gate-mp-template.yml`; max RSS was `53149696`
+bytes for Lobsters and `47497216` bytes for generic_blog_app. No request RSS
+benchmark was run for this milestone.
 
 ## what eats memory
 

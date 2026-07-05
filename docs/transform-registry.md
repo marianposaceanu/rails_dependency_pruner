@@ -86,6 +86,12 @@ Active Storage attachments, Action Text, rake tasks, and mounted Rack app or
 engine paths. RSS savings alone are not enough because this transform can move
 work from boot to first use.
 
+`skip_railtie:active_storage/engine` requires full reviewed Active Storage
+action coverage when the app declares attachments: upload, analyze, variant,
+preview, representation, and attachment read. The generic `attachments` workload
+only proves that storage was touched; it does not prove the railtie skip's full
+surface.
+
 ## why this exists
 
 The old profile shape could say `lazy_gems: ["ruby-vips"]`, but that hid two

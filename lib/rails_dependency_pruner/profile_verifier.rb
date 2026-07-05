@@ -545,6 +545,11 @@ module RailsDependencyPruner
             end
           end
 
+          if Array(extreme_boot["skip_railties"]).map(&:to_s).include?("active_storage/engine")
+            missing = active_storage_action_coverage_gaps
+            gaps << high_risk_gap("skip_railtie:active_storage/engine", "active_storage_action_coverage", missing) unless missing.empty?
+          end
+
           gaps.sort_by { |gap| gap.fetch("transform_id") }
         end
       end
@@ -848,6 +853,12 @@ module RailsDependencyPruner
       def active_storage_vips_proof_gaps
         return [] unless active_storage_attachment_static_usage?
         return [] if high_risk_override?("stub:active_storage_vips_analyzer")
+
+        active_storage_action_coverage_gaps
+      end
+
+      def active_storage_action_coverage_gaps
+        return [] unless active_storage_attachment_static_usage?
 
         actions = coverage_manifest&.active_storage_actions || []
         missing_actions = CoverageManifest::ACTIVE_STORAGE_ACTIONS - actions
