@@ -1278,7 +1278,7 @@ module RailsDependencyPruner
             gaps = []
             expected_profile_id = profile.profile_id
             actual_profile_id = measurement_profile_id
-            if expected_profile_id && actual_profile_id && actual_profile_id != expected_profile_id
+            if expected_profile_id && (actual_profile_id.to_s.empty? || actual_profile_id != expected_profile_id)
               gaps << {
                 "requirement" => "measurement.profile_id",
                 "expected" => expected_profile_id,
@@ -1288,7 +1288,7 @@ module RailsDependencyPruner
 
             expected_coverage_digest = profile.payload.dig("evidence", "coverage_manifest_digest")
             actual_coverage_digest = measurement.dig("coverage", "digest")
-            if expected_coverage_digest && actual_coverage_digest && actual_coverage_digest != expected_coverage_digest
+            if expected_coverage_digest && (actual_coverage_digest.to_s.empty? || actual_coverage_digest != expected_coverage_digest)
               gaps << {
                 "requirement" => "measurement.coverage.digest",
                 "expected" => expected_coverage_digest,
@@ -1298,7 +1298,7 @@ module RailsDependencyPruner
 
             expected_rails_env = profile.payload.dig("environment", "rails_env")
             actual_rails_env = measurement.dig("coverage", "rails_env")
-            if expected_rails_env && actual_rails_env && actual_rails_env != expected_rails_env
+            if expected_rails_env && (actual_rails_env.to_s.empty? || actual_rails_env != expected_rails_env)
               gaps << {
                 "requirement" => "measurement.coverage.rails_env",
                 "expected" => expected_rails_env,
@@ -1338,8 +1338,11 @@ module RailsDependencyPruner
       end
 
       def measurement_request_workload?
-        measurement["target"] == "requests" ||
-          Array(measurement["request_paths"]).any? ||
+        target = measurement["target"].to_s
+        return true if target == "requests"
+        return false unless target.empty?
+
+        Array(measurement["request_paths"]).any? ||
           Array(measurement.dig("coverage", "workloads")).map(&:to_s).include?("requests")
       end
 

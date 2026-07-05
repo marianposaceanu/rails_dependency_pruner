@@ -886,6 +886,18 @@ generic_blog_app coverage-template max RSS `48267264` bytes. Artifacts:
 `generic_blog_app/tmp/measurement-paths-mp-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
 target remains open.
+Measurement-identity verification follow-up rejects production measurements
+that omit profile id, coverage digest, or Rails env, and keeps explicit
+environment measurements out of request-path checks. Sequential static smokes
+still passed: Lobsters doctor max RSS `53690368` bytes, Lobsters
+coverage-template max RSS `54247424` bytes, generic_blog_app doctor max RSS
+`47939584` bytes, and generic_blog_app coverage-template max RSS `48414720` bytes.
+Artifacts: `tmp/measurement-identity-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/measurement-identity-lobsters-template.yml`,
+`tmp/measurement-identity-doctor-mp.json`, and
+`generic_blog_app/tmp/measurement-identity-mp-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
+target remains open.
 
 ## what eats memory
 

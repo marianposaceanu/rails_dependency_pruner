@@ -2013,7 +2013,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2030,7 +2030,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -2110,7 +2110,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2127,7 +2127,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -2216,7 +2216,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2233,7 +2233,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -2365,7 +2365,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2382,7 +2382,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -2485,7 +2485,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2502,7 +2502,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -2605,7 +2605,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2622,7 +2622,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -2718,7 +2718,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2735,7 +2735,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -2840,7 +2840,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2857,7 +2857,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -2959,7 +2959,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -2976,7 +2976,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -3088,7 +3088,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -3105,7 +3105,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -3186,7 +3186,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -3203,7 +3203,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -3310,7 +3310,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -3327,7 +3327,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -3417,7 +3417,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -3434,7 +3434,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -3514,7 +3514,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -3531,7 +3531,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, _stderr, status = Open3.capture3(
         RUBY,
@@ -3619,7 +3619,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert build_status.success?, build_stderr
 
       measurement_path = File.join(dir, "measurement.json")
-      File.write(measurement_path, JSON.pretty_generate(
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
         "variants" => {
           "baseline" => {
             "status" => "ok",
@@ -3636,7 +3636,7 @@ class RailsDependencyPrunerTest < Minitest::Test
             "warmed_request_duration_ms_p99_median" => 21.0,
           },
         },
-      ))
+      )
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -6147,6 +6147,65 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert payload.fetch("errors").any? { |error| error.include?("reference savings not preserved") }
       assert_equal 5_000, payload.dig("production_risks", "memory_policy", "measurement", "saved_kb")
 
+      missing_context_measurement_path = File.join(dir, "missing-context-measurement.json")
+      File.write(missing_context_measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+          },
+        },
+      ))
+
+      missing_context_stdout, _missing_context_stderr, missing_context_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        missing_context_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute missing_context_status.success?
+
+      missing_context_payload = JSON.parse(missing_context_stdout)
+      assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.profile_id expected #{profile_id}, got missing"
+      assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.coverage.digest expected #{coverage_digest}, got missing"
+      assert_includes missing_context_payload.fetch("errors"), "production verify measurement context mismatch: measurement.coverage.rails_env expected production, got missing"
+      assert_equal [
+        {
+          "requirement" => "measurement.profile_id",
+          "expected" => profile_id,
+          "actual" => nil,
+        },
+        {
+          "requirement" => "measurement.coverage.digest",
+          "expected" => coverage_digest,
+          "actual" => nil,
+        },
+        {
+          "requirement" => "measurement.coverage.rails_env",
+          "expected" => "production",
+          "actual" => nil,
+        },
+      ], missing_context_payload.dig("production_risks", "measurement_context_gaps")
+
       stale_measurement_path = File.join(dir, "stale-measurement.json")
       write_measurement_report(
         path: stale_measurement_path,
@@ -6234,6 +6293,56 @@ class RailsDependencyPrunerTest < Minitest::Test
           "missing" => ["/health"],
         },
       ], incomplete_payload.dig("production_risks", "measurement_context_gaps")
+
+      environment_measurement_path = File.join(dir, "environment-measurement.json")
+      File.write(environment_measurement_path, JSON.pretty_generate(
+        "target" => "environment",
+        "profile" => {
+          "profile_id" => profile_id,
+        },
+        "coverage" => {
+          "digest" => coverage_digest,
+          "rails_env" => "production",
+          "workloads" => ["requests"],
+        },
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 60_000,
+          },
+        },
+      ))
+
+      environment_stdout, environment_stderr, environment_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        environment_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert environment_status.success?, environment_stderr
+
+      environment_payload = JSON.parse(environment_stdout)
+      assert_equal true, environment_payload.fetch("verified")
+      assert_empty environment_payload.dig("production_risks", "measurement_context_gaps")
 
       passing_measurement_path = File.join(dir, "passing-measurement.json")
       write_measurement_report(
@@ -10888,6 +10997,35 @@ class RailsDependencyPrunerTest < Minitest::Test
           include: all
       YAML
       coverage_path
+    end
+
+    def write_identified_measurement_json(path, profile_path, coverage_path, payload)
+      profile_payload = JSON.parse(File.read(profile_path))
+      coverage_manifest = RailsDependencyPruner::CoverageManifest.load(coverage_path)
+      request_paths = coverage_manifest.request_entries.map { |entry| entry.fetch("path") }.uniq.sort
+      request_status_matrix = request_paths.to_h do |request_path|
+        [
+          request_path,
+          {
+            "statuses" => [200],
+          },
+        ]
+      end
+
+      report = {
+        "target" => "requests",
+        "profile" => {
+          "profile_id" => profile_payload.fetch("profile_id"),
+        },
+        "coverage" => coverage_manifest.to_h,
+      }.merge(payload)
+      report["request_paths"] ||= request_paths unless request_paths.empty?
+      if Array(report["request_paths"]).any?
+        report.fetch("variants", {}).each_value do |variant|
+          variant["request_status_matrix"] ||= request_status_matrix
+        end
+      end
+      File.write(path, JSON.pretty_generate(report))
     end
 
     def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil, request_paths: ["/"])

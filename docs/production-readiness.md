@@ -46,8 +46,9 @@ A profile is ready only when:
 
 - `approve` exits with verifier errors `0`
 - the coverage digest in the profile matches the reviewed manifest
-- coverage-bound measurement artifacts name the same profile id and coverage
-  digest and, for request measurements, cover the reviewed request paths
+- coverage-bound measurement artifacts name the same profile id, coverage
+  digest, and Rails env, and request measurements cover the reviewed request
+  paths
 - source, environment, bundle, runtime evidence, and profile fingerprints match
 - request, job, mail, storage, Action Text, cable, and task coverage covers the
   transforms
