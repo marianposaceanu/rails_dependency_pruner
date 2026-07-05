@@ -130,7 +130,20 @@ module RailsDependencyPruner
 
       def external_integrations_section
         external_integrations.to_h do |name|
-          [name, "review"]
+          policy = integration_policy_for(name)
+          values = {
+            "status" => "review",
+          }
+          if policy
+            values["class"] = policy["class"]
+            values["risk"] = policy["risk"]
+            values["strategies"] = Array(policy["strategies"])
+            values["production_rule"] = policy["production_rule"]
+          else
+            values["unclassified"] = true
+          end
+
+          [name, review_section(values)]
         end
       end
 
@@ -240,6 +253,14 @@ module RailsDependencyPruner
 
       def external_integrations
         Array(capabilities["integrations"])
+      end
+
+      def integration_policy_for(name)
+        integration_policies.find { |policy| policy["gem"] == name }
+      end
+
+      def integration_policies
+        @integration_policies ||= Array(capabilities["integration_gem_policies"])
       end
 
       def rake_tasks

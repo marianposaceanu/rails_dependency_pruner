@@ -130,6 +130,12 @@ Artifacts:
 - `tmp/integration-policy-doctor-lobsters.time`
 - `tmp/integration-policy-doctor-mp.json`
 - `tmp/integration-policy-doctor-mp.time`
+- `tmp/integration-policy-coverage-lobsters-template.yml`
+- `tmp/integration-policy-coverage-lobsters-template.stdout`
+- `tmp/integration-policy-coverage-lobsters-template.time`
+- `tmp/integration-policy-coverage-mp-template.yml`
+- `tmp/integration-policy-coverage-mp-template.stdout`
+- `tmp/integration-policy-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -210,6 +216,17 @@ Integration policy doctor static smoke:
 
 Both scans reported `0` parse errors, `0` dynamic constantization risks, and
 `0` initializer dynamic require/load risks.
+
+Integration policy coverage-template static smoke:
+
+| app | artifact | generated integration entries | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/integration-policy-coverage-lobsters-template.yml` | `rack-mini-profiler:middleware_integration:medium`, `sentry-rails:railtie_integration:high`, `sentry-ruby:unclassified` | `53362688` bytes |
+| generic_blog_app, generic blog simple app | `tmp/integration-policy-coverage-mp-template.yml` | none | `48054272` bytes |
+
+Generated entries remain `review_required: true`. This was a static
+coverage-template smoke only; no request RSS benchmark was run for
+generic_blog_app, so the `40%` RSS target remains unmeasured.
 
 Gem policy smoke:
 

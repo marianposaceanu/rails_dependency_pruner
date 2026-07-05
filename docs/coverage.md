@@ -31,7 +31,8 @@ Typical review steps:
   storage or rich-text declarations, and rake task names only when the exact
   entries were covered
 - replace external integration `review` placeholders with a reviewed production
-  status before lazying or stubbing integration gems
+  status before lazying or stubbing integration gems; generated placeholders
+  include policy class, risk, strategies, and unclassified markers for review
 - keep `rake_tasks` to the production tasks covered by the release process;
   generated templates include `assets:precompile`, `db:migrate`, and static
   candidates found in `Rakefile` or `lib/tasks/**/*.rake`
@@ -71,6 +72,8 @@ Lazy or stubbed middleware and Railtie integration gems, such as
 `external_integrations` status. Accepted statuses are `covered`,
 `disabled`, `disabled_in_profile`, `disabled_in_production`,
 `disabled_in_test_profile`, `no_production_dsn`, and `not_used`.
+Generated structured entries remain non-proof while `review_required: true`,
+even when they include class and risk metadata from the gem policy registry.
 For v2 manifests, production verification also requires reviewed rollback
 evidence through `rollback.disable_env_tested: true` and reviewed canary
 evidence with zero unexpected events.

@@ -9579,8 +9579,16 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "Avatar", payload.dig("action_text", "declarations", 0, "class")
       assert_equal "bio", payload.dig("action_text", "declarations", 0, "name")
       assert_equal %w[assets:precompile db:migrate cleanup maintenance:sweep], payload.dig("rake_tasks", "tasks")
-      assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler")
-      assert_equal "review", payload.dig("external_integrations", "sentry-rails")
+      assert_equal true, payload.dig("external_integrations", "rack-mini-profiler", "review_required")
+      assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler", "status")
+      assert_equal "middleware_integration", payload.dig("external_integrations", "rack-mini-profiler", "class")
+      assert_equal "medium", payload.dig("external_integrations", "rack-mini-profiler", "risk")
+      assert_equal ["noop_shim"], payload.dig("external_integrations", "rack-mini-profiler", "strategies")
+      assert_equal true, payload.dig("external_integrations", "sentry-rails", "review_required")
+      assert_equal "review", payload.dig("external_integrations", "sentry-rails", "status")
+      assert_equal "railtie_integration", payload.dig("external_integrations", "sentry-rails", "class")
+      assert_equal "high", payload.dig("external_integrations", "sentry-rails", "risk")
+      assert_equal ["disabled_in_profile"], payload.dig("external_integrations", "sentry-rails", "strategies")
       assert_equal true, payload.dig("lazy_gems", "nokogiri", "review_required")
       assert_equal "review", payload.dig("lazy_gems", "nokogiri", "status")
       assert_equal ["Nokogiri"], payload.dig("lazy_gems", "nokogiri", "constants")
@@ -9855,6 +9863,10 @@ class RailsDependencyPrunerTest < Minitest::Test
           sentry:
             review_required: true
             status: disabled_in_production
+            class: railtie_integration
+            risk: high
+            strategies:
+              - disabled_in_profile
       YAML
 
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)

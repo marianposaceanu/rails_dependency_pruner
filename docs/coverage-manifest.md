@@ -79,6 +79,21 @@ lazy_gems:
     status: manual_app_use
     constants:
       - Vips
+external_integrations:
+  rack-mini-profiler:
+    review_required: false
+    status: disabled_in_production
+    class: middleware_integration
+    risk: medium
+    strategies:
+      - noop_shim
+  sentry-rails:
+    review_required: false
+    status: disabled_in_profile
+    class: railtie_integration
+    risk: high
+    strategies:
+      - disabled_in_profile
 canary:
   review_required: false
   duration_minutes: 60
@@ -111,6 +126,10 @@ first-use surface under `lazy_gems`. Accepted statuses are `covered`,
 `not_on_request_path`. A generated template leaves these entries as
 `review_required: true` until the app owner confirms the request or manual path
 that can load the constant.
+
+Lazy or stubbed middleware and Railtie integration gems also need reviewed
+`external_integrations` entries. Generated entries may include class, risk, and
+strategy metadata, but they still do not count while `review_required: true`.
 
 ## policy sections
 
