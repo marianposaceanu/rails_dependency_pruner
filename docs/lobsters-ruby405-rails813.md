@@ -361,6 +361,13 @@ Mounted-app coverage smoke generated a Lobsters starter request entry for
 The same static template smoke on `generic_blog_app`
 found no mounted Rack apps; max RSS `36421632` bytes.
 
+Rake-task coverage smoke found six Lobsters app tasks:
+`backfill_notifications`, `build`, `data_stats`, `fake_data`, `privacy_wipe`,
+and `update_banned_url_shorteners`. Artifact:
+`tmp/rake-task-coverage-lobsters-template.yml`; max RSS `42565632` bytes.
+The same static smoke on `generic_blog_app` found
+`admin:user:create` and `semantic_search:reindex`; max RSS `36503552` bytes.
+
 ## what eats memory
 
 RSS is not additive by Rails framework, so these rows are attribution signals,

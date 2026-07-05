@@ -29,7 +29,9 @@ Typical review steps:
   when those flows exist in production
 - replace external integration `review` placeholders with a reviewed production
   status before lazying or stubbing integration gems
-- keep `rake_tasks` to the production tasks covered by the release process
+- keep `rake_tasks` to the production tasks covered by the release process;
+  generated templates include `assets:precompile`, `db:migrate`, and static
+  candidates found in `Rakefile` or `lib/tasks/**/*.rake`
 - set `rollback.review_required: false` and `rollback.disable_env_tested: true`
   only after testing `RAILS_DEPENDENCY_PRUNER_DISABLE=1`
 

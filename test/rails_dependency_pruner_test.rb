@@ -7731,6 +7731,15 @@ class RailsDependencyPrunerTest < Minitest::Test
           resources :stories
         end
       RUBY
+      FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
+      File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
+        namespace :maintenance do
+          task :sweep do
+          end
+        end
+
+        task "reports:daily" => :environment
+      RAKE
       File.open(File.join(app_root, "config/application.rb"), "a") do |file|
         file.write(<<~RUBY)
           module DoctorApp
@@ -7814,6 +7823,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal ["CleanupJob"], payload.dig("capabilities", "jobs", "classes")
       assert_equal ["UserMailer"], payload.dig("capabilities", "mailers", "classes")
       assert_equal ["NotificationsChannel"], payload.dig("capabilities", "channels", "classes")
+      assert_equal %w[maintenance:sweep reports:daily], payload.dig("capabilities", "rake_tasks", "tasks").map { |entry| entry.fetch("name") }
+      assert_equal "lib/tasks/maintenance.rake", payload.dig("capabilities", "rake_tasks", "tasks", 0, "path")
       assert_equal "AdminApp", payload.dig("capabilities", "mounted_rack_apps", 0, "target")
       assert_equal "/admin", payload.dig("capabilities", "mounted_rack_apps", 0, "mount_path")
       assert_equal "use", payload.dig("capabilities", "middleware", 0, "operation")
@@ -7841,6 +7852,15 @@ class RailsDependencyPrunerTest < Minitest::Test
           mount AdminApp, at: "/admin"
         end
       RUBY
+      FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
+      File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
+        namespace :maintenance do
+          task :sweep do
+          end
+        end
+
+        task cleanup: :environment
+      RAKE
       File.write(File.join(app_root, "Gemfile"), <<~RUBY)
         source "https://rubygems.org"
         gem "rack-mini-profiler"
@@ -7920,7 +7940,7 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal false, payload.dig("active_storage", "attachment_read")
       assert_equal true, payload.dig("action_text", "rich_text_expected")
       assert_equal "bio", payload.dig("action_text", "declarations", 0, "name")
-      assert_equal %w[assets:precompile db:migrate], payload.dig("rake_tasks", "tasks")
+      assert_equal %w[assets:precompile db:migrate cleanup maintenance:sweep], payload.dig("rake_tasks", "tasks")
       assert_equal "review", payload.dig("external_integrations", "rack-mini-profiler")
       assert_equal "review", payload.dig("external_integrations", "sentry-rails")
       assert_equal true, payload.dig("lazy_gems", "nokogiri", "review_required")

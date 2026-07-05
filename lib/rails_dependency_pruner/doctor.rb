@@ -180,6 +180,7 @@ module RailsDependencyPruner
           "channels" => channels,
           "active_storage" => active_storage,
           "action_text" => action_text,
+          "rake_tasks" => rake_tasks,
           "direct_gem_usage" => direct_gem_usage,
           "integrations" => integrations,
           "adapters" => adapters,
@@ -261,6 +262,14 @@ module RailsDependencyPruner
 
       def channels
         class_inventory("app/channels", /<\s*ApplicationCable::Channel\b|<\s*ActionCable::Channel::Base\b|\bstream_from\b/)
+      end
+
+      def rake_tasks
+        tasks = rake_task_files.flat_map { |path| rake_tasks_in(path) }
+        {
+          "files" => rake_task_files.map { |path| path.relative_path_from(app_root).to_s },
+          "tasks" => tasks.uniq { |task| task.fetch("name") }.sort_by { |task| task.fetch("name") },
+        }
       end
 
       def active_storage
@@ -384,6 +393,13 @@ module RailsDependencyPruner
         @route_files ||= Pathname.glob(app_root.join("config/routes{.rb,/**/*.rb}").to_s).select(&:file?).sort
       end
 
+      def rake_task_files
+        @rake_task_files ||= (
+          [app_root.join("Rakefile")] +
+            Pathname.glob(app_root.join("lib/tasks/**/*.rake").to_s)
+        ).select(&:file?).uniq.sort
+      end
+
       def grep_file(path, pattern)
         return [] unless path.file?
 
@@ -397,6 +413,49 @@ module RailsDependencyPruner
             "source" => line.strip,
           }
         end
+      end
+
+      def rake_tasks_in(path)
+        relative = path.relative_path_from(app_root).to_s
+        namespace_stack = []
+        depth = 0
+
+        path.readlines.filter_map.with_index(1) do |line, line_number|
+          source = line.strip
+          namespace = rake_namespace_name(source)
+          namespace_stack << { "name" => namespace, "depth" => depth } if namespace
+
+          task_name = rake_task_name(source)
+          task = if task_name
+            full_name = task_name.include?(":") || namespace_stack.empty? ? task_name : "#{namespace_stack.map { |entry| entry.fetch("name") }.join(":")}:#{task_name}"
+            {
+              "name" => full_name,
+              "path" => relative,
+              "line" => line_number,
+              "source" => source,
+            }
+          end
+
+          depth = rake_depth_after(source, depth)
+          namespace_stack.pop while namespace_stack.any? && namespace_stack.last.fetch("depth") >= depth
+          task
+        end
+      end
+
+      def rake_namespace_name(source)
+        match = source.match(/\A\s*namespace\s+(?::([A-Za-z0-9_]+)|["']([^"']+)["'])/)
+        match && (match[1] || match[2])
+      end
+
+      def rake_task_name(source)
+        match = source.match(/\A\s*task\s+(?::([A-Za-z0-9_]+)|["']([^"']+)["']|([A-Za-z0-9_]+)\s*:)/)
+        match && (match[1] || match[2] || match[3])
+      end
+
+      def rake_depth_after(source, depth)
+        next_depth = depth + source.scan(/\bdo\b/).length
+        next_depth -= 1 if source.match?(/\Aend\b/)
+        [next_depth, 0].max
       end
 
       def class_inventory(root, pattern)

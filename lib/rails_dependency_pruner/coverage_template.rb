@@ -41,7 +41,7 @@ module RailsDependencyPruner
         document["active_storage"] = active_storage_section
         document["action_text"] = action_text_section
         document["inbound_email"] = review_section("mailboxes" => mailbox_classes) if mailbox_classes.any?
-        document["rake_tasks"] = review_section("tasks" => DEFAULT_RAKE_TASKS)
+        document["rake_tasks"] = review_section("tasks" => rake_tasks)
         document["external_integrations"] = external_integrations_section if external_integrations.any?
         document["lazy_gems"] = lazy_gems_section if lazy_gem_usage.any?
         document["canary"] = review_section(
@@ -238,6 +238,11 @@ module RailsDependencyPruner
 
       def external_integrations
         Array(capabilities["integrations"])
+      end
+
+      def rake_tasks
+        discovered = Array(capabilities.dig("rake_tasks", "tasks")).map { |task| task["name"].to_s }.reject(&:empty?)
+        (DEFAULT_RAKE_TASKS + discovered.sort).uniq
       end
 
       def lazy_gem_usage
