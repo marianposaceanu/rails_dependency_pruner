@@ -33,10 +33,23 @@ module RailsDependencyPruner
           lines << "- Target: `#{payload.fetch("target")}`"
           lines << "- Source profile: `#{source_profile["profile_id"] || "(none)"}`"
           lines << "- Profile path: `#{source_profile["path"]}`" if source_profile["path"]
-          lines << "- Coverage: `#{payload["coverage_path"]}`" if payload["coverage_path"]
+          append_coverage_context(lines)
           request_paths = Array(payload["request_paths"])
           lines << "- Request paths: #{list(request_paths)}" unless request_paths.empty?
           lines << ""
+        end
+
+        def append_coverage_context(lines)
+          coverage = payload["coverage"]
+          if coverage
+            lines << "- Coverage: `#{coverage.fetch("path")}`"
+            lines << "- Coverage digest: `#{coverage.fetch("digest")}`" if coverage["digest"]
+            lines << "- Coverage Rails env: `#{coverage.fetch("rails_env")}`" if coverage["rails_env"]
+            workloads = Array(coverage["workloads"])
+            lines << "- Coverage workloads: #{list(workloads)}" unless workloads.empty?
+          elsif payload["coverage_path"]
+            lines << "- Coverage: `#{payload["coverage_path"]}`"
+          end
         end
 
         def append_summary(lines)

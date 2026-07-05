@@ -841,6 +841,18 @@ generic_blog_app coverage-template max RSS `48136192` bytes. Artifacts:
 `tmp/lobsters-ruby405-rails813/tmp/object-memory-coverage-lobsters-template.yml`,
 `tmp/object-memory-doctor-mp.json`, and
 `generic_blog_app/tmp/object-memory-coverage-mp-template.yml`.
+Coverage-bound measurement follow-up added `measure --coverage` so reports carry
+the coverage digest, Rails env, and reviewed workloads, and request measurements
+can use reviewed coverage request paths. Sequential static smokes still passed:
+Lobsters doctor max RSS `54050816` bytes, Lobsters coverage-template max RSS
+`53821440` bytes, generic_blog_app doctor max RSS `47775744` bytes, and
+generic_blog_app coverage-template max RSS `47972352` bytes. Artifacts:
+`tmp/measure-coverage-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/measure-coverage-lobsters-template.yml`,
+`tmp/measure-coverage-doctor-mp.json`, and
+`generic_blog_app/tmp/measure-coverage-mp-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
+target remains open.
 
 ## what eats memory
 

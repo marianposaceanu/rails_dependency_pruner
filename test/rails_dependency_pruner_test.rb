@@ -9083,7 +9083,14 @@ class RailsDependencyPrunerTest < Minitest::Test
       report_path = File.join(dir, "ablation.json")
       markdown_path = File.join(dir, "ablation.md")
       profile_path = File.join(dir, "profile.json")
+      coverage_path = File.join(dir, "coverage.yml")
       write_measurement_profile(profile_path)
+      File.write(coverage_path, <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          - GET /hello => 200
+      YAML
 
       stdout, stderr, status = Open3.capture3(
         RUBY,
@@ -9094,6 +9101,8 @@ class RailsDependencyPrunerTest < Minitest::Test
         FAKE_APP_ROOT.to_s,
         "--profile",
         profile_path,
+        "--coverage",
+        coverage_path,
         "--runs",
         "1",
         "--object-memory",
@@ -9111,6 +9120,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal true, payload.fetch("ablation")
       assert_equal "application", payload.fetch("target")
       assert_equal true, payload.fetch("object_memory")
+      assert_equal "production", payload.dig("coverage", "rails_env")
+      assert_match(/\Asha256:/, payload.dig("coverage", "digest"))
       assert_equal "ok", payload.dig("variants", "baseline", "status")
       assert_equal "ok", payload.dig("variants", "all_approved_transforms", "status")
       assert_kind_of Hash, payload.dig("variants", "baseline", "object_counts_median")
@@ -9130,6 +9141,7 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       markdown = File.read(markdown_path)
       assert_includes markdown, "# Rails Dependency Pruner Ablation"
+      assert_includes markdown, "- Coverage Rails env: `production`"
       assert_includes markdown, "## Process Memory"
       assert_includes markdown, "## Rails Memory Buckets"
       assert_includes markdown, "## Ruby Object Buckets"
@@ -9553,6 +9565,90 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes markdown, "warm p95 ms"
       assert_includes markdown, "## Request Status Matrix"
       assert_includes markdown, "| baseline | /hello | 200 | none |"
+    end
+  end
+
+  def test_measure_uses_coverage_manifest_for_request_paths_and_environment
+    Dir.mktmpdir("rails_dependency_pruner_measure_coverage") do |dir|
+      app_root = File.join(dir, "app")
+      report_path = File.join(dir, "measurement.json")
+      markdown_path = File.join(dir, "measurement.md")
+      env_path = File.join(dir, "rails-env.txt")
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(File.join(app_root, "config/environments/production.rb"), <<~RUBY)
+        File.write(#{env_path.dump}, Rails.env)
+      RUBY
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        # frozen_string_literal: true
+
+        require "rails"
+        require "action_controller/railtie"
+        require "logger"
+
+        class CoverageHelloController < ActionController::Base
+          def index
+            render plain: "hello"
+          end
+        end
+
+        module MeasureCoverageApp
+          class Application < Rails::Application
+            config.root = #{app_root.dump}
+            config.secret_key_base = "x" * 64
+            config.logger = Logger.new(nil)
+            config.eager_load = false
+            config.hosts.clear
+            routes.append do
+              get "/hello" => "coverage_hello#index"
+            end
+          end
+        end
+      RUBY
+      File.write(File.join(app_root, "config/pruner_coverage.yml"), <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          - GET /hello => 200
+      YAML
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "measure",
+        "--app",
+        app_root,
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--target",
+        "requests",
+        "--variants",
+        "baseline",
+        "--runs",
+        "1",
+        "--output",
+        report_path,
+        "--markdown",
+        markdown_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal "production", File.read(env_path)
+      assert_equal ["/hello"], payload.fetch("request_paths")
+      assert_equal "production", payload.dig("coverage", "rails_env")
+      assert_match(/\Asha256:/, payload.dig("coverage", "digest"))
+      assert_equal ["requests"], payload.dig("coverage", "workloads")
+      assert_equal 200, payload.dig("runs", "baseline", 0, "requests", 0, "status")
+      assert_equal [200], payload.dig("variants", "baseline", "request_status_matrix", "/hello", "statuses")
+
+      markdown = File.read(markdown_path)
+      assert_includes markdown, "- Coverage Rails env: `production`"
+      assert_includes markdown, "- Coverage workloads: `requests`"
+      assert_includes markdown, "- Request paths: `/hello`"
+      assert File.exist?(report_path)
     end
   end
 

@@ -4,6 +4,7 @@ require "json"
 require "open3"
 require "tmpdir"
 
+require_relative "../coverage_manifest"
 require_relative "../profile"
 
 module RailsDependencyPruner
@@ -185,16 +186,17 @@ module RailsDependencyPruner
       TARGETS = %w[application environment requests].freeze
 
       attr_reader :app_root, :variants, :runs, :profile_path, :target, :skip_railties, :request_paths,
-        :variant_profile_paths, :process_memory_details, :object_memory
+        :variant_profile_paths, :process_memory_details, :object_memory, :coverage_path
 
-      def initialize(app_root:, variants:, runs:, profile_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {}, process_memory_details: false, object_memory: false)
+      def initialize(app_root:, variants:, runs:, profile_path: nil, coverage_path: nil, target: "application", skip_railties: [], request_paths: [], variant_profile_paths: {}, process_memory_details: false, object_memory: false)
         @app_root = File.expand_path(app_root)
         @variants = variants
         @runs = runs
         @profile_path = profile_path && File.expand_path(profile_path)
+        @coverage_path = coverage_path && File.expand_path(coverage_path)
         @target = target
         @skip_railties = Array(skip_railties)
-        @request_paths = Array(request_paths)
+        @request_paths = request_paths_for(Array(request_paths))
         @variant_profile_paths = variant_profile_paths.to_h.transform_keys(&:to_s).transform_values do |path|
           File.expand_path(path)
         end
@@ -217,11 +219,18 @@ module RailsDependencyPruner
         report["process_memory_details"] = true if process_memory_details
         report["object_memory"] = true if object_memory
         report["request_paths"] = request_paths if target == "requests"
+        report["coverage"] = coverage_metadata if coverage_manifest
         report["profile"] = profile_metadata if profile_path
         report
       end
 
       private
+        def request_paths_for(explicit_paths)
+          return explicit_paths unless explicit_paths.empty? && target == "requests"
+
+          coverage_manifest&.request_entries&.map { |entry| entry.fetch("path") }&.uniq || []
+        end
+
         def run_variant(variant)
           runs.times.map do
             run_once(variant)
@@ -319,6 +328,10 @@ module RailsDependencyPruner
           }
           env["RAILS_DEPENDENCY_PRUNER_PROCESS_MEMORY_DETAILS"] = "1" if process_memory_details
           env["RAILS_DEPENDENCY_PRUNER_OBJECT_MEMORY"] = "1" if object_memory
+          if coverage_rails_env
+            env["RAILS_ENV"] = coverage_rails_env
+            env["RACK_ENV"] = coverage_rails_env
+          end
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_SKIP_RAILTIES"] = skip_railties.join(",") if skip_railties_variant?(variant)
           env["RAILS_DEPENDENCY_PRUNER_MEASURE_REQUEST_PATHS"] = JSON.generate(request_paths) if target == "requests"
           env["BUNDLE_GEMFILE"] = File.join(app_root, "Gemfile") if File.exist?(File.join(app_root, "Gemfile"))
@@ -334,6 +347,19 @@ module RailsDependencyPruner
             env["RAILS_DEPENDENCY_PRUNER_MODE"] = "boot_prune"
           end
           env
+        end
+
+        def coverage_manifest
+          @coverage_manifest ||= coverage_path && CoverageManifest.load(coverage_path)
+        end
+
+        def coverage_metadata
+          coverage_manifest.to_h
+        end
+
+        def coverage_rails_env
+          value = coverage_manifest&.rails_env.to_s
+          value.empty? ? nil : value
         end
 
         def skip_railties_variant?(variant)

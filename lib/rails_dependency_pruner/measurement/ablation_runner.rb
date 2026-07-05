@@ -45,6 +45,7 @@ module RailsDependencyPruner
             app_root: app_root,
             variants: definitions.map(&:name),
             runs: runs,
+            coverage_path: coverage_path,
             target: target,
             request_paths: request_paths,
             variant_profile_paths: profile_paths,

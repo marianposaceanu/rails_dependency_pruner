@@ -10,6 +10,27 @@ RSS is the hard process number. The Rails and Ruby buckets are attribution
 signals. They explain where the win probably came from, but they are not
 byte-exact ownership by framework.
 
+## measure
+
+Compare a baseline boot with a profiled variant:
+
+```bash
+bundle exec rails-dependency-pruner measure \
+  --app . \
+  --profile config/rails_dependency_pruner_profile.json \
+  --coverage config/pruner_coverage.yml \
+  --variants baseline,boot_prune \
+  --target requests \
+  --runs 5 \
+  --process-memory-details \
+  --output tmp/pruner-requests.json \
+  --markdown tmp/pruner-requests.md
+```
+
+When `--coverage` is present, the report records the coverage path, digest,
+Rails env, and reviewed workloads. Request measurements use reviewed coverage
+request paths when `--request-paths` is not provided.
+
 ## ablation
 
 Run the approved profile one transform group at a time:

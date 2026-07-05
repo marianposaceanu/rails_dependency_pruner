@@ -347,7 +347,7 @@ events to an NDJSON file. Set
 - `bundle exec rails-dependency-pruner patch --app . --profile config/rails_dependency_pruner_profile.json --patch tmp/pruner-boot-plan.patch`
 - `bundle exec rails-dependency-pruner shim --app . --patch tmp/pruner-early-boot.patch`
 - `bundle exec rails-dependency-pruner rollout --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --patch tmp/pruner-rollout.patch`
-- `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --variants baseline,boot_prune --runs 5 --process-memory-details --output tmp/pruner-memory-report.json --markdown tmp/pruner-memory-report.md`
+- `bundle exec rails-dependency-pruner measure --app . --profile config/rails_dependency_pruner_profile.json --coverage config/pruner_coverage.yml --variants baseline,boot_prune --runs 5 --process-memory-details --output tmp/pruner-memory-report.json --markdown tmp/pruner-memory-report.md`
 - `bundle exec rails-dependency-pruner runtime collect --app . --coverage config/pruner_coverage.yml --output tmp/pruner-runtime.json`
 - `bundle exec rails-dependency-pruner explain ActiveRecord::Base --app .`
 - `bundle exec rails-dependency-pruner explain ActiveStorage --profile config/rails_dependency_pruner_profile.json`

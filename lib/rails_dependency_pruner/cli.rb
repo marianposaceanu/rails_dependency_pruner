@@ -275,6 +275,7 @@ module RailsDependencyPruner
           variants: options.fetch(:variants),
           runs: options.fetch(:runs),
           profile_path: options[:profile_path],
+          coverage_path: options[:coverage_path],
           target: options.fetch(:target),
           skip_railties: options.fetch(:skip_railties),
           request_paths: options.fetch(:request_paths),

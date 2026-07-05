@@ -455,6 +455,7 @@ module RailsDependencyPruner
         options = {
           app_root: nil,
           profile_path: nil,
+          coverage_path: nil,
           variants: %w[baseline],
           runs: 5,
           target: "application",
@@ -471,6 +472,7 @@ module RailsDependencyPruner
           parser.banner = "Usage: rails-dependency-pruner #{usage} [options]"
           parser.on("--app PATH", "Rails app root") { |path| options[:app_root] = path }
           parser.on("--profile PATH", "Profile used by shadow/boot_prune/production variants") { |path| options[:profile_path] = path }
+          parser.on("--coverage PATH", "Coverage manifest for measurement metadata and Rails env") { |path| options[:coverage_path] = path }
           parser.on("--variants NAMES", "Comma-separated variant names") { |names| options[:variants] = split_csv(names) }
           parser.on("--runs N", Integer, "Runs per variant") { |runs| options[:runs] = runs }
           parser.on("--target NAME", "Measure target: application, environment, or requests") { |target| options[:target] = target }
@@ -489,12 +491,23 @@ module RailsDependencyPruner
 
         parser.parse!(argv)
         raise ArgumentError, "--app is required" if blank?(options[:app_root])
-        raise ArgumentError, "--profile does not exist" if options[:profile_path] && !File.exist?(options[:profile_path])
+        options[:app_root] = File.expand_path(options.fetch(:app_root))
+        if options[:profile_path]
+          options[:profile_path] = input_path(options.fetch(:app_root), options.fetch(:profile_path))
+          raise ArgumentError, "--profile does not exist" unless File.exist?(options.fetch(:profile_path))
+        end
+        if options[:coverage_path]
+          options[:coverage_path] = input_path(options.fetch(:app_root), options.fetch(:coverage_path))
+          raise ArgumentError, "--coverage does not exist" unless File.exist?(options.fetch(:coverage_path))
+        end
         raise ArgumentError, "--runs must be positive" unless options.fetch(:runs).positive?
         raise ArgumentError, "--variants must not be empty" if options.fetch(:variants).empty?
         raise ArgumentError, "--target must be application, environment, or requests" unless Measurement::Runner::TARGETS.include?(options.fetch(:target))
+        if options.fetch(:target) == "requests" && options.fetch(:request_paths).empty? && options[:coverage_path]
+          options[:request_paths] = coverage_request_paths(options.fetch(:coverage_path))
+        end
         if options.fetch(:target) == "requests" && options.fetch(:request_paths).empty?
-          raise ArgumentError, "--request-paths is required for --target requests"
+          raise ArgumentError, "--request-paths or reviewed coverage requests are required for --target requests"
         end
         if (options.fetch(:variants) & %w[skip_railties no_eager_load_skip_railties]).any? && options.fetch(:skip_railties).empty?
           raise ArgumentError, "--skip-railties is required for skip_railties variants"
@@ -539,13 +552,21 @@ module RailsDependencyPruner
 
         parser.parse!(argv)
         raise ArgumentError, "--app is required" if blank?(options[:app_root])
+        options[:app_root] = File.expand_path(options.fetch(:app_root))
         raise ArgumentError, "--profile is required" if blank?(options[:profile_path])
-        raise ArgumentError, "--profile does not exist" unless File.exist?(options[:profile_path])
-        raise ArgumentError, "--coverage does not exist" if options[:coverage_path] && !File.exist?(options[:coverage_path])
+        options[:profile_path] = input_path(options.fetch(:app_root), options.fetch(:profile_path))
+        raise ArgumentError, "--profile does not exist" unless File.exist?(options.fetch(:profile_path))
+        if options[:coverage_path]
+          options[:coverage_path] = input_path(options.fetch(:app_root), options.fetch(:coverage_path))
+          raise ArgumentError, "--coverage does not exist" unless File.exist?(options.fetch(:coverage_path))
+        end
         raise ArgumentError, "--runs must be positive" unless options.fetch(:runs).positive?
         raise ArgumentError, "--target must be application, environment, or requests" unless Measurement::Runner::TARGETS.include?(options.fetch(:target))
+        if options.fetch(:target) == "requests" && options.fetch(:request_paths).empty? && options[:coverage_path]
+          options[:request_paths] = coverage_request_paths(options.fetch(:coverage_path))
+        end
         if options.fetch(:target) == "requests" && options.fetch(:request_paths).empty?
-          raise ArgumentError, "--request-paths is required for --target requests"
+          raise ArgumentError, "--request-paths or reviewed coverage requests are required for --target requests"
         end
 
         options
@@ -600,6 +621,10 @@ module RailsDependencyPruner
           return current_path if File.exist?(current_path)
 
           app_relative_path(app_root, path)
+        end
+
+        def coverage_request_paths(path)
+          CoverageManifest.load(path).request_entries.map { |entry| entry.fetch("path") }.uniq
         end
 
         def blank?(value)

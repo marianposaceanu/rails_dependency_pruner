@@ -16,6 +16,7 @@ module RailsDependencyPruner
         ]
 
         append_target(lines)
+        append_coverage(lines)
         append_profile(lines)
         append_variants(lines)
         append_process_memory(lines)
@@ -42,6 +43,18 @@ module RailsDependencyPruner
           lines << "- Skip railties: #{list(skip_railties)}" unless skip_railties.empty?
           request_paths = Array(payload["request_paths"])
           lines << "- Request paths: #{list(request_paths)}" unless request_paths.empty?
+          lines << ""
+        end
+
+        def append_coverage(lines)
+          coverage = payload["coverage"]
+          return unless coverage
+
+          lines << "- Coverage: `#{coverage.fetch("path")}`"
+          lines << "- Coverage digest: `#{coverage.fetch("digest")}`" if coverage["digest"]
+          lines << "- Coverage Rails env: `#{coverage.fetch("rails_env")}`" if coverage["rails_env"]
+          workloads = Array(coverage["workloads"])
+          lines << "- Coverage workloads: #{list(workloads)}" unless workloads.empty?
           lines << ""
         end
 
