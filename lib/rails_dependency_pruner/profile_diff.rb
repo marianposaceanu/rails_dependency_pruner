@@ -31,6 +31,7 @@ module RailsDependencyPruner
       lazy_constants
       memory_policy
       safety_policy
+      overrides
       safety
       summary
     ].freeze

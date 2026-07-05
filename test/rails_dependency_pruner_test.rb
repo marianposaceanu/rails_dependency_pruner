@@ -1073,6 +1073,53 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_profile_diff_reports_safety_override_changes
+    Dir.mktmpdir("rails_dependency_pruner_profile_diff_overrides") do |dir|
+      old_profile = File.join(dir, "old.json")
+      new_profile = File.join(dir, "new.json")
+      payload = {
+        "schema_version" => 3,
+        "overrides" => [],
+        "pruning" => {
+          "disabled_constants" => [],
+          "disabled_require_paths" => [],
+        },
+      }
+      changed = Marshal.load(Marshal.dump(payload))
+      changed["overrides"] = [
+        {
+          "id" => "allow_dynamic_constantize_admin_reports",
+          "reason" => "Admin reports constantize only app-owned report classes",
+          "owner" => "platform-team",
+          "expires_at" => "2099-01-01",
+          "paths" => ["app/services/report_runner.rb"],
+        },
+      ]
+      File.write(old_profile, JSON.pretty_generate(payload))
+      File.write(new_profile, JSON.pretty_generate(changed))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "diff",
+        "--old",
+        old_profile,
+        "--new",
+        new_profile,
+        "--semantic",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      diff = JSON.parse(stdout)
+      assert_equal true, diff.fetch("changed")
+      assert_equal true, diff.fetch("semantic")
+      assert diff.fetch("context_changes").any? { |change| change.fetch("key") == "overrides" }
+    end
+  end
+
   def test_profile_diff_semantic_ignores_approval_only_changes
     Dir.mktmpdir("rails_dependency_pruner_profile_semantic_diff") do |dir|
       old_profile = File.join(dir, "old.json")

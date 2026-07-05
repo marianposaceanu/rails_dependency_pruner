@@ -137,7 +137,7 @@ Schema v3 profiles can also carry `overrides` from the coverage manifest. Each
 entry has an id, owner, reason, future expiry, and paths. The verifier uses
 valid entries only for the listed dynamic require/load or dynamic
 constantization paths. Because the entries are in the profile payload, changing
-the override changes the profile digest.
+the override changes the profile digest and appears in semantic profile diffs.
 
 ## runtime events
 
