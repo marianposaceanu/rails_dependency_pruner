@@ -12,6 +12,8 @@ require_relative "static/require_visitor"
 
 module RailsDependencyPruner
   class Planner
+    COMPONENT_NEUTRAL_CONSTANTS = %w[Rails].freeze
+
     attr_reader :index, :usage, :runtime_evidence
 
     def initialize(index:, usage:, runtime_evidence: nil)
@@ -31,6 +33,8 @@ module RailsDependencyPruner
           next if used.include?(constant)
 
           used << constant
+
+          next if COMPONENT_NEUTRAL_CONSTANTS.include?(constant)
 
           resolver.parent_constants(constant).each do |parent|
             queue << parent unless used.include?(parent)

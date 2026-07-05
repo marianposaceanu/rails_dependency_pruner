@@ -409,10 +409,9 @@ ActiveRecord, Action View, and Active Storage.
 
 Small-app benchmark target: `generic_blog_app` is the
 "generic blog simple app". Acceptance target: at least `40%` RSS reduction on a
-measured production request workload. Latest static smoke found 4 exact Rake
-task candidates and no direct `Vips`, `Nokogiri`, or `Sentry` lazy-gem surface
-there; the `40%` RSS target still needs a request measurement before it is a
-result.
+measured production request workload. Current Ruby `4.0.5` request smoke saved
+`34672 KB` RSS (`33.9 MiB`, `21.5%`) after pruning unused Rails engines and
+disabling eager load, so this target is not met yet.
 
 Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.

@@ -174,7 +174,10 @@ a valid memory win.
 Use Lobsters for the larger real-app workload. For a smaller generic blog app,
 use `generic_blog_app`. The target for that app is at
 least `40%` RSS reduction on a production request workload, measured with the
-same baseline and candidate request paths before it is reported as a result.
+same baseline and candidate request paths before it is reported as a success.
+The current Ruby `4.0.5` smoke on a temporary copy saved `34672 KB` RSS
+(`33.9 MiB`, `21.5%`) on `/up`, `/`, `/archive`, `/home/about`,
+`/home/projects`, `/feed`, and `/404`, so the target remains open.
 
 The checked-in static regression matrix lives under `test/fixtures/apps`. It
 covers minimal Rails, Active Record only, Action Mailer, Active Storage

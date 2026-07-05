@@ -168,6 +168,7 @@ module RailsDependencyPruner
           index: index,
           scan_roots: options.fetch(:scan_roots),
           feature_catalog: feature_catalog_for(index),
+          rails_env: rails_env_for_usage(options),
         )
         context = ProfileContext.build(
           app_root: options.fetch(:app_root),
@@ -816,6 +817,7 @@ module RailsDependencyPruner
           index: index,
           scan_roots: options.fetch(:scan_roots),
           feature_catalog: feature_catalog_for(index),
+          rails_env: rails_env_for_usage(options),
         )
         runtime_evidence = runtime_evidence_for(options.fetch(:runtime_evidence_paths), index)
         Planner.new(index: index, usage: usage, runtime_evidence: runtime_evidence)
@@ -823,6 +825,17 @@ module RailsDependencyPruner
 
       def feature_catalog_for(index)
         FeatureCatalog.for_rails_version(index.source.version)
+      end
+
+      def rails_env_for_usage(options)
+        coverage_path = options[:coverage_path]
+        return unless coverage_path
+
+        path = Pathname.new(coverage_path)
+        path = Pathname.new(options.fetch(:app_root)).join(path) unless path.absolute? || path.file?
+        CoverageManifest.load(path).rails_env
+      rescue ArgumentError
+        nil
       end
 
       def boot_plan_for_profile(mode, planner)

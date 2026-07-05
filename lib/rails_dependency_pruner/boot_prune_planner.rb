@@ -3,6 +3,7 @@
 require "set"
 
 require_relative "boot_plan"
+require_relative "planner"
 
 module RailsDependencyPruner
   class BootPrunePlanner
@@ -17,7 +18,7 @@ module RailsDependencyPruner
     }.freeze
 
     ALWAYS_KEEP = %w[activesupport railties].freeze
-    COMPONENT_NEUTRAL_CONSTANTS = %w[Rails].freeze
+    COMPONENT_NEUTRAL_CONSTANTS = Planner::COMPONENT_NEUTRAL_CONSTANTS
     FRAMEWORK_APP_PATHS = {
       "actioncable" => %w[app/channels],
       "actionmailbox" => %w[app/mailboxes],

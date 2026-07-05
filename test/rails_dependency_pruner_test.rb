@@ -600,6 +600,40 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_includes rails81.to_h.keys, "active_model"
   end
 
+  def test_generic_rails_constant_does_not_keep_framework_peers
+    Dir.mktmpdir("rails_dependency_pruner_neutral_rails") do |dir|
+      rails_root = File.join(dir, "rails")
+      app_root = File.join(dir, "app")
+      FileUtils.mkdir_p(File.join(rails_root, "actioncable/lib/rails/generators/channel"))
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      File.write(File.join(rails_root, "actioncable/lib/rails/generators/channel/channel_generator.rb"), <<~RUBY)
+        module Rails
+          module Generators
+            class ChannelGenerator
+            end
+          end
+        end
+      RUBY
+      File.write(File.join(app_root, "config/application.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.eager_load = true
+        end
+      RUBY
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: rails_root,
+        frameworks: %w[actioncable],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index)
+      planner = RailsDependencyPruner::Planner.new(index: index, usage: usage)
+      plan = RailsDependencyPruner::BootPrunePlanner.new(planner).plan
+
+      assert_includes usage.direct_rails_constants, "Rails"
+      refute_includes planner.used_constants, "Rails::Generators::ChannelGenerator"
+      assert_includes plan.pruned_frameworks, "actioncable"
+    end
+  end
+
   def test_dynamic_constant_patterns_keep_exact_literal_constants
     Dir.mktmpdir("rails_dependency_pruner_dynamic_constants") do |dir|
       app_root = File.join(dir, "app")
@@ -739,6 +773,41 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal "config", storage_config_match.fetch("evidence_kind")
       assert_equal ["active_storage/engine"], storage_config_match.fetch("railties")
       assert_equal ["active_storage"], storage_config_match.fetch("coverage_required")
+    end
+  end
+
+  def test_app_usage_filters_environment_configs_for_target_rails_env
+    Dir.mktmpdir("rails_dependency_pruner_env_config") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(
+        File.join(app_root, "config/environments/production.rb"),
+        <<~RUBY,
+          Rails.application.configure do
+            config.active_storage.service = :local
+          end
+        RUBY
+      )
+      File.write(
+        File.join(app_root, "config/environments/test.rb"),
+        <<~RUBY,
+          Rails.application.configure do
+            config.action_mailer.delivery_method = :test
+          end
+        RUBY
+      )
+
+      index = RailsDependencyPruner::ConstantIndex.build(
+        rails_root: FAKE_RAILS_ROOT,
+        frameworks: %w[actionmailer activestorage],
+      )
+      usage = RailsDependencyPruner::AppUsage.scan(app_root: app_root, index: index, rails_env: "production")
+
+      assert_includes usage.direct_rails_constants, "ActiveStorage::Blob"
+      refute_includes usage.direct_rails_constants, "ActionMailer::Base"
+      assert usage.sorted_config_matches.any? { |match| match.fetch("path") == "config/environments/production.rb" }
+      refute usage.sorted_config_matches.any? { |match| match.fetch("path") == "config/environments/test.rb" }
     end
   end
 
@@ -6297,6 +6366,52 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_includes profile.dig("explanations", "activejob", "negative_evidence"), "no static framework evidence in scanned app files"
       assert_equal "keep_framework", profile.dig("explanations", "activerecord", "decision")
       assert profile.dig("explanations", "activerecord", "positive_evidence").any? { |evidence| evidence.include?("ActiveRecord::Base") }
+    end
+  end
+
+  def test_plan_command_uses_coverage_rails_env_for_static_scan
+    Dir.mktmpdir("rails_dependency_pruner_plan_env") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config/environments"))
+      File.write(File.join(app_root, "config/environments/test.rb"), <<~RUBY)
+        Rails.application.configure do
+          config.action_mailer.delivery_method = :test
+        end
+      RUBY
+      coverage_path = File.join(dir, "coverage.yml")
+      profile_path = File.join(dir, "profile.json")
+      File.write(coverage_path, <<~YAML)
+        ---
+        version: 2
+        rails_env: production
+      YAML
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionmailer,actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.dig("boot_plan", "pruned_frameworks"), "actionmailer"
+      profile = JSON.parse(File.read(profile_path))
+      assert_includes profile.dig("pruning", "disabled_frameworks"), "actionmailer"
+      assert_equal "production", profile.dig("environment", "rails_env")
     end
   end
 

@@ -811,6 +811,27 @@ clustered Puma for both apps; max RSS was `53624832` bytes for Lobsters and
 `48119808` bytes for the generic_blog_app generic blog app. Artifacts:
 `tmp/ci-matrix-doctor-lobsters.json` and `tmp/ci-matrix-doctor-mp.json`. No
 request RSS benchmark was run for this milestone.
+Production-env scanner follow-up stopped generic `Rails` constants from keeping
+framework peer constants and made `plan --coverage` honor the manifest
+`rails_env` while scanning `config/environments/*.rb`. On a temporary Ruby
+`4.0.5` copy of the generic_blog_app generic blog app, the profile pruned Action
+Cable, Action Mailbox, Action Mailer, Action Text, Active Job, and Active
+Storage. The request smoke used `/up`, `/`, `/archive`, `/home/about`,
+`/home/projects`, `/feed`, and `/404`; all statuses matched. Original
+`rails/all` RSS was `161328 KB`; patched baseline RSS was `131552 KB`; the
+boot-pruned candidate was `126656 KB`. Total saving was `34672 KB`
+(`33.9 MiB`, `21.5%`), so the `40%` target remains open. Artifacts:
+`tmp/generic_blog_app-ruby405-env-filter-coverage.yml`,
+`tmp/generic_blog_app-ruby405-env-filter-profile.json`,
+`tmp/generic_blog_app-ruby405-env-filter.patch`,
+`tmp/generic_blog_app-ruby405-env-filter-original-baseline-1run.json`, and
+`tmp/generic_blog_app-ruby405-env-filter-measurement-patched-1run.json`.
+Sequential static smokes also passed: Lobsters doctor max RSS `53460992` bytes,
+Lobsters coverage-template max RSS `53673984` bytes, generic_blog_app doctor max
+RSS `47923200` bytes, and generic_blog_app coverage-template max RSS `48496640`
+bytes. Artifacts: `tmp/env-scan-doctor-lobsters.json`,
+`tmp/env-scan-coverage-lobsters-template.yml`, `tmp/env-scan-doctor-mp.json`,
+and `tmp/env-scan-coverage-mp-template.yml`.
 
 ## what eats memory
 

@@ -19,13 +19,14 @@ module RailsDependencyPruner
   class AppUsage
     DEFAULT_SCAN_ROOTS = %w[app config lib].freeze
 
-    attr_reader :app_root, :index, :scan_roots, :feature_catalog, :references, :require_references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :require_matches, :parse_errors
+    attr_reader :app_root, :index, :scan_roots, :feature_catalog, :rails_env, :references, :require_references, :feature_matches, :config_matches, :route_matches, :dynamic_matches, :require_matches, :parse_errors
 
-    def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default)
+    def initialize(app_root:, index:, scan_roots: DEFAULT_SCAN_ROOTS, feature_catalog: FeatureCatalog.default, rails_env: nil)
       @app_root = Pathname.new(app_root).expand_path
       @index = index
       @scan_roots = scan_roots
       @feature_catalog = feature_catalog
+      @rails_env = rails_env&.to_s
       @references = []
       @require_references = []
       @feature_matches = []
@@ -135,6 +136,7 @@ module RailsDependencyPruner
         app_root: app_root.to_s,
         scan_roots: scan_roots,
         feature_catalog: feature_catalog_context,
+        rails_env: rails_env,
         files_scanned: ruby_files.length,
         parse_errors: parse_errors,
         direct_rails_constants_count: direct_rails_constants.length,
@@ -180,9 +182,17 @@ module RailsDependencyPruner
             relative_path = relative(path)
             relative_path.start_with?("tmp/") ||
               relative_path.start_with?("vendor/bundle/") ||
-              relative_path.start_with?("node_modules/")
+              relative_path.start_with?("node_modules/") ||
+              ignored_environment_config?(relative_path)
           end
         end
+      end
+
+      def ignored_environment_config?(relative_path)
+        return false unless rails_env
+
+        match = relative_path.match(%r{\Aconfig/environments/([^/]+)\.rb\z})
+        match && match[1] != rails_env
       end
 
       def relative(path)
