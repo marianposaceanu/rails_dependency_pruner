@@ -21,8 +21,11 @@ The checked-in fixture matrix covers planner decisions for:
 - Active Record only
 - Action Mailer
 - Active Storage attachment declarations
+- Active Job
+- Action Text
 - Action Cable channel and mount
 - mounted Rack or engine route
+- Sentry, Honeybadger, Rollbar, and Rack Mini Profiler integration signals
 
 These fixtures are static source shapes, not bootable apps. Lobsters and
 `generic_blog_app` remain the real RSS benchmark targets.
@@ -32,7 +35,7 @@ These fixtures are static source shapes, not bootable apps. Lobsters and
 - Rails `7.2` catalogs
 - Linux x86_64 and Linux arm64 release measurements
 - Puma clustered, Falcon, and Passenger matrices
-- Action Text and third-party observability fixture apps beyond static scanning
+- Bootable Action Text and third-party observability sample apps beyond static fixtures
 
 Production approval is still app-specific. A supported Rails version only means
 the catalog and gem dependency range exist; approval still requires coverage,

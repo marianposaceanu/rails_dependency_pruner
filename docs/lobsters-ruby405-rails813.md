@@ -268,6 +268,9 @@ Runtime event manifest smoke:
   section from the static scan; max RSS `45973504` bytes
 - rollback-template smoke wrote reviewed rollback placeholders to
   `tmp/lobsters-ruby405-rollback-template-smoke.yml`; max RSS `42205184` bytes
+- fixture-matrix doctor smoke scanned Lobsters without booting it, detected
+  Rack Mini Profiler, Sentry, Puma, jobs, and mailers, and used max RSS
+  `41353216` bytes
 - event artifacts:
   `tmp/lobsters-ruby405-rails813-event-manifest-smoke.json`,
   `tmp/lobsters-ruby405-rails813-event-manifest-no-svg-graph-smoke.json`,
@@ -281,7 +284,9 @@ Runtime event manifest smoke:
   `tmp/lobsters-ruby405-reference-matrix-static-smoke.json`,
   `tmp/lobsters-ruby405-process-memory-details-smoke.json`,
   `tmp/lobsters-ruby405-process-memory-report-smoke.json`,
-  `tmp/lobsters-ruby405-process-memory-report-smoke.md`
+  `tmp/lobsters-ruby405-process-memory-report-smoke.md`,
+  `tmp/lobsters-ruby405-fixture-matrix-doctor-smoke.json`,
+  `tmp/lobsters-ruby405-fixture-matrix-doctor-smoke.time`
 
 The current strict-profile smoke above uses the no-`svg-graph` profile. The
 older full-profile RSS rows are still useful as historical context, but do not

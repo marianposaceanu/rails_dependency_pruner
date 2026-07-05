@@ -63,6 +63,38 @@ apps:
       - actionpack
       - actiontext
       - actionview
+  active_job:
+    description: Active Job class and queue DSL
+    expected_required:
+      - activejob
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
+      - activemodel
+      - activerecord
+      - activestorage
+  action_text:
+    description: rich text declaration on Active Record model
+    expected_required:
+      - actionpack
+      - actiontext
+      - actionview
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
   action_cable:
     description: channel class and mounted Action Cable server
     expected_required:
@@ -75,6 +107,22 @@ apps:
       - actionmailbox
       - actionmailer
       - actiontext
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
+  observability_integrations:
+    description: Sentry, Honeybadger, Rollbar, and Rack Mini Profiler integration surface
+    expected_required:
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
       - activejob
       - activemodel
       - activerecord

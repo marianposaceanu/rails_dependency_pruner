@@ -102,6 +102,28 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_reference_observability_fixture_reports_integrations
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "doctor",
+      "--app",
+      REFERENCE_APPS_ROOT.join("observability_integrations").to_s,
+      "--json",
+      chdir: ROOT.to_s,
+    )
+
+    assert status.success?, stderr
+
+    payload = JSON.parse(stdout)
+    assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails], payload.dig("capabilities", "integrations")
+    assert_equal true, payload.dig("capabilities", "direct_gem_usage", "sentry", "present")
+    assert_equal true, payload.dig("capabilities", "direct_gem_usage", "honeybadger", "present")
+    assert_equal true, payload.dig("capabilities", "direct_gem_usage", "rollbar", "present")
+    assert_equal "use", payload.dig("capabilities", "middleware", 0, "operation")
+    assert_equal "Rack::MiniProfiler", payload.dig("capabilities", "middleware", 0, "target")
+  end
+
   def test_app_literal_require_keeps_rails_file_constants
     Dir.mktmpdir("rails_dependency_pruner_static_require") do |dir|
       app_root = File.join(dir, "app")

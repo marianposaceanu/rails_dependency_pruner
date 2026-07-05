@@ -170,5 +170,6 @@ same baseline and candidate request paths before it is reported as a result.
 
 The checked-in static regression matrix lives under `test/fixtures/apps`. It
 covers minimal Rails, Active Record only, Action Mailer, Active Storage
-attachments, Action Cable, and mounted engine shapes. These fixtures assert
-planner decisions only; Lobsters and generic_blog_app remain the RSS benchmarks.
+attachments, Active Job, Action Text, Action Cable, mounted engine shapes, and
+observability integrations. These fixtures assert planner decisions only;
+Lobsters and generic_blog_app remain the RSS benchmarks.
