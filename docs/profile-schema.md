@@ -174,6 +174,7 @@ Supported `unexpected_event_policy` values:
 
 Generated schema v3 profiles use
 `fail_in_canary_report_in_production` by default.
+Validation rejects explicit policy values outside that list.
 
 Lazy gem policies are keyed by gem name and are required for production when
 `extreme_boot.lazy_gems` is not empty. The legacy array remains for runtime

@@ -4,6 +4,13 @@ require_relative "safety_policy"
 
 module RailsDependencyPruner
   module ProfileSchema
+    UNEXPECTED_EVENT_POLICIES = %w[
+      report
+      fail_boot
+      fail_all
+      fail_in_canary_report_in_production
+    ].freeze
+
     module_function
 
     def profile_id(payload)
@@ -25,6 +32,10 @@ module RailsDependencyPruner
 
     def deterministic_schema?(schema_version)
       [2, 3].include?(schema_version)
+    end
+
+    def valid_unexpected_event_policy?(policy)
+      UNEXPECTED_EVENT_POLICIES.include?(policy.to_s)
     end
 
     def migrate_v2(payload)

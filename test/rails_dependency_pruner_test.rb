@@ -848,6 +848,25 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_profile_validate_rejects_unknown_unexpected_event_policy
+    Dir.mktmpdir("rails_dependency_pruner_event_policy") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      profile_path = File.join(dir, "profile.json")
+      write_deterministic_profile(profile_path: profile_path, app_root: app_root)
+
+      payload = JSON.parse(File.read(profile_path))
+      payload["unexpected_event_policy"] = "ignore_events"
+      RailsDependencyPruner::ProfileSchema.set_profile_id(payload, RailsDependencyPruner::Profile.new(payload).digest)
+      RailsDependencyPruner::Profile.new(payload).write(profile_path)
+
+      _stdout, stderr, status = validate_profile(profile_path: profile_path, app_root: app_root)
+      refute status.success?
+      assert_includes stderr, "unexpected_event_policy invalid"
+      assert_includes stderr, "ignore_events"
+    end
+  end
+
   def test_profile_schema_migrates_v2_payload_shape
     migrated = RailsDependencyPruner::ProfileSchema.migrate_v2(
       "schema_version" => 2,
@@ -1267,6 +1286,46 @@ class RailsDependencyPrunerTest < Minitest::Test
       payload = JSON.parse(stdout)
       assert_equal false, payload.fetch("verified")
       assert_includes payload.fetch("errors"), "production verify requires a coverage manifest digest"
+    end
+  end
+
+  def test_verify_production_rejects_unknown_unexpected_event_policy
+    Dir.mktmpdir("rails_dependency_pruner_verify_event_policy") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = write_coverage_manifest(app_root)
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+      payload = JSON.parse(File.read(profile_path))
+      payload["unexpected_event_policy"] = "ignore_events"
+      RailsDependencyPruner::ProfileSchema.set_profile_id(payload, RailsDependencyPruner::Profile.new(payload).digest)
+      RailsDependencyPruner::Profile.new(payload).write(profile_path)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_equal false, payload.fetch("verified")
+      assert payload.fetch("errors").any? { |error| error.include?("unexpected_event_policy invalid") }
     end
   end
 

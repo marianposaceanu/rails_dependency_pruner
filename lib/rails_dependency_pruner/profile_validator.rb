@@ -66,7 +66,18 @@ module RailsDependencyPruner
 
           compare(errors, "fingerprints.#{key}", profile.payload.dig("fingerprints", key), value)
         end
+        validate_unexpected_event_policy(errors)
         compare(errors, "overrides", Array(profile.payload["overrides"]), context.safety_overrides_context)
+      end
+
+      def validate_unexpected_event_policy(errors)
+        return unless profile.payload.key?("unexpected_event_policy")
+
+        policy = profile.payload["unexpected_event_policy"].to_s
+        return if ProfileSchema.valid_unexpected_event_policy?(policy)
+
+        allowed = ProfileSchema::UNEXPECTED_EVENT_POLICIES.sort.join(", ")
+        errors << "unexpected_event_policy invalid: expected one of #{allowed}, got #{profile.payload["unexpected_event_policy"].inspect}"
       end
 
       def compare(errors, key, expected, actual)
