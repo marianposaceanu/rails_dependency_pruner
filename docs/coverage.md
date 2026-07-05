@@ -27,8 +27,8 @@ Typical review steps:
 - remove sections that are not covered
 - add storage, Action Text, inbound email, job, mailer, and channel coverage
   when those flows exist in production
-- keep generated job classes, mailer actions, and channel classes only when the
-  exact entries were covered
+- keep generated job classes, mailer actions, channel classes, and mailboxes
+  only when the exact entries were covered
 - replace external integration `review` placeholders with a reviewed production
   status before lazying or stubbing integration gems
 - keep `rake_tasks` to the production tasks covered by the release process;
@@ -52,10 +52,10 @@ attachment-read coverage. A single `attachments` workload marker is not enough
 for that railtie skip.
 Action Text pruning requires reviewed `action_text` coverage, even when the
 review says rich-text declarations are not expected in production.
-When `disable_eager_load` is enabled, declared job classes, mailer actions, and
-channel classes must be covered by exact manifest entries such as
-`jobs.CleanupJob`, `mailers.UserMailer#welcome`, and
-`channels.NotificationsChannel`.
+When `disable_eager_load` is enabled, declared job classes, mailer actions,
+channel classes, and inbound email mailboxes must be covered by exact manifest
+entries such as `jobs.CleanupJob`, `mailers.UserMailer#welcome`,
+`channels.NotificationsChannel`, and `inbound_email.ApplicationMailbox`.
 When `disable_eager_load` is enabled, app-defined rake tasks also require
 reviewed `rake_tasks` coverage because task constants may move from boot to
 first use.

@@ -45,6 +45,10 @@ channels:
   review_required: false
   classes:
     - NotificationsChannel
+inbound_email:
+  review_required: false
+  mailboxes:
+    - ApplicationMailbox
 active_storage:
   review_required: false
   declarations_expected: false
@@ -81,9 +85,9 @@ rollback:
   env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
 ```
 
-For `disable_eager_load`, job classes, mailer actions, and channel classes are
-matched by exact entry. A reviewed `jobs` section that omits `ReportJob` does
-not cover first use of `ReportJob`.
+For `disable_eager_load`, job classes, mailer actions, channel classes, and
+mailboxes are matched by exact entry. A reviewed `jobs` section that omits
+`ReportJob` does not cover first use of `ReportJob`.
 
 Production verification fails when a transform needs a workload that is missing
 or still marked for review. Active Storage declarations alone do not count as

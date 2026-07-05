@@ -837,9 +837,11 @@ module RailsDependencyPruner
         gaps.concat(declared_entry_coverage_gaps("jobs", declared_job_classes, coverage_manifest&.job_classes))
         gaps.concat(declared_entry_coverage_gaps("mailers", declared_mailer_actions, coverage_manifest&.mailer_actions))
         gaps.concat(declared_entry_coverage_gaps("channels", declared_channel_classes, coverage_manifest&.channel_classes))
+        gaps.concat(declared_entry_coverage_gaps("inbound_email", declared_mailbox_classes, coverage_manifest&.inbound_email_mailboxes))
         gaps << "jobs" if declared_job_classes.empty? && app_path_has_ruby_files?("app/jobs") && !coverage_workloads.include?("jobs")
         gaps << "mailers" if declared_mailer_actions.empty? && app_path_has_ruby_files?("app/mailers") && !coverage_workloads.include?("mailers")
         gaps << "cable" if declared_channel_classes.empty? && app_path_has_ruby_files?("app/channels") && !coverage_workloads.include?("cable")
+        gaps << "inbound_email" if declared_mailbox_classes.empty? && app_path_has_ruby_files?("app/mailboxes") && !coverage_workloads.include?("inbound_email")
         gaps << "attachments" if active_storage_attachment_static_usage? && !coverage_workloads.include?("attachments")
         gaps << "action_text" if action_text_static_usage? && !coverage_workloads.include?("action_text")
         gaps << "rake_tasks" if rake_task_static_usage? && !coverage_workloads.include?("rake_tasks")
@@ -988,6 +990,10 @@ module RailsDependencyPruner
 
       def declared_channel_classes
         @declared_channel_classes ||= class_names_under("app/channels")
+      end
+
+      def declared_mailbox_classes
+        @declared_mailbox_classes ||= class_names_under("app/mailboxes")
       end
 
       def class_names_under(relative_path)

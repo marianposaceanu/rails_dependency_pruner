@@ -162,6 +162,10 @@ module RailsDependencyPruner
       reviewed_entries("channels", "classes")
     end
 
+    def inbound_email_mailboxes
+      reviewed_entries("inbound_email", "mailboxes")
+    end
+
     def request_entries
       @request_entries ||= normalized_request_entries(payload["requests"])
     end

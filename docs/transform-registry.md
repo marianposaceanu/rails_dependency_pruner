@@ -82,10 +82,10 @@ rollback checklist.
 `disable_eager_load` is medium risk. Production verification requires request
 coverage, memory policy gates for first request, p95, and p99 latency, and
 reviewed exact coverage for app-declared job classes, mailer actions, and
-channel classes. It also requires coverage for inbound email, Active Storage
-attachments, Action Text, rake tasks, and mounted Rack app or engine paths. RSS
-savings alone are not enough because this transform can move work from boot to
-first use.
+channel classes. It also requires exact inbound email mailbox coverage, Active
+Storage attachment coverage, Action Text, rake tasks, and mounted Rack app or
+engine paths. RSS savings alone are not enough because this transform can move
+work from boot to first use.
 
 `skip_railtie:active_storage/engine` requires full reviewed Active Storage
 action coverage when the app declares attachments: upload, analyze, variant,
