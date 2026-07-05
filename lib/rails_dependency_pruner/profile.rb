@@ -136,7 +136,7 @@ module RailsDependencyPruner
           "warnings" => [],
           "failure_mode" => "raise",
         },
-        "unexpected_event_policy" => "fail_boot",
+        "unexpected_event_policy" => "fail_in_canary_report_in_production",
         "explanations" => explanations || {},
       }
       memory_policy = context.memory_policy_context

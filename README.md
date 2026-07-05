@@ -322,9 +322,10 @@ events and does not change boot behavior.
 checks. `RAILS_DEPENDENCY_PRUNER_MODE=production` requires
 `safety.production_allowed=true`, a matching `profile_id` in the profile, and
 `RAILS_DEPENDENCY_PRUNER_PROFILE_ID=sha256:...`. Safety modes classify early
-boot events against the profile's `expected_events`; unexpected boot events fail
-closed unless `unexpected_event_policy` is set to `report`. Lazy constants can be
-limited to declared phases through `lazy_constants`. Set
+boot events against the profile's `expected_events`. Generated profiles fail
+closed for unexpected canary events, fail production boot for unexpected boot
+events, and report production request events. Lazy constants can be limited to
+declared phases through `lazy_constants`. Set
 `RAILS_DEPENDENCY_PRUNER_EVENT_LOG=tmp/pruner-events.ndjson` to mirror structured
 events to an NDJSON file. Set
 `RAILS_DEPENDENCY_PRUNER_DISABLE=1` to skip it.

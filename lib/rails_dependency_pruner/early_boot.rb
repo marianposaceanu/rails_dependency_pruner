@@ -84,7 +84,7 @@ module RailsDependencyPruner
     SAFETY_MODES = %w[canary production].freeze
     BLOCKING_MODES = %w[boot_prune canary production].freeze
     UNEXPECTED_EVENT_POLICIES = %w[report fail_boot fail_all fail_in_canary_report_in_production].freeze
-    DEFAULT_UNEXPECTED_EVENT_POLICY = "fail_boot"
+    DEFAULT_UNEXPECTED_EVENT_POLICY = "fail_in_canary_report_in_production"
     DisabledRequireError = Class.new(StandardError)
     UnsafeProfileError = Class.new(StandardError)
     UnexpectedEventError = Class.new(StandardError)

@@ -172,6 +172,9 @@ Supported `unexpected_event_policy` values:
 - `fail_in_canary_report_in_production`: fail canary, and still fail closed for
   production boot events
 
+Generated schema v3 profiles use
+`fail_in_canary_report_in_production` by default.
+
 Lazy gem policies are keyed by gem name and are required for production when
 `extreme_boot.lazy_gems` is not empty. The legacy array remains for runtime
 compatibility, but production review uses the structured entry:
