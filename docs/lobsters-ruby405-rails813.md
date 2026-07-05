@@ -781,6 +781,18 @@ kept `boot.eager_load: true` with max RSS `47628288` bytes. Artifacts:
 `tmp/boot-mode-matrix-doctor-mp.json`, and
 `tmp/boot-mode-matrix-coverage-mp-template.yml`. No request RSS benchmark was
 run for this milestone.
+Puma topology follow-up added static doctor output for Puma mode, worker/thread
+settings, `preload_app!`, and plugins. Lobsters reported clustered Puma with
+dynamic worker/thread expressions, `preload_app!`, `tmp_restart` and
+`solid_queue` plugins, and max RSS `52477952` bytes; its coverage template used
+max RSS `53526528` bytes. The generic_blog_app generic blog app reported clustered
+Puma with dynamic worker/thread expressions, `preload_app!`, no plugins, and
+max RSS `47366144` bytes; its coverage template used max RSS `47808512` bytes.
+Artifacts: `tmp/puma-topology-doctor-lobsters.json`,
+`tmp/puma-topology-coverage-lobsters-template.yml`,
+`tmp/puma-topology-doctor-mp.json`, and
+`tmp/puma-topology-coverage-mp-template.yml`. No request RSS benchmark was run
+for this milestone.
 
 ## what eats memory
 

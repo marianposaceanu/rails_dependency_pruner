@@ -192,6 +192,40 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_empty payload.dig("capabilities", "parse_errors")
   end
 
+  def test_reference_puma_clustered_fixture_reports_server_topology
+    stdout, stderr, status = Open3.capture3(
+      RUBY,
+      ROOT.join("exe/rails-dependency-pruner").to_s,
+      "doctor",
+      "--app",
+      REFERENCE_APPS_ROOT.join("puma_clustered").to_s,
+      "--json",
+      chdir: ROOT.to_s,
+    )
+
+    assert status.success?, stderr
+
+    payload = JSON.parse(stdout)
+    assert_equal ["puma"], payload.dig("capabilities", "adapters")
+    web_servers = payload.dig("capabilities", "web_servers")
+    assert_equal 1, web_servers.length
+    puma = web_servers.first
+    assert_equal "puma", puma.fetch("server")
+    assert_equal true, puma.fetch("present")
+    assert_equal "config/puma.rb", puma.fetch("config_path")
+    assert_equal "clustered", puma.fetch("mode")
+    assert_equal true, puma.fetch("clustered")
+    assert_equal 2, puma.dig("workers", "value")
+    assert_equal "2", puma.dig("workers", "raw")
+    assert_equal 3, puma.dig("threads", "value")
+    assert_equal "3, 5", puma.dig("threads", "raw")
+    assert_equal true, puma.dig("preload_app", "value")
+    assert_equal ["tmp_restart"], puma.fetch("plugins").map { |entry| entry.fetch("name") }
+    assert_equal "web_server", puma.fetch("class")
+    assert_equal ["requests"], puma.fetch("coverage_required")
+    assert_empty payload.dig("capabilities", "parse_errors")
+  end
+
   def test_reference_configured_adapters_fixture_reports_config_surface
     stdout, stderr, status = Open3.capture3(
       RUBY,
@@ -9589,6 +9623,10 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal %w[bootsnap good_job puma que sidekiq solid_queue], adapter_policies.map { |entry| entry.fetch("gem") }
       assert_equal %w[boot_cache job_adapter web_server job_adapter job_adapter job_adapter], adapter_policies.map { |entry| entry.fetch("class") }
       assert_equal [%w[boot], %w[jobs], %w[requests], %w[jobs], %w[jobs], %w[jobs]], adapter_policies.map { |entry| entry.fetch("coverage_required") }
+      web_servers = payload.dig("capabilities", "web_servers")
+      assert_equal ["puma"], web_servers.map { |entry| entry.fetch("server") }
+      assert_equal ["single"], web_servers.map { |entry| entry.fetch("mode") }
+      assert_equal [false], web_servers.map { |entry| entry.fetch("clustered") }
       assert_equal ["solid_queue"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("adapter") }
       assert_equal ["solid_queue"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("gem") }
       assert_equal ["job_adapter"], payload.dig("capabilities", "active_job_queue_adapters").map { |entry| entry.fetch("class") }

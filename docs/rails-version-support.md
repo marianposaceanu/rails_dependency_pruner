@@ -27,6 +27,7 @@ The checked-in fixture matrix covers planner decisions for:
 - Action Cable channel and mount
 - mounted Rack or engine route
 - eager-load true/false and boot-cache gem mode signals
+- Puma single and clustered static config signals
 - config-only job, mailer, storage, and cable adapter settings
 - Sentry, Honeybadger, Rollbar, and Rack Mini Profiler integration signals
 - third-party integration policy classes for `sentry-rails`, `sentry-ruby`,
@@ -41,7 +42,7 @@ signals. Lobsters and `generic_blog_app` remain the real RSS benchmark targets.
 
 - Rails `7.2` catalogs
 - Linux x86_64 and Linux arm64 release measurements
-- Puma clustered, Falcon, and Passenger matrices
+- bootable Puma clustered request measurements, Falcon, and Passenger matrices
 - Bootable Action Text and third-party observability sample apps beyond static fixtures
 
 Production approval is still app-specific. A supported Rails version only means

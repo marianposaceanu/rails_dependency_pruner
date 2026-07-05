@@ -175,6 +175,22 @@ apps:
       - activemodel
       - activerecord
       - activestorage
+  puma_clustered:
+    description: Puma clustered config without app feature use
+    expected_required:
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
   configured_adapters:
     description: Rails config selects job, mailer, storage, and cable adapters
     expected_required:

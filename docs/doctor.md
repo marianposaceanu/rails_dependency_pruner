@@ -41,6 +41,8 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.adapters`: known server/job/boot adapter gems
 - `capabilities.adapter_gem_policies`: adapter class, risk, coverage sections,
   and production rule for known adapters
+- `capabilities.web_servers`: static web server topology details, currently
+  Puma config mode, worker/thread settings, `preload_app!`, and plugins
 - `capabilities.active_job_queue_adapters`: configured
   `config.active_job.queue_adapter` values with source locations and job
   coverage requirements

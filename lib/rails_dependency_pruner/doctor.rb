@@ -306,6 +306,7 @@ module RailsDependencyPruner
           "unclassified_integrations" => unclassified_integrations,
           "adapters" => adapters,
           "adapter_gem_policies" => adapter_gem_policies,
+          "web_servers" => web_servers,
           "active_job_queue_adapters" => active_job_queue_adapters,
           "parse_errors" => parse_errors,
         }
@@ -520,6 +521,36 @@ module RailsDependencyPruner
         adapters.map do |name|
           ADAPTER_POLICIES.fetch(name).merge("gem" => name)
         end.sort_by { |entry| entry.fetch("gem") }
+      end
+
+      def web_servers
+        [puma_web_server].compact
+      end
+
+      def puma_web_server
+        return unless gem_names.include?("puma") || puma_config_path.file?
+
+        policy = ADAPTER_POLICIES.fetch("puma")
+        workers = puma_setting("workers")
+        threads = puma_setting("threads")
+        preload_app = puma_preload_app
+
+        {
+          "server" => "puma",
+          "gem" => "puma",
+          "present" => gem_names.include?("puma"),
+          "config_path" => puma_config_path.file? ? "config/puma.rb" : nil,
+          "mode" => puma_mode(workers),
+          "clustered" => puma_clustered?(workers),
+          "workers" => workers,
+          "threads" => threads,
+          "preload_app" => preload_app,
+          "plugins" => puma_plugins,
+          "class" => policy["class"],
+          "risk" => policy["risk"],
+          "coverage_required" => Array(policy["coverage_required"]).map(&:to_s),
+          "production_rule" => policy["production_rule"],
+        }.compact
       end
 
       def active_job_queue_adapters
@@ -741,6 +772,70 @@ module RailsDependencyPruner
 
       def environment_config_files
         @environment_config_files ||= Pathname.glob(app_root.join("config/environments/*.rb").to_s).select(&:file?).sort
+      end
+
+      def puma_config_path
+        app_root.join("config/puma.rb")
+      end
+
+      def puma_lines
+        @puma_lines ||= puma_config_path.file? ? grep_file(puma_config_path, /./) : []
+      end
+
+      def puma_setting(name)
+        puma_lines.filter_map do |match|
+          source = match.fetch("source")
+          next if source.start_with?("#")
+
+          case name
+          when "workers"
+            next unless source.match?(/\Aworkers\b/)
+            raw = source.sub(/\Aworkers\s*/, "").strip
+          when "threads"
+            next unless source.match?(/\Athreads\b/)
+            raw = source.sub(/\Athreads\s*/, "").strip
+          else
+            next
+          end
+
+          match.merge(
+            "value" => literal_number(raw),
+            "raw" => raw,
+          )
+        end.first
+      end
+
+      def puma_preload_app
+        match = puma_lines.find { |entry| entry.fetch("source").match?(/\Apreload_app!/) }
+        return unless match
+
+        match.merge("value" => true)
+      end
+
+      def puma_plugins
+        puma_lines.filter_map do |match|
+          source = match.fetch("source")
+          next if source.start_with?("#")
+          next unless source.match?(/\Aplugin\b/)
+
+          plugin = source[/\Aplugin\s+[:'"]?([A-Za-z0-9_-]+)/, 1]
+          match.merge("name" => plugin).compact
+        end
+      end
+
+      def puma_clustered?(workers)
+        return false unless workers
+        return workers["value"] > 0 if workers["value"].is_a?(Integer)
+
+        true
+      end
+
+      def puma_mode(workers)
+        puma_clustered?(workers) ? "clustered" : "single"
+      end
+
+      def literal_number(raw)
+        raw.to_s[/\A\d+\b/].then { |value| value && Integer(value) }
       end
 
       def action_mailer_delivery_methods
