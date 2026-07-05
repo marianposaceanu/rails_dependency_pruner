@@ -839,6 +839,7 @@ module RailsDependencyPruner
         end
         declared_workloads << "attachments" if active_storage_attachment_static_usage?
         declared_workloads << "action_text" if action_text_static_usage?
+        declared_workloads << "rake_tasks" if rake_task_static_usage?
 
         declared_workloads.uniq.sort - coverage_workloads
       end
@@ -954,6 +955,21 @@ module RailsDependencyPruner
         return false unless root.directory?
 
         Pathname.glob(root.join("**/*.rb").to_s).any?
+      end
+
+      def rake_task_static_usage?
+        rake_task_files.any? { |path| rake_task_file_declares_task?(path) }
+      end
+
+      def rake_task_files
+        @rake_task_files ||= (
+          [usage.app_root.join("Rakefile")] +
+            Pathname.glob(usage.app_root.join("lib/tasks/**/*.rake").to_s)
+        ).select(&:file?).uniq.sort
+      end
+
+      def rake_task_file_declares_task?(path)
+        path.readlines.any? { |line| line.match?(/\A\s*(?:namespace|task)\b/) }
       end
 
       def path_matches(railtie, paths)

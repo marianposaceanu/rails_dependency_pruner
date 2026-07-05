@@ -46,6 +46,9 @@ catalog. For example, Active Storage catalog evidence requires the normalized
 `attachments` workload before an Active Storage railtie skip can be approved.
 Action Text pruning requires reviewed `action_text` coverage, even when the
 review says rich-text declarations are not expected in production.
+When `disable_eager_load` is enabled, app-defined rake tasks also require
+reviewed `rake_tasks` coverage because task constants may move from boot to
+first use.
 Lazy or stubbed middleware and Railtie integration gems, such as
 `rack-mini-profiler` and `sentry-rails`, require a reviewed
 `external_integrations` status. Accepted statuses are `covered`,

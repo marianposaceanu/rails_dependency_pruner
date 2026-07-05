@@ -367,6 +367,10 @@ and `update_banned_url_shorteners`. Artifact:
 `tmp/rake-task-coverage-lobsters-template.yml`; max RSS `42565632` bytes.
 The same static smoke on `generic_blog_app` found
 `admin:user:create` and `semantic_search:reindex`; max RSS `36503552` bytes.
+The follow-up approval-gate smoke used the same task lists after production
+verification started requiring reviewed `rake_tasks` coverage for
+`disable_eager_load`; max RSS was `42582016` bytes for Lobsters template and
+`36814848` bytes for the generic_blog_app template.
 
 ## what eats memory
 

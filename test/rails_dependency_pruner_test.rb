@@ -2036,6 +2036,211 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_declared_rake_task_coverage_for_disable_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_rake_task_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
+      File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
+        namespace :maintenance do
+          task :sweep do
+          end
+        end
+      RAKE
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      File.write(measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      ))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires rake_tasks"
+      assert_equal(
+        {
+          "transform_id" => "disable_eager_load",
+          "requirement" => "declared_workload_coverage",
+          "missing_requirements" => ["rake_tasks"],
+        },
+        payload.dig("production_risks", "high_risk_transform_gaps", 0),
+      )
+    end
+  end
+
+  def test_verify_production_allows_disable_eager_load_with_declared_rake_task_coverage
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_rake_task_pass") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "lib/tasks"))
+      File.write(File.join(app_root, "lib/tasks/maintenance.rake"), <<~RAKE)
+        namespace :maintenance do
+          task :sweep do
+          end
+        end
+      RAKE
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+        rake_tasks:
+          - maintenance:sweep
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      File.write(measurement_path, JSON.pretty_generate(
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      ))
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "high_risk_transform_gaps")
+    end
+  end
+
   def test_verify_production_requires_inbound_email_when_storage_skip_keeps_mailboxes
     Dir.mktmpdir("rails_dependency_pruner_storage_mailbox_coverage_verify") do |dir|
       app_root = File.join(dir, "app")

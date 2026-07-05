@@ -82,8 +82,8 @@ rollback checklist.
 `disable_eager_load` is medium risk. Production verification requires request
 coverage, memory policy gates for first request, p95, and p99 latency, and
 reviewed coverage for app-declared jobs, mailers, channels, inbound email,
-Active Storage attachments, and Action Text. RSS savings alone are not enough
-because this transform can move work from boot to first use.
+Active Storage attachments, Action Text, and rake tasks. RSS savings alone are
+not enough because this transform can move work from boot to first use.
 
 ## why this exists
 
