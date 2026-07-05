@@ -101,6 +101,7 @@ regular measurement reports, the default candidate is `boot_prune`. The policy
 fails production approval when:
 
 - the measurement artifact is missing
+- the measurement artifact declares a different profile id or coverage digest
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`
 - total saved RSS is below `min_total_savings_percent`

@@ -864,6 +864,17 @@ Artifacts: `tmp/gc-stat-doctor-lobsters.json`,
 `generic_blog_app/tmp/gc-stat-mp-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
 target remains open.
+Measurement-context verification follow-up rejects production measurements that
+declare a mismatched profile id or coverage digest. Sequential static smokes
+still passed: Lobsters doctor max RSS `53903360` bytes, Lobsters
+coverage-template max RSS `53592064` bytes, generic_blog_app doctor max RSS
+`47939584` bytes, and generic_blog_app coverage-template max RSS `48431104` bytes.
+Artifacts: `tmp/measurement-context-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/measurement-context-lobsters-template.yml`,
+`tmp/measurement-context-doctor-mp.json`, and
+`generic_blog_app/tmp/measurement-context-mp-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app `40%`
+target remains open.
 
 ## what eats memory
 

@@ -6104,10 +6104,12 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
       profile_id = JSON.parse(File.read(profile_path)).fetch("profile_id")
+      coverage_digest = JSON.parse(File.read(profile_path)).dig("evidence", "coverage_manifest_digest")
       weak_measurement_path = File.join(dir, "weak-measurement.json")
       write_measurement_report(
         path: weak_measurement_path,
         profile_id: profile_id,
+        coverage_digest: coverage_digest,
         baseline_rss_kb: 100_000,
         candidate_rss_kb: 95_000,
       )
@@ -6141,10 +6143,53 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert payload.fetch("errors").any? { |error| error.include?("reference savings not preserved") }
       assert_equal 5_000, payload.dig("production_risks", "memory_policy", "measurement", "saved_kb")
 
+      stale_measurement_path = File.join(dir, "stale-measurement.json")
+      write_measurement_report(
+        path: stale_measurement_path,
+        profile_id: profile_id,
+        coverage_digest: "sha256:stale",
+        baseline_rss_kb: 100_000,
+        candidate_rss_kb: 60_000,
+      )
+
+      stale_stdout, _stale_stderr, stale_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        stale_measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute stale_status.success?
+
+      stale_payload = JSON.parse(stale_stdout)
+      assert_includes stale_payload.fetch("errors"), "production verify measurement context mismatch: measurement.coverage.digest expected #{coverage_digest}, got sha256:stale"
+      assert_equal [
+        {
+          "requirement" => "measurement.coverage.digest",
+          "expected" => coverage_digest,
+          "actual" => "sha256:stale",
+        },
+      ], stale_payload.dig("production_risks", "measurement_context_gaps")
+
       passing_measurement_path = File.join(dir, "passing-measurement.json")
       write_measurement_report(
         path: passing_measurement_path,
         profile_id: profile_id,
+        coverage_digest: coverage_digest,
         baseline_rss_kb: 100_000,
         candidate_rss_kb: 60_000,
       )
@@ -10794,8 +10839,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       coverage_path
     end
 
-    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune")
-      File.write(path, JSON.pretty_generate(
+    def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil)
+      report = {
         "target" => "requests",
         "profile" => {
           "profile_id" => profile_id,
@@ -10821,7 +10866,15 @@ class RailsDependencyPrunerTest < Minitest::Test
           },
         },
         "request_paths" => ["/"],
-      ))
+      }
+      if coverage_digest
+        report["coverage"] = {
+          "digest" => coverage_digest,
+          "rails_env" => "production",
+          "workloads" => ["requests"],
+        }
+      end
+      File.write(path, JSON.pretty_generate(report))
     end
 
     def approved_early_boot_profile(payload)

@@ -167,6 +167,9 @@ module RailsDependencyPruner
         disabled_framework_runtime_matches.each do |match|
           errors << "production verify found disabled framework runtime evidence: #{format_runtime_framework_match(match)}"
         end
+        measurement_context_gaps.each do |gap|
+          errors << "production verify measurement context mismatch: #{format_measurement_context_gap(gap)}"
+        end
         memory_policy_result.fetch("errors").each do |error|
           errors << "production verify #{error}"
         end
@@ -201,6 +204,7 @@ module RailsDependencyPruner
           "canary_evidence_gaps" => canary_evidence_gaps,
           "high_risk_transform_gaps" => high_risk_transform_gaps,
           "disabled_framework_runtime_matches" => disabled_framework_runtime_matches,
+          "measurement_context_gaps" => measurement_context_gaps,
           "memory_policy" => memory_policy_result,
         },
         "profile" => {
@@ -1266,6 +1270,51 @@ module RailsDependencyPruner
         end
       end
 
+      def measurement_context_gaps
+        @measurement_context_gaps ||= begin
+          if measurement.nil?
+            []
+          else
+            gaps = []
+            expected_profile_id = profile.profile_id
+            actual_profile_id = measurement_profile_id
+            if expected_profile_id && actual_profile_id && actual_profile_id != expected_profile_id
+              gaps << {
+                "requirement" => "measurement.profile_id",
+                "expected" => expected_profile_id,
+                "actual" => actual_profile_id,
+              }
+            end
+
+            expected_coverage_digest = profile.payload.dig("evidence", "coverage_manifest_digest")
+            actual_coverage_digest = measurement.dig("coverage", "digest")
+            if expected_coverage_digest && actual_coverage_digest && actual_coverage_digest != expected_coverage_digest
+              gaps << {
+                "requirement" => "measurement.coverage.digest",
+                "expected" => expected_coverage_digest,
+                "actual" => actual_coverage_digest,
+              }
+            end
+
+            expected_rails_env = profile.payload.dig("environment", "rails_env")
+            actual_rails_env = measurement.dig("coverage", "rails_env")
+            if expected_rails_env && actual_rails_env && actual_rails_env != expected_rails_env
+              gaps << {
+                "requirement" => "measurement.coverage.rails_env",
+                "expected" => expected_rails_env,
+                "actual" => actual_rails_env,
+              }
+            end
+            gaps
+          end
+        end
+      end
+
+      def measurement_profile_id
+        measurement.dig("source_profile", "profile_id") ||
+          measurement.dig("profile", "profile_id")
+      end
+
       def dynamic_constantization_risks
         @dynamic_constantization_risks ||= begin
           namespaces = pruned_namespaces
@@ -1395,6 +1444,11 @@ module RailsDependencyPruner
         ].compact.join(":")
 
         "#{gap.fetch("target")} #{evidence} requires #{gap.fetch("missing_workloads").join(", ")}"
+      end
+
+      def format_measurement_context_gap(gap)
+        actual = gap["actual"].to_s.empty? ? "missing" : gap["actual"]
+        "#{gap.fetch("requirement")} expected #{gap.fetch("expected")}, got #{actual}"
       end
 
       def high_risk_gap(transform_id, requirement, missing_requirements, alternative: nil)
