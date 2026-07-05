@@ -47,6 +47,22 @@ apps:
       - activemodel
       - activerecord
       - activestorage
+  action_mailbox:
+    description: inbound mailbox class
+    expected_required:
+      - actionmailbox
+      - actionpack
+      - actionview
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailer
+      - actiontext
   active_storage_attachments:
     description: Active Storage attachment DSL
     expected_required:

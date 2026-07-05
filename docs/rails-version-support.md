@@ -20,6 +20,7 @@ The checked-in fixture matrix covers planner decisions for:
 - minimal controller and Active Record model
 - Active Record only
 - Action Mailer
+- Action Mailbox inbound mailboxes
 - Active Storage attachment declarations
 - Active Job
 - Action Text

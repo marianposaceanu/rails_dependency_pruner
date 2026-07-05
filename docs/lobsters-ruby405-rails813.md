@@ -210,6 +210,16 @@ Artifacts:
 - `tmp/native-heavy-matrix-doctor-lobsters.time`
 - `tmp/native-heavy-matrix-doctor-mp.json`
 - `tmp/native-heavy-matrix-doctor-mp.time`
+- `tmp/action-mailbox-matrix-doctor-lobsters.json`
+- `tmp/action-mailbox-matrix-doctor-lobsters.time`
+- `tmp/action-mailbox-matrix-doctor-mp.json`
+- `tmp/action-mailbox-matrix-doctor-mp.time`
+- `tmp/action-mailbox-matrix-coverage-lobsters-template.yml`
+- `tmp/action-mailbox-matrix-coverage-lobsters-template.stdout`
+- `tmp/action-mailbox-matrix-coverage-lobsters-template.time`
+- `tmp/action-mailbox-matrix-coverage-mp-template.yml`
+- `tmp/action-mailbox-matrix-coverage-mp-template.stdout`
+- `tmp/action-mailbox-matrix-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -706,6 +716,19 @@ and `0` channel classes; generic_blog_app produced `0` for all three. Artifacts:
 `tmp/declared-entry-gate-mp-template.yml`; max RSS was `53035008` bytes for
 Lobsters and `47726592` bytes for generic_blog_app. No request RSS benchmark was run
 for this milestone.
+
+Action Mailbox matrix follow-up added an inbound mailbox fixture to the
+checked-in planner matrix. Static doctor smokes used max RSS `53133312` bytes
+for Lobsters and `47923200` bytes for generic_blog_app. Coverage-template smokes
+generated `3` Lobsters mailboxes (`ApplicationMailbox`, `BackstopMailbox`,
+`InboxMailbox`) and no generic_blog_app mailboxes; max RSS was `53264384` bytes for
+Lobsters and `48021504` bytes for generic_blog_app. Artifacts:
+`tmp/action-mailbox-matrix-doctor-lobsters.json`,
+`tmp/action-mailbox-matrix-doctor-mp.json`,
+`tmp/action-mailbox-matrix-coverage-lobsters-template.yml`, and
+`tmp/action-mailbox-matrix-coverage-mp-template.yml`. No request RSS benchmark
+was run for generic_blog_app in this milestone.
+
 Inbound mailbox gate smoke generated templates after production verification
 started requiring exact inbound email mailbox coverage for `disable_eager_load`.
 Lobsters produced `3` mailboxes, `10` job classes, `10` mailer actions, and `0`
