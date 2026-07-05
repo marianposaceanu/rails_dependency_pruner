@@ -120,6 +120,7 @@ module RailsDependencyPruner
       @lazy_constant_policies = lazy_constant_policies(payload)
       @expected_events = expected_events(payload)
       @unexpected_event_policy = unexpected_event_policy(payload)
+      @memory_policy = memory_policy(payload)
       @events = []
       @output_path = output_path
       @event_log_path = ENV["RAILS_DEPENDENCY_PRUNER_EVENT_LOG"]
@@ -317,6 +318,9 @@ module RailsDependencyPruner
     def telemetry_counters
       counters = Hash.new(0)
       counters["pruner.profile.valid"] = @profile_id ? 1 : 0
+      counters["pruner.memory.current_rss_kb"] = current_rss_kb
+      reference_rss = baseline_reference_rss_kb
+      counters["pruner.memory.baseline_reference_rss_kb"] = reference_rss if reference_rss
 
       Array(@events).each do |event|
         counters["pruner.event.total"] += 1
@@ -334,6 +338,23 @@ module RailsDependencyPruner
       end
 
       counters.sort.to_h
+    end
+
+    def baseline_reference_rss_kb
+      return unless @memory_policy.is_a?(Hash)
+
+      number(
+        @memory_policy["baseline_reference_rss_kb"] ||
+          @memory_policy["reference_baseline_rss_kb"] ||
+          @memory_policy["baseline_rss_kb"] ||
+          @memory_policy["reference_rss_kb"],
+      )&.to_i
+    end
+
+    def current_rss_kb
+      `ps -o rss= -p #{Process.pid}`.to_i
+    rescue Errno::ENOENT
+      0
     end
 
     def caller_string(event)
@@ -451,6 +472,20 @@ module RailsDependencyPruner
     def unexpected_event_policy(payload)
       policy = payload["unexpected_event_policy"].to_s
       UNEXPECTED_EVENT_POLICIES.include?(policy) ? policy : DEFAULT_UNEXPECTED_EVENT_POLICY
+    end
+
+    def memory_policy(payload)
+      policy = payload["memory_policy"]
+      policy.is_a?(Hash) ? policy : {}
+    end
+
+    def number(value)
+      return value if value.is_a?(Numeric)
+      return if value.nil? || value.to_s.empty?
+
+      Float(value)
+    rescue ArgumentError, TypeError
+      nil
     end
 
     def lazy_constant_policies(payload)

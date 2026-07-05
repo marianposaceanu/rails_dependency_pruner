@@ -245,6 +245,20 @@ class RailsDependencyPrunerTest < Minitest::Test
           "pruner.event.unexpected" => 1,
           "pruner.event.skipped_require" => 1,
           "pruner.event.lazy_load" => 1,
+          "pruner.memory.baseline_reference_rss_kb" => 100_000,
+          "pruner.memory.current_rss_kb" => 50_000,
+        },
+      ))
+      second_evidence_path = File.join(dir, "runtime_events_2.json")
+      File.write(second_evidence_path, JSON.pretty_generate(
+        "mode" => "canary",
+        "events_count" => 0,
+        "expected_events_count" => 0,
+        "unexpected_events_count" => 0,
+        "counters" => {
+          "pruner.event.total" => 0,
+          "pruner.memory.baseline_reference_rss_kb" => 100_000,
+          "pruner.memory.current_rss_kb" => 60_000,
         },
       ))
 
@@ -252,17 +266,20 @@ class RailsDependencyPrunerTest < Minitest::Test
         rails_root: FAKE_RAILS_ROOT,
         frameworks: %w[actionpack activerecord],
       )
-      runtime_evidence = RailsDependencyPruner::RuntimeEvidence.new(paths: [evidence_path], index: index)
+      runtime_evidence = RailsDependencyPruner::RuntimeEvidence.new(paths: [evidence_path, second_evidence_path], index: index)
       summary = runtime_evidence.event_summary
 
-      assert_equal 1, summary.fetch("files_count")
+      assert_equal 2, summary.fetch("files_count")
       assert_equal 2, summary.fetch("events_count")
       assert_equal 1, summary.fetch("expected_events_count")
       assert_equal 1, summary.fetch("unexpected_events_count")
       assert_equal 1, summary.dig("counters", "pruner.profile.valid")
       assert_equal 2, summary.dig("counters", "pruner.event.total")
       assert_equal 1, summary.dig("counters", "pruner.event.unexpected")
+      assert_equal 100_000, summary.dig("counters", "pruner.memory.baseline_reference_rss_kb")
+      assert_equal 60_000, summary.dig("counters", "pruner.memory.current_rss_kb")
       assert_equal 1, summary.dig("files", 0, "counters", "pruner.event.lazy_load")
+      assert_equal 50_000, summary.dig("files", 0, "counters", "pruner.memory.current_rss_kb")
       assert_equal "request:loaded_lazy_gem:ruby-vips", summary.dig("files", 0, "unexpected_events", 0, "event_id")
       assert_equal "app/models/story_image.rb", summary.dig("files", 0, "unexpected_events", 0, "caller_path")
     end
@@ -5475,6 +5492,9 @@ class RailsDependencyPrunerTest < Minitest::Test
             "path" => "blocked_feature",
           },
         ],
+        "memory_policy" => {
+          "reference_baseline_rss_kb" => 123_456,
+        },
       )
       File.write(profile_path, JSON.pretty_generate(payload))
 
@@ -5512,6 +5532,8 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 1, events.dig("counters", "pruner.event.expected")
       assert_equal 1, events.dig("counters", "pruner.event.skipped_require")
       assert_nil events.dig("counters", "pruner.event.unexpected")
+      assert_equal 123_456, events.dig("counters", "pruner.memory.baseline_reference_rss_kb")
+      assert_operator events.dig("counters", "pruner.memory.current_rss_kb"), :>, 0
     end
   end
 
@@ -6081,6 +6103,9 @@ class RailsDependencyPrunerTest < Minitest::Test
         "safety" => {
           "production_allowed" => false,
         },
+        "memory_policy" => {
+          "baseline_reference_rss_kb" => 111_222,
+        },
       }
       payload["transforms"] = RailsDependencyPruner::TransformRegistry.transforms_for_payload(payload)
       payload["expected_events"] = payload.fetch("transforms").flat_map { |transform| Array(transform["expected_events"]) }
@@ -6101,9 +6126,13 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 1, report.dig("runs", "boot_prune", 0, "expected_events_count")
       assert_equal 0, report.dig("runs", "boot_prune", 0, "unexpected_events_count")
       assert_equal 1, report.dig("runs", "boot_prune", 0, "counters", "pruner.event.skipped_require")
+      assert_equal 111_222, report.dig("runs", "boot_prune", 0, "counters", "pruner.memory.baseline_reference_rss_kb")
+      assert_operator report.dig("runs", "boot_prune", 0, "counters", "pruner.memory.current_rss_kb"), :>, 0
       assert_equal 1, report.dig("variants", "boot_prune", "events_count")
       assert_equal 0, report.dig("variants", "boot_prune", "unexpected_events_count")
       assert_equal 1, report.dig("variants", "boot_prune", "counters", "pruner.event.skipped_require")
+      assert_equal 111_222, report.dig("variants", "boot_prune", "counters", "pruner.memory.baseline_reference_rss_kb")
+      assert_operator report.dig("variants", "boot_prune", "counters", "pruner.memory.current_rss_kb"), :>, 0
     end
   end
 

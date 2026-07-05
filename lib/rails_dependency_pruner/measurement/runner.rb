@@ -485,8 +485,21 @@ module RailsDependencyPruner
         def summarize_counters(runs)
           keys = runs.flat_map { |run| run.fetch("counters", {}).keys }.uniq.sort
           keys.to_h do |key|
-            [key, runs.sum { |run| run.fetch("counters", {}).fetch(key, 0).to_i }]
+            values = runs.filter_map do |run|
+              value = run.fetch("counters", {})[key]
+              Integer(value) unless value.nil?
+            rescue ArgumentError, TypeError
+              nil
+            end
+            [
+              key,
+              memory_counter?(key) ? values.max.to_i : values.sum,
+            ]
           end
+        end
+
+        def memory_counter?(key)
+          key.to_s.start_with?("pruner.memory.")
         end
 
         def numeric_delta(summary, baseline, key)

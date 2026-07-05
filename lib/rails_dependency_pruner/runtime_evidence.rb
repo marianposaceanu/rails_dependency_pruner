@@ -169,10 +169,20 @@ module RailsDependencyPruner
         summaries.each do |summary|
           summary.fetch("counters", {}).each do |key, value|
             count = integer(value)
-            counters[key.to_s] += count unless count.nil?
+            next if count.nil?
+
+            if memory_counter?(key)
+              counters[key.to_s] = [counters[key.to_s], count].max
+            else
+              counters[key.to_s] += count
+            end
           end
         end
         counters.sort.to_h
+      end
+
+      def memory_counter?(key)
+        key.to_s.start_with?("pruner.memory.")
       end
 
       def legacy_limits(payload)

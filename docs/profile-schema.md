@@ -229,9 +229,13 @@ The telemetry payload includes `component`, `profile_id`, `mode`, `event`,
 Early output JSON also includes `counters` with `pruner.profile.valid`,
 `pruner.event.total`, `pruner.event.expected`, `pruner.event.unexpected`,
 `pruner.event.skipped_require`, `pruner.event.lazy_load`, and
-`pruner.event.stub_used` when those events occur.
-Runtime evidence keeps those counters in `summary.runtime_event_summary` and
-sums them across evidence files.
+`pruner.event.stub_used` when those events occur. It also reports
+`pruner.memory.current_rss_kb`; when the profile memory policy includes
+`baseline_reference_rss_kb` or `reference_baseline_rss_kb`, output includes
+`pruner.memory.baseline_reference_rss_kb`.
+Runtime evidence keeps those counters in `summary.runtime_event_summary`. Event
+counters are summed across evidence files; memory gauges keep the maximum
+reported value.
 
 ## migration
 
