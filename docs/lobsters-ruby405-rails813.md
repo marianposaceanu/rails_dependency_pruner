@@ -400,6 +400,14 @@ channel classes; generic_blog_app produced `0` for all four. Artifacts:
 `tmp/inbound-mailbox-gate-mp-template.yml`; max RSS was `53379072` bytes for
 Lobsters and `47464448` bytes for generic_blog_app. No request RSS benchmark was run
 for this milestone.
+Action Text declaration gate smoke generated templates after production
+verification started requiring exact rich-text declaration coverage for
+`disable_eager_load`. Lobsters and generic_blog_app both reported
+`action_text.rich_text_expected: false` with `0` declarations. Artifacts:
+`tmp/action-text-gate-lobsters-template.yml` and
+`tmp/action-text-gate-mp-template.yml`; max RSS was `52969472` bytes for
+Lobsters and `48119808` bytes for generic_blog_app. No request RSS benchmark was run
+for this milestone.
 
 ## what eats memory
 

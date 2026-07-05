@@ -61,7 +61,9 @@ active_storage:
 action_text:
   review_required: false
   rich_text_expected: false
-  declarations: []
+  declarations:
+    - class: Avatar
+      name: bio
 rake_tasks:
   review_required: false
   tasks:
@@ -85,9 +87,11 @@ rollback:
   env_var: RAILS_DEPENDENCY_PRUNER_DISABLE
 ```
 
-For `disable_eager_load`, job classes, mailer actions, channel classes, and
-mailboxes are matched by exact entry. A reviewed `jobs` section that omits
-`ReportJob` does not cover first use of `ReportJob`.
+For `disable_eager_load`, job classes, mailer actions, channel classes,
+mailboxes, and Action Text rich-text declarations are matched by exact entry. A
+reviewed `jobs` section that omits `ReportJob` does not cover first use of
+`ReportJob`; an `action_text` section that omits `Avatar#bio` does not cover
+that rich-text field.
 
 Production verification fails when a transform needs a workload that is missing
 or still marked for review. Active Storage declarations alone do not count as

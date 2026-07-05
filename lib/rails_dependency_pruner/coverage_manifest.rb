@@ -166,6 +166,14 @@ module RailsDependencyPruner
       reviewed_entries("inbound_email", "mailboxes")
     end
 
+    def action_text_declarations
+      value = payload["action_text"]
+      return [] unless value.is_a?(Hash)
+      return [] if value["review_required"] == true
+
+      Array(value["declarations"]).filter_map { |entry| normalized_declaration_entry(entry) }.uniq.sort
+    end
+
     def request_entries
       @request_entries ||= normalized_request_entries(payload["requests"])
     end
@@ -331,6 +339,26 @@ module RailsDependencyPruner
           value.empty? ? [] : [value]
         else
           []
+        end
+      end
+
+      def normalized_declaration_entry(entry)
+        case entry
+        when Hash
+          name = entry["name"].to_s
+          return if name.empty?
+
+          owner = entry["class"] || entry["model"] || entry["owner"]
+          owner = owner.to_s
+          return "#{owner}##{name}" unless owner.empty?
+
+          path = entry["path"].to_s
+          return "#{path}:#{name}" unless path.empty?
+
+          name
+        else
+          value = entry.to_s
+          value.empty? ? nil : value
         end
       end
 

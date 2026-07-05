@@ -287,7 +287,10 @@ module RailsDependencyPruner
 
       def action_text
         declarations = grep_ruby(/\bhas_rich_text\b/).map do |match|
-          match.merge("name" => match.fetch("source")[/\bhas_rich_text\s+[:"']?([A-Za-z0-9_]+)/, 1]).compact
+          match.merge(
+            "class" => class_name_near(match.fetch("path"), match.fetch("line")),
+            "name" => match.fetch("source")[/\bhas_rich_text\s+[:"']?([A-Za-z0-9_]+)/, 1],
+          ).compact
         end
         {
           "declarations" => declarations,

@@ -838,12 +838,13 @@ module RailsDependencyPruner
         gaps.concat(declared_entry_coverage_gaps("mailers", declared_mailer_actions, coverage_manifest&.mailer_actions))
         gaps.concat(declared_entry_coverage_gaps("channels", declared_channel_classes, coverage_manifest&.channel_classes))
         gaps.concat(declared_entry_coverage_gaps("inbound_email", declared_mailbox_classes, coverage_manifest&.inbound_email_mailboxes))
+        gaps.concat(declared_entry_coverage_gaps("action_text", declared_action_text_declarations, coverage_manifest&.action_text_declarations))
         gaps << "jobs" if declared_job_classes.empty? && app_path_has_ruby_files?("app/jobs") && !coverage_workloads.include?("jobs")
         gaps << "mailers" if declared_mailer_actions.empty? && app_path_has_ruby_files?("app/mailers") && !coverage_workloads.include?("mailers")
         gaps << "cable" if declared_channel_classes.empty? && app_path_has_ruby_files?("app/channels") && !coverage_workloads.include?("cable")
         gaps << "inbound_email" if declared_mailbox_classes.empty? && app_path_has_ruby_files?("app/mailboxes") && !coverage_workloads.include?("inbound_email")
         gaps << "attachments" if active_storage_attachment_static_usage? && !coverage_workloads.include?("attachments")
-        gaps << "action_text" if action_text_static_usage? && !coverage_workloads.include?("action_text")
+        gaps << "action_text" if declared_action_text_declarations.empty? && action_text_static_usage? && !coverage_workloads.include?("action_text")
         gaps << "rake_tasks" if rake_task_static_usage? && !coverage_workloads.include?("rake_tasks")
         gaps.concat(mounted_app_request_coverage_gaps)
 
@@ -996,6 +997,19 @@ module RailsDependencyPruner
         @declared_mailbox_classes ||= class_names_under("app/mailboxes")
       end
 
+      def declared_action_text_declarations
+        @declared_action_text_declarations ||= class_files_under("app").flat_map do |path|
+          relative = path.relative_path_from(usage.app_root).to_s
+          path.readlines.filter_map.with_index(1) do |line, line_number|
+            name = line[/\bhas_rich_text\s+[:"']?([A-Za-z0-9_]+)/, 1]
+            next if name.to_s.empty?
+
+            owner = class_name_near(path, line_number)
+            owner ? "#{owner}##{name}" : "#{relative}:#{name}"
+          end
+        end.uniq.sort
+      end
+
       def class_names_under(relative_path)
         class_files_under(relative_path).filter_map { |path| class_name_in(path) }.uniq.sort
       end
@@ -1009,6 +1023,14 @@ module RailsDependencyPruner
 
       def class_name_in(path)
         path.readlines.each do |line|
+          match = line.match(/^\s*class\s+([A-Z][A-Za-z0-9_:]*)/)
+          return match[1] if match
+        end
+        nil
+      end
+
+      def class_name_near(path, line_number)
+        path.readlines.first(line_number).reverse_each do |line|
           match = line.match(/^\s*class\s+([A-Z][A-Za-z0-9_:]*)/)
           return match[1] if match
         end

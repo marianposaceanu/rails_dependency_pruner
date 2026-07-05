@@ -118,6 +118,7 @@ module RailsDependencyPruner
           "rich_text_expected" => declarations.any?,
           "declarations" => declarations.map do |entry|
             {
+              "class" => entry["class"],
               "name" => entry["name"],
               "path" => entry["path"],
               "line" => entry["line"],
