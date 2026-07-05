@@ -2272,6 +2272,112 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_requires_request_event_recording_for_disable_eager_load
+    Dir.mktmpdir("rails_dependency_pruner_eager_load_event_recording_verify") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      FileUtils.mkdir_p(File.dirname(coverage_path))
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: false
+        routes:
+          include: all
+        requests:
+          - GET /privacy => 200
+        memory_policy:
+          min_total_savings_mib: 1
+          max_first_request_latency_regression_ms: 100
+          max_warmed_p95_latency_regression_percent: 5
+          max_warmed_p99_latency_regression_percent: 10
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      _stdout, build_stderr, build_status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "plan",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--profile",
+        profile_path,
+        "--disable-eager-load",
+        chdir: ROOT.to_s,
+      )
+      assert build_status.success?, build_stderr
+
+      measurement_path = File.join(dir, "measurement.json")
+      write_identified_measurement_json(measurement_path, profile_path, coverage_path,
+        "variants" => {
+          "baseline" => {
+            "status" => "ok",
+            "rss_kb_median" => 100_000,
+            "first_request_duration_ms_median" => 20.0,
+            "warmed_request_duration_ms_p95_median" => 10.0,
+            "warmed_request_duration_ms_p99_median" => 20.0,
+          },
+          "boot_prune" => {
+            "status" => "ok",
+            "rss_kb_median" => 80_000,
+            "first_request_duration_ms_median" => 30.0,
+            "warmed_request_duration_ms_p95_median" => 10.3,
+            "warmed_request_duration_ms_p99_median" => 21.0,
+          },
+        },
+      )
+      measurement_payload = JSON.parse(File.read(measurement_path))
+      measurement_payload.dig("variants", "boot_prune").delete("events_count")
+      measurement_payload.dig("variants", "boot_prune").delete("expected_events_count")
+      measurement_payload.dig("variants", "boot_prune").delete("unexpected_events_count")
+      File.write(measurement_path, JSON.pretty_generate(measurement_payload))
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--measurement",
+        measurement_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
+      assert_includes payload.fetch("errors"), "production verify missing high-risk transform proof: disable_eager_load requires measurement.variants.boot_prune.events_count, measurement.variants.boot_prune.expected_events_count, measurement.variants.boot_prune.unexpected_events_count"
+      assert_equal [
+        {
+          "transform_id" => "disable_eager_load",
+          "requirement" => "request_event_recording",
+          "missing_requirements" => [
+            "measurement.variants.boot_prune.events_count",
+            "measurement.variants.boot_prune.expected_events_count",
+            "measurement.variants.boot_prune.unexpected_events_count",
+          ],
+        },
+      ], payload.dig("production_risks", "high_risk_transform_gaps")
+    end
+  end
+
   def test_verify_production_requires_declared_workload_coverage_for_disable_eager_load
     Dir.mktmpdir("rails_dependency_pruner_eager_load_declared_workload_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -11429,6 +11535,9 @@ class RailsDependencyPrunerTest < Minitest::Test
         "activerecord" => -40,
         "actionview" => -20,
       }
+      candidate["events_count"] = 1 unless candidate.key?("events_count")
+      candidate["expected_events_count"] = 1 unless candidate.key?("expected_events_count")
+      candidate["unexpected_events_count"] = 0 unless candidate.key?("unexpected_events_count")
     end
 
     def write_measurement_report(path:, profile_id:, baseline_rss_kb:, candidate_rss_kb:, candidate_variant: "boot_prune", coverage_digest: nil, request_paths: ["/"], coverage_workloads: %w[boot requests routes])

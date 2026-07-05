@@ -533,6 +533,8 @@ module RailsDependencyPruner
             gaps << high_risk_gap("disable_eager_load", "request_measurement", missing) unless missing.empty?
             missing = disable_eager_load_feature_delta_gaps
             gaps << high_risk_gap("disable_eager_load", "loaded_feature_delta", missing) unless missing.empty?
+            missing = disable_eager_load_request_event_gaps
+            gaps << high_risk_gap("disable_eager_load", "request_event_recording", missing) unless missing.empty?
             missing = disable_eager_load_declared_workload_gaps
             gaps << high_risk_gap("disable_eager_load", "declared_workload_coverage", missing) unless missing.empty?
           end
@@ -861,6 +863,23 @@ module RailsDependencyPruner
           "measurement.deltas.#{candidate}.loaded_features" => measurement.dig("deltas", candidate, "loaded_features"),
           "measurement.deltas.#{candidate}.rails_loaded_features" => measurement.dig("deltas", candidate, "rails_loaded_features"),
           "measurement.deltas.#{candidate}.rails_loaded_features_by_framework" => measurement.dig("deltas", candidate, "rails_loaded_features_by_framework"),
+        }
+
+        required.filter_map do |key, value|
+          key if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+        end
+      end
+
+      def disable_eager_load_request_event_gaps
+        return [] unless disable_eager_load_latency_policy_gaps.empty?
+        return [] unless measurement&.fetch("target", nil) == "requests"
+        return [] unless disable_eager_load_feature_delta_gaps.empty?
+
+        candidate = memory_policy_candidate_variant
+        required = {
+          "measurement.variants.#{candidate}.events_count" => measurement.dig("variants", candidate, "events_count"),
+          "measurement.variants.#{candidate}.expected_events_count" => measurement.dig("variants", candidate, "expected_events_count"),
+          "measurement.variants.#{candidate}.unexpected_events_count" => measurement.dig("variants", candidate, "unexpected_events_count"),
         }
 
         required.filter_map do |key, value|

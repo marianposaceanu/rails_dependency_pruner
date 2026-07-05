@@ -957,6 +957,18 @@ doctor max RSS `48545792` bytes, and generic_blog_app coverage-template max RSS
 `generic_blog_app/tmp/loaded-feature-delta-generic-blog-template.yml`.
 No request RSS benchmark was run for this milestone, so the generic_blog_app
 `40%` target remains open.
+Request-event verification follow-up rejects `disable_eager_load` production
+approval unless the request measurement includes candidate event counters:
+`events_count`, `expected_events_count`, and `unexpected_events_count`.
+Sequential static smokes still passed: Lobsters doctor max RSS `53985280`
+bytes, Lobsters coverage-template max RSS `54280192` bytes, generic_blog_app
+doctor max RSS `48005120` bytes, and generic_blog_app coverage-template max RSS
+`48201728` bytes. Artifacts: `tmp/request-events-doctor-lobsters.json`,
+`tmp/lobsters-ruby405-rails813/tmp/request-events-lobsters-template.yml`,
+`tmp/request-events-doctor-generic-blog.json`, and
+`generic_blog_app/tmp/request-events-generic-blog-template.yml`.
+No request RSS benchmark was run for this milestone, so the generic_blog_app
+`40%` target remains open.
 
 ## what eats memory
 

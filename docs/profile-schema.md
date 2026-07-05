@@ -117,9 +117,10 @@ For `disable_eager_load`, the policy must include first request, p95, and p99
 latency regression limits, and approval must use a measurement artifact with
 `target: requests`. That measurement must record baseline and candidate loaded
 feature medians plus candidate loaded-feature deltas, including Rails framework
-feature deltas. The coverage manifest must also cover app-declared jobs,
-mailers, channels, inbound email, attachments, and Action Text before this
-transform can be approved.
+feature deltas. It must also record candidate request event counters so
+unexpected lazy loads are proved absent instead of omitted. The coverage
+manifest must also cover app-declared jobs, mailers, channels, inbound email,
+attachments, and Action Text before this transform can be approved.
 
 ## safety policy
 

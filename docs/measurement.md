@@ -108,6 +108,8 @@ fails production approval when:
   `target: requests`
 - `disable_eager_load` is enabled but the request measurement omits loaded
   feature medians or Rails framework loaded-feature deltas
+- `disable_eager_load` is enabled but the request measurement omits candidate
+  event counters
 - baseline or candidate RSS is missing
 - total saved RSS is below `min_total_savings_mib`
 - total saved RSS is below `min_total_savings_percent`
