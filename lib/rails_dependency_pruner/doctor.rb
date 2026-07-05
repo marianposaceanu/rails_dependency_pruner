@@ -185,6 +185,8 @@ module RailsDependencyPruner
           "direct_gem_usage" => direct_gem_usage,
           "native_heavy_gems" => native_heavy_gems,
           "integrations" => integrations,
+          "integration_gem_policies" => integration_gem_policies,
+          "unclassified_integrations" => unclassified_integrations,
           "adapters" => adapters,
           "parse_errors" => parse_errors,
         }
@@ -332,6 +334,27 @@ module RailsDependencyPruner
 
       def integrations
         INTEGRATION_GEMS.select { |name| gem_names.include?(name) }.sort
+      end
+
+      def integration_gem_policies
+        integrations.filter_map do |name|
+          policy = GemPolicyRegistry.default.policy_for(name)
+          next unless integration_policy?(policy)
+
+          {
+            "gem" => name,
+            "class" => policy.gem_class,
+            "risk" => policy.risk,
+            "strategies" => Array(policy.strategies).sort,
+            "external_integration_required" => true,
+            "production_rule" => policy.production_rule,
+          }
+        end.sort_by { |entry| entry.fetch("gem") }
+      end
+
+      def unclassified_integrations
+        classified = integration_gem_policies.map { |entry| entry.fetch("gem") }
+        (integrations - classified).sort
       end
 
       def adapters
@@ -512,6 +535,12 @@ module RailsDependencyPruner
 
         direct_key = [name, policy["require"]].compact.find { |key| DIRECT_GEM_USAGE.key?(key) }
         direct_key || name
+      end
+
+      def integration_policy?(policy)
+        return false unless policy
+
+        %w[railtie_integration middleware_integration].include?(policy.gem_class)
       end
 
       def mount_path_for(source)

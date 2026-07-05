@@ -24,6 +24,10 @@ The report keeps the existing `recommendations` list and adds:
 - `capabilities.native_heavy_gems`: policy-registered native-heavy gems present
   in the bundle or directly used by app code
 - `capabilities.integrations`: known observability/profiler gems
+- `capabilities.integration_gem_policies`: policy classes for integration gems,
+  such as `railtie_integration` and `middleware_integration`
+- `capabilities.unclassified_integrations`: known integration gems without a
+  production lazy/stub policy
 - `capabilities.adapters`: known server/job/boot adapter gems
 - `risks.initializers_dynamic_require_load`
 - `risks.dynamic_constantization`

@@ -126,6 +126,10 @@ Artifacts:
 - `tmp/native-heavy-doctor-lobsters.time`
 - `tmp/native-heavy-doctor-mp.json`
 - `tmp/native-heavy-doctor-mp.time`
+- `tmp/integration-policy-doctor-lobsters.json`
+- `tmp/integration-policy-doctor-lobsters.time`
+- `tmp/integration-policy-doctor-mp.json`
+- `tmp/integration-policy-doctor-mp.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -196,6 +200,16 @@ Native-heavy doctor static smoke:
 
 Both doctor scans reported `0` parse errors, `0` dynamic constantization risks,
 and `0` initializer dynamic require/load risks.
+
+Integration policy doctor static smoke:
+
+| app | artifact | integration policy surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/integration-policy-doctor-lobsters.json` | `rack-mini-profiler:middleware_integration`, `sentry-rails:railtie_integration`; unclassified `sentry-ruby` | `52330496` bytes |
+| generic_blog_app, generic blog simple app | `tmp/integration-policy-doctor-mp.json` | no integration gems detected | `47726592` bytes |
+
+Both scans reported `0` parse errors, `0` dynamic constantization risks, and
+`0` initializer dynamic require/load risks.
 
 Gem policy smoke:
 

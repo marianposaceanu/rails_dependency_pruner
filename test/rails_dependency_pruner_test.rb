@@ -120,6 +120,13 @@ class RailsDependencyPrunerTest < Minitest::Test
 
     payload = JSON.parse(stdout)
     assert_equal %w[honeybadger rack-mini-profiler rollbar sentry-rails], payload.dig("capabilities", "integrations")
+    integration_policies = payload.dig("capabilities", "integration_gem_policies")
+    assert_equal %w[rack-mini-profiler sentry-rails], integration_policies.map { |entry| entry.fetch("gem") }
+    assert_equal %w[middleware_integration railtie_integration], integration_policies.map { |entry| entry.fetch("class") }
+    assert_equal %w[medium high], integration_policies.map { |entry| entry.fetch("risk") }
+    assert_equal [["noop_shim"], ["disabled_in_profile"]], integration_policies.map { |entry| entry.fetch("strategies") }
+    assert_equal [true, true], integration_policies.map { |entry| entry.fetch("external_integration_required") }
+    assert_equal %w[honeybadger rollbar], payload.dig("capabilities", "unclassified_integrations")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "sentry", "present")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "honeybadger", "present")
     assert_equal true, payload.dig("capabilities", "direct_gem_usage", "rollbar", "present")
