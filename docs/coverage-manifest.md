@@ -160,6 +160,11 @@ Generated `active_storage.configured_services` and `service_definitions`
 entries show the configured storage backend. They are review context for Active
 Storage coverage and do not replace upload, analysis, variant, preview,
 representation, or attachment-read coverage.
+Context-only entries do not add workloads to the manifest digest or production
+proof; exact classes, actions, declarations, request paths, or task names do.
+Reviewed empty exact lists, such as `mailers.actions: []`, can declare that the
+workload was checked and absent when no generated context entry is standing in
+for proof.
 
 If a lazy gem is used directly by app code, the manifest must also review that
 first-use surface under `lazy_gems`. Accepted statuses are `covered`,

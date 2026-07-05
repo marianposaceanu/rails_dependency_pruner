@@ -9896,6 +9896,105 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_coverage_manifest_does_not_count_generated_context_as_workload_coverage
+    Dir.mktmpdir("rails_dependency_pruner_coverage_context_review") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        requests:
+          review_required: false
+          paths: []
+        jobs:
+          review_required: false
+          classes: []
+          queue_adapters:
+            - adapter: solid_queue
+              risk: medium
+        mailers:
+          review_required: false
+          actions: []
+          delivery_methods:
+            - environment: production
+              method: smtp
+              risk: medium
+          smtp_settings:
+            - path: config/initializers/email.rb
+              risk: medium
+        channels:
+          review_required: false
+          classes: []
+          cable_adapters:
+            - environment: production
+              adapter: redis
+              risk: medium
+        active_storage:
+          review_required: false
+          declarations_expected: false
+          configured_services:
+            - environment: production
+              service: local
+              adapter: Disk
+          service_definitions:
+            - name: local
+              adapter: Disk
+          declarations: []
+          upload: false
+          analyze: false
+          variant: false
+          preview: false
+          representation: false
+          attachment_read: false
+        action_text:
+          review_required: false
+          rich_text_expected: false
+          declarations: []
+        rake_tasks:
+          review_required: false
+          tasks: []
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      workloads = manifest.workloads
+      refute_includes workloads, "requests"
+      refute_includes workloads, "jobs"
+      refute_includes workloads, "mailers"
+      refute_includes workloads, "cable"
+      refute_includes workloads, "attachments"
+      refute_includes workloads, "action_text"
+      refute_includes workloads, "rake_tasks"
+      assert_empty manifest.job_classes
+      assert_empty manifest.mailer_actions
+      assert_empty manifest.channel_classes
+      assert_empty manifest.active_storage_actions
+      assert_empty manifest.action_text_declarations
+      assert_empty manifest.rake_tasks
+
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        jobs:
+          review_required: false
+          classes: []
+        mailers:
+          review_required: false
+          actions: []
+        channels:
+          review_required: false
+          classes: []
+        inbound_email:
+          review_required: false
+          mailboxes: []
+      YAML
+
+      workloads = RailsDependencyPruner::CoverageManifest.load(manifest_path).workloads
+      assert_includes workloads, "jobs"
+      assert_includes workloads, "mailers"
+      assert_includes workloads, "cable"
+      assert_includes workloads, "inbound_email"
+    end
+  end
+
   def test_coverage_manifest_normalizes_reviewed_request_entries
     Dir.mktmpdir("rails_dependency_pruner_request_coverage_review") do |dir|
       manifest_path = File.join(dir, "coverage.yml")

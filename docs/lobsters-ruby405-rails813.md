@@ -180,6 +180,12 @@ Artifacts:
 - `tmp/mailer-delivery-coverage-mp-template.yml`
 - `tmp/mailer-delivery-coverage-mp-template.stdout`
 - `tmp/mailer-delivery-coverage-mp-template.time`
+- `tmp/context-workload-coverage-lobsters-template.yml`
+- `tmp/context-workload-coverage-lobsters-template.stdout`
+- `tmp/context-workload-coverage-lobsters-template.time`
+- `tmp/context-workload-coverage-mp-template.yml`
+- `tmp/context-workload-coverage-mp-template.stdout`
+- `tmp/context-workload-coverage-mp-template.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -369,6 +375,18 @@ Generated mailer delivery entries remain review context while
 `mailers.review_required: true`; exact mailer action coverage is still required
 before approval. No request RSS benchmark was run for generic_blog_app in this
 milestone.
+
+Coverage context workload static smoke:
+
+| app | artifact | generated context | loaded workloads | max RSS |
+| --- | --- | --- | --- | ---: |
+| Lobsters | `tmp/context-workload-coverage-lobsters-template.yml` | `10` jobs, `10` mailer actions, `3` cable adapters, `3` storage services | `boot` only | `53362688` bytes |
+| generic_blog_app, generic blog simple app | `tmp/context-workload-coverage-mp-template.yml` | no jobs or mailer actions; `1` delivery method, `3` cable adapters | `boot` only | `47857664` bytes |
+
+The generated adapter, delivery, SMTP, and storage service entries remain
+context. They do not become workload proof until exact classes, actions,
+declarations, request paths, or task names are reviewed. No request RSS
+benchmark was run for generic_blog_app in this milestone.
 
 Gem policy smoke:
 

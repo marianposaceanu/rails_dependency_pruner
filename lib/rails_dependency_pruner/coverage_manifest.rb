@@ -324,8 +324,22 @@ module RailsDependencyPruner
 
       def workload_present?(key)
         case key
+        when "requests"
+          request_entries.any?
+        when "jobs"
+          reviewed_workload_section?("jobs", "classes", context_keys: %w[queue_adapters])
+        when "mailers"
+          reviewed_workload_section?("mailers", "actions", context_keys: %w[delivery_methods smtp_settings])
+        when "channels", "cable"
+          reviewed_workload_section?("channels", "classes", context_keys: %w[cable_adapters])
+        when "inbound_email"
+          reviewed_workload_section?("inbound_email", "mailboxes")
         when "active_storage"
           active_storage_present?(payload[key])
+        when "action_text"
+          action_text_declarations.any?
+        when "rake_tasks"
+          rake_tasks.any?
         else
           present?(payload[key])
         end
@@ -335,7 +349,23 @@ module RailsDependencyPruner
         return false unless value.is_a?(Hash)
         return false if value["review_required"] == true
 
-        ACTIVE_STORAGE_ACTIONS.any? { |key| value[key] == true }
+          ACTIVE_STORAGE_ACTIONS.any? { |key| value[key] == true }
+      end
+
+      def reviewed_workload_section?(section, key, context_keys: [])
+        value = payload[section]
+        case value
+        when Hash
+          return false if value["review_required"] == true
+          return true if reviewed_entries(section, key).any?
+          return false if context_keys.any? { |context_key| present?(value[context_key]) }
+
+          value.key?(key)
+        when Array, String
+          reviewed_entries(section, key).any?
+        else
+          false
+        end
       end
 
       def reviewed_entries(section, key)
