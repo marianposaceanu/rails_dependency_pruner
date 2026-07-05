@@ -17,7 +17,8 @@ bundle exec rails-dependency-pruner rollout --app . --profile config/rails_depen
 ```
 
 Review and apply `tmp/pruner-rollout.patch` in the app repo. The command does
-not edit the app.
+not edit the app. See `rollout.md` for shadow, canary, production, and rollback
+steps.
 
 ## rollout patch
 
@@ -32,6 +33,7 @@ The patch can include:
 
 If `--coverage` is omitted, the patch includes a generated coverage template.
 Generated workload sections still need review before production approval.
+The coverage contract is described in `coverage-manifest.md`.
 The generated production config is gated by
 `RAILS_DEPENDENCY_PRUNER_ENABLED=1`; early boot can also be bypassed with
 `RAILS_DEPENDENCY_PRUNER_DISABLE=1`.

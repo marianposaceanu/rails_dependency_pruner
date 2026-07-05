@@ -409,6 +409,9 @@ Detailed commands and local artifact paths are in
 `docs/lobsters-ruby405-rails813.md`.
 Schema v3 fingerprints are described in `docs/profile-schema.md`.
 Production profile transform ids are described in `docs/transform-registry.md`.
+Rollout, coverage, lazy-gem, and Vips analyzer details are in `docs/rollout.md`,
+`docs/coverage-manifest.md`, `docs/lazy-gems.md`, and
+`docs/active-storage-vips-analyzer.md`.
 Rails and app-shape support is listed in `docs/rails-version-support.md`.
 
 ## limits

@@ -46,7 +46,7 @@ unknown id or when a registered transform is missing contract fields.
 `config/rails_dependency_pruner/gem_policies.yml`. Unknown lazy gems stay out of
 production approval. Lazy-gem transforms embed the policy used at profile
 generation time so review can see the class, risk, strategies, and production
-rule.
+rule. See `lazy-gems.md` for the profile shape and rollout rules.
 
 Generated profiles also copy the registry policy into top-level `lazy_gems`.
 Production verification rejects a supported gem listed in
@@ -76,7 +76,8 @@ variant, preview, representation, and attachment read. A reviewed
 stub temporarily, but it must include `accepted_by`, `reason`, and a future
 `expires_at` date. The stub makes the Active Storage Vips analyzer decline
 instead of loading `ruby-vips` during boot. Direct app use of `Vips` can still
-lazy-load `ruby-vips`.
+lazy-load `ruby-vips`. See `active-storage-vips-analyzer.md` for the proof and
+rollback checklist.
 
 `disable_eager_load` is medium risk. Production verification requires request
 coverage, memory policy gates for first request, p95, and p99 latency, and
