@@ -206,6 +206,10 @@ Artifacts:
 - `tmp/sentry-sdk-policy-coverage-mp-template.yml`
 - `tmp/sentry-sdk-policy-coverage-mp-template.stdout`
 - `tmp/sentry-sdk-policy-coverage-mp-template.time`
+- `tmp/native-heavy-matrix-doctor-lobsters.json`
+- `tmp/native-heavy-matrix-doctor-lobsters.time`
+- `tmp/native-heavy-matrix-doctor-mp.json`
+- `tmp/native-heavy-matrix-doctor-mp.time`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.json`
 - `tmp/lobsters-ruby405-request-status-policy-smoke.md`
 - `tmp/lobsters-ruby405-safety-policy-profile-smoke.json`
@@ -276,6 +280,18 @@ Native-heavy doctor static smoke:
 
 Both doctor scans reported `0` parse errors, `0` dynamic constantization risks,
 and `0` initializer dynamic require/load risks.
+
+Native-heavy matrix follow-up static smoke:
+
+| app | artifact | native-heavy surface | max RSS |
+| --- | --- | --- | ---: |
+| Lobsters | `tmp/native-heavy-matrix-doctor-lobsters.json` | direct `nokogiri`, direct `ruby-vips`; bundled `bcrypt`, `commonmarker`, `stackprof` | `53084160` bytes |
+| generic_blog_app, generic blog simple app | `tmp/native-heavy-matrix-doctor-mp.json` | bundled `bcrypt`, bundled `nokogiri`; no direct static app use | `47611904` bytes |
+
+The checked-in fixture matrix now includes the native-heavy direct-use fixture,
+so direct `Nokogiri` and `Vips` use is covered by planner matrix regression as
+well as doctor capability tests. No request RSS benchmark was run for
+generic_blog_app in this milestone.
 
 Integration policy doctor static smoke:
 

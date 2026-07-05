@@ -127,6 +127,22 @@ apps:
       - activemodel
       - activerecord
       - activestorage
+  native_heavy_gems:
+    description: direct Nokogiri and ruby-vips use outside Rails framework features
+    expected_required:
+      - activesupport
+      - railties
+    expected_pruned:
+      - actioncable
+      - actionmailbox
+      - actionmailer
+      - actionpack
+      - actiontext
+      - actionview
+      - activejob
+      - activemodel
+      - activerecord
+      - activestorage
   engine_mount:
     description: mounted Rack or engine route
     expected_required:
