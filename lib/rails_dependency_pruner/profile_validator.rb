@@ -66,6 +66,7 @@ module RailsDependencyPruner
 
           compare(errors, "fingerprints.#{key}", profile.payload.dig("fingerprints", key), value)
         end
+        compare(errors, "overrides", Array(profile.payload["overrides"]), context.safety_overrides_context)
       end
 
       def compare(errors, key, expected, actual)

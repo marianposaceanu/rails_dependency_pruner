@@ -87,6 +87,23 @@ memory_policy:
 `safety_policy` may repeat the generated fail-closed defaults. It must not
 weaken them for production approval.
 
+Generic overrides can approve a known dynamic edge by path:
+
+```yaml
+overrides:
+  - id: allow_dynamic_constantize_admin_reports
+    reason: "Admin reports constantize only app-owned report classes"
+    owner: "platform-team"
+    expires_at: "2026-08-31"
+    paths:
+      - app/services/report_runner.rb
+```
+
+An override must have an id, owner, reason, future expiry, and at least one
+path. Valid entries are copied into the profile and are part of the profile
+digest. They currently apply to dynamic `require` or `load` edges and dynamic
+constantization risks for the listed files.
+
 High-risk overrides are temporary and explicit:
 
 ```yaml

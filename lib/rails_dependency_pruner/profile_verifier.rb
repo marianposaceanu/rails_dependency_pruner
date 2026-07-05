@@ -2,6 +2,7 @@
 
 require "set"
 require "pathname"
+require "date"
 
 require_relative "boot_plan"
 require_relative "coverage_manifest"
@@ -218,6 +219,8 @@ module RailsDependencyPruner
       def dynamic_boot_require_risks
         @dynamic_boot_require_risks ||= usage.sorted_require_matches.select do |match|
           match["dynamic"] && boot_critical_path?(match.fetch("path"))
+        end.reject do |match|
+          safety_override_for?("dynamic_require_load", match)
         end
       end
 
@@ -736,6 +739,85 @@ module RailsDependencyPruner
         !!coverage_manifest&.high_risk_override(transform_id)
       end
 
+      def safety_override_for?(kind, match)
+        safety_overrides.any? do |override|
+          safety_override_kind_matches?(override, kind) &&
+            override_paths_match?(override, match.fetch("path"))
+        end
+      end
+
+      def safety_overrides
+        @safety_overrides ||= Array(profile.payload["overrides"]).filter_map do |override|
+          normalize_safety_override(override)
+        end
+      end
+
+      def normalize_safety_override(override)
+        return unless override.is_a?(Hash)
+
+        id = override["id"].to_s.strip
+        reason = override["reason"].to_s.strip
+        owner = override["owner"].to_s.strip
+        expires_at = parse_date(override["expires_at"])
+        paths = Array(override["paths"]).map { |path| normalize_override_path(path) }.reject(&:empty?).uniq.sort
+        return if id.empty? || reason.empty? || owner.empty? || expires_at.nil? || expires_at <= Date.today || paths.empty?
+
+        override.merge(
+          "id" => id,
+          "reason" => reason,
+          "owner" => owner,
+          "expires_at" => expires_at.iso8601,
+          "paths" => paths,
+        )
+      end
+
+      def safety_override_kind_matches?(override, kind)
+        declared = Array(
+          override["risk"] ||
+          override["risks"] ||
+          override["kind"] ||
+          override["kinds"] ||
+          override["category"] ||
+          override["categories"],
+        ).map(&:to_s).reject(&:empty?)
+        declared.empty? || declared.include?(kind)
+      end
+
+      def override_paths_match?(override, risk_path)
+        normalized_risk_path = normalize_override_path(risk_path)
+        Array(override["paths"]).any? do |path|
+          path = normalize_override_path(path)
+          if path.end_with?("/*")
+            normalized_risk_path.start_with?(path.delete_suffix("/*") + "/")
+          elsif path.end_with?("/")
+            normalized_risk_path.start_with?(path)
+          else
+            normalized_risk_path == path
+          end
+        end
+      end
+
+      def normalize_override_path(path)
+        path = path.to_s.strip.delete_prefix("./")
+        return path if path.empty?
+
+        pathname = Pathname.new(path)
+        return path unless pathname.absolute?
+
+        pathname.expand_path.relative_path_from(usage.app_root).to_s
+      rescue ArgumentError
+        path
+      end
+
+      def parse_date(value)
+        return value if value.is_a?(Date)
+        return if value.nil? || value.to_s.empty?
+
+        Date.iso8601(value.to_s)
+      rescue ArgumentError
+        nil
+      end
+
       def coverage_manifest
         context.coverage_manifest
       end
@@ -861,6 +943,8 @@ module RailsDependencyPruner
           else
             usage.sorted_dynamic_matches.select do |match|
               match["dynamic"] && dynamic_constantization_risk?(match, namespaces)
+            end.reject do |match|
+              safety_override_for?("dynamic_constantization", match)
             end
           end
         end

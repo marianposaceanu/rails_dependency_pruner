@@ -154,6 +154,10 @@ module RailsDependencyPruner
       SafetyPolicy.normalize(coverage_manifest&.safety_policy || {})
     end
 
+    def safety_overrides_context
+      coverage_manifest&.safety_overrides || []
+    end
+
     def feature_catalog_context
       catalog = FeatureCatalog.for_rails_version(rails_source.version)
 

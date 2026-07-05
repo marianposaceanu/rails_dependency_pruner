@@ -71,6 +71,7 @@ module RailsDependencyPruner
       boot_plan_payload = boot_plan&.to_h || {}
       extreme_boot_payload = normalize_extreme_boot(extreme_boot)
       lazy_gem_policies = structured_lazy_gems(extreme_boot_payload.fetch("lazy_gems"))
+      safety_overrides = context.safety_overrides_context
       payload = {
         "schema_version" => DETERMINISTIC_SCHEMA_VERSION,
         "profile_id" => nil,
@@ -122,6 +123,7 @@ module RailsDependencyPruner
         "lazy_gems" => lazy_gem_policies,
         "lazy_constants" => lazy_constants_for(lazy_gem_policies),
         "safety_policy" => context.safety_policy_context,
+        "overrides" => safety_overrides,
         "safety" => {
           "always_keep" => [],
           "manual_keep" => [],

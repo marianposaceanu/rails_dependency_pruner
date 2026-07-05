@@ -125,6 +125,13 @@ module RailsDependencyPruner
       policy
     end
 
+    def safety_overrides(today: Date.today)
+      overrides = payload["overrides"]
+      return [] unless overrides.is_a?(Array)
+
+      overrides.filter_map { |override| normalize_safety_override(override, today: today) }
+    end
+
     def active_storage_actions
       value = payload["active_storage"]
       return [] unless value.is_a?(Hash)
@@ -234,6 +241,25 @@ module RailsDependencyPruner
         keys = [normalized, normalized.tr("-", "_")]
         keys.concat(EXTERNAL_INTEGRATION_ALIASES.fetch(normalized, []))
         keys.uniq
+      end
+
+      def normalize_safety_override(override, today:)
+        return unless override.is_a?(Hash)
+
+        id = override["id"].to_s.strip
+        reason = override["reason"].to_s.strip
+        owner = override["owner"].to_s.strip
+        expires_at = parse_date(override["expires_at"])
+        paths = Array(override["paths"]).map { |path| path.to_s.strip }.reject(&:empty?).uniq.sort
+        return if id.empty? || reason.empty? || owner.empty? || expires_at.nil? || expires_at <= today || paths.empty?
+
+        override.merge(
+          "id" => id,
+          "reason" => reason,
+          "owner" => owner,
+          "expires_at" => expires_at.iso8601,
+          "paths" => paths,
+        )
       end
 
       def parse_date(value)

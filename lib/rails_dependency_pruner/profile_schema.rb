@@ -56,6 +56,7 @@ module RailsDependencyPruner
       migrated["unexpected_event_policy"] ||= "fail_boot"
       migrated["lazy_constants"] ||= {}
       migrated["safety_policy"] ||= SafetyPolicy.defaults
+      migrated["overrides"] ||= []
       migrated
     end
   end

@@ -15,6 +15,7 @@ readiness fields:
 - `lazy_constants`: optional phase policy for lazy top-level constants
 - `memory_policy`: optional RSS savings gates copied from the coverage manifest
 - `safety_policy`: required fail-closed production safety defaults
+- `overrides`: expiring path-scoped safety overrides copied from coverage
 
 `analysis.feature_catalog` records the Rails feature catalog name, Rails minor
 version, and catalog digest used by the static scanner.
@@ -131,6 +132,12 @@ with fail-closed defaults:
 - stale fingerprints and missing profile ids: `reject`
 
 Production verification rejects profiles whose policy weakens those defaults.
+
+Schema v3 profiles can also carry `overrides` from the coverage manifest. Each
+entry has an id, owner, reason, future expiry, and paths. The verifier uses
+valid entries only for the listed dynamic require/load or dynamic
+constantization paths. Because the entries are in the profile payload, changing
+the override changes the profile digest.
 
 ## runtime events
 

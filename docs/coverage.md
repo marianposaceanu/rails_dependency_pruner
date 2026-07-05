@@ -56,6 +56,10 @@ fail closed. Production verification rejects policy entries that weaken the
 default rejection behavior for dynamic loads, missing coverage, unexpected
 events, stale fingerprints, or unclassified and high-risk transforms.
 
+Generic `overrides` entries can approve a known dynamic `require`, `load`, or
+constantization edge for specific paths. They must include an id, owner, reason,
+future expiry, and paths. Valid entries are copied into the profile digest.
+
 High-risk overrides are explicit and temporary:
 
 ```yaml

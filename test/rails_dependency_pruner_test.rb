@@ -886,6 +886,7 @@ class RailsDependencyPrunerTest < Minitest::Test
     assert_equal({}, migrated.fetch("lazy_constants"))
     assert_equal "reject", migrated.dig("safety_policy", "unknown_dynamic_require")
     assert_equal "reject_if_pruned_namespace_possible", migrated.dig("safety_policy", "unknown_dynamic_constantize")
+    assert_equal [], migrated.fetch("overrides")
   end
 
   def test_profile_digest_preserves_legacy_v2_shape
@@ -1258,6 +1259,116 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       payload = JSON.parse(stdout)
       assert_equal false, payload.fetch("verified")
+      assert payload.fetch("errors").any? { |error| error.include?("dynamic require/load risk: config/dynamic_require.rb:2:require") }
+      assert_equal "config/dynamic_require.rb", payload.dig("production_risks", "dynamic_boot_require_matches", 0, "path")
+    end
+  end
+
+  def test_verify_production_allows_overridden_dynamic_boot_requires
+    Dir.mktmpdir("rails_dependency_pruner_dynamic_require_override") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "config/dynamic_require.rb"), <<~RUBY)
+        feature = ENV.fetch("BOOT_FEATURE")
+        require feature
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        overrides:
+          - id: allow_dynamic_boot_feature
+            owner: platform-team
+            reason: boot feature names are app-owned and reviewed
+            expires_at: 2099-01-01
+            paths:
+              - config/dynamic_require.rb
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout + stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "dynamic_boot_require_matches")
+    end
+  end
+
+  def test_verify_production_ignores_expired_dynamic_boot_override
+    Dir.mktmpdir("rails_dependency_pruner_dynamic_require_expired_override") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "config/dynamic_require.rb"), <<~RUBY)
+        feature = ENV.fetch("BOOT_FEATURE")
+        require feature
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        overrides:
+          - id: allow_dynamic_boot_feature
+            owner: platform-team
+            reason: expired review
+            expires_at: 2000-01-01
+            paths:
+              - config/dynamic_require.rb
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(profile_path: profile_path, app_root: app_root, coverage_path: coverage_path)
+
+      stdout, _stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+
+      payload = JSON.parse(stdout)
       assert payload.fetch("errors").any? { |error| error.include?("dynamic require/load risk: config/dynamic_require.rb:2:require") }
       assert_equal "config/dynamic_require.rb", payload.dig("production_risks", "dynamic_boot_require_matches", 0, "path")
     end
@@ -2929,6 +3040,72 @@ class RailsDependencyPrunerTest < Minitest::Test
     end
   end
 
+  def test_verify_production_allows_overridden_dynamic_constantization_for_pruned_namespaces
+    Dir.mktmpdir("rails_dependency_pruner_dynamic_constant_override") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      File.write(File.join(app_root, "app/models/dynamic_constant_risk.rb"), <<~RUBY)
+        class DynamicConstantRisk
+          def resolve(name)
+            name.constantize
+          end
+        end
+      RUBY
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        mailers:
+          review_required: false
+          actions: []
+        overrides:
+          - id: allow_app_report_constantization
+            owner: platform-team
+            reason: dynamic constant names are restricted to app report classes
+            expires_at: 2099-01-01
+            paths:
+              - app/models/dynamic_constant_risk.rb
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      build_profile(
+        profile_path: profile_path,
+        app_root: app_root,
+        coverage_path: coverage_path,
+        frameworks: "actionmailer,actionpack,activerecord",
+      )
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "verify",
+        "--profile",
+        profile_path,
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionmailer,actionpack,activerecord",
+        "--coverage",
+        coverage_path,
+        "--production",
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout + stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal true, payload.fetch("verified")
+      assert_empty payload.dig("production_risks", "dynamic_constantization_matches")
+    end
+  end
+
   def test_verify_production_rejects_truncated_runtime_evidence
     Dir.mktmpdir("rails_dependency_pruner_truncated_runtime_verify") do |dir|
       app_root = File.join(dir, "app")
@@ -3467,6 +3644,65 @@ class RailsDependencyPrunerTest < Minitest::Test
       assert_equal 5, payload.dig("memory_policy", "max_warmed_p95_latency_regression_percent")
       assert_equal 80, payload.dig("memory_policy", "preserve_at_least_percent_of_reference_savings")
       assert_equal 98.3, payload.dig("memory_policy", "reference_savings_mib")
+      assert_equal payload.fetch("profile_id"), JSON.parse(File.read(profile_path)).fetch("profile_id")
+    end
+  end
+
+  def test_profile_build_copies_safety_overrides_from_coverage_manifest
+    Dir.mktmpdir("rails_dependency_pruner_safety_override_profile_build") do |dir|
+      app_root = File.join(dir, "app")
+      FileUtils.cp_r(FAKE_APP_ROOT, app_root)
+      FileUtils.mkdir_p(File.join(app_root, "config"))
+      coverage_path = File.join(app_root, "config/pruner_coverage.yml")
+      File.write(coverage_path, <<~YAML)
+        version: 1
+        rails_env: production
+        boot:
+          eager_load: true
+        routes:
+          include: all
+        overrides:
+          - id: allow_dynamic_constantize_admin_reports
+            reason: Admin reports constantize only app-owned report classes
+            owner: platform-team
+            expires_at: 2099-01-01
+            paths:
+              - app/services/report_runner.rb
+      YAML
+      profile_path = File.join(dir, "profile.json")
+
+      stdout, stderr, status = Open3.capture3(
+        RUBY,
+        ROOT.join("exe/rails-dependency-pruner").to_s,
+        "profile",
+        "build",
+        "--app",
+        app_root,
+        "--rails-root",
+        FAKE_RAILS_ROOT.to_s,
+        "--frameworks",
+        "actionpack,activerecord",
+        "--coverage",
+        "config/pruner_coverage.yml",
+        "--write",
+        profile_path,
+        "--json",
+        chdir: ROOT.to_s,
+      )
+
+      assert status.success?, stdout + stderr
+
+      payload = JSON.parse(stdout)
+      assert_equal [
+        {
+          "id" => "allow_dynamic_constantize_admin_reports",
+          "reason" => "Admin reports constantize only app-owned report classes",
+          "owner" => "platform-team",
+          "expires_at" => "2099-01-01",
+          "paths" => ["app/services/report_runner.rb"],
+        },
+      ], payload.fetch("overrides")
+      assert_equal payload.fetch("overrides"), JSON.parse(File.read(profile_path)).fetch("overrides")
       assert_equal payload.fetch("profile_id"), JSON.parse(File.read(profile_path)).fetch("profile_id")
     end
   end
@@ -7048,6 +7284,46 @@ class RailsDependencyPrunerTest < Minitest::Test
 
       manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
       assert_nil manifest.high_risk_override("stub:active_storage_vips_analyzer")
+    end
+  end
+
+  def test_coverage_manifest_accepts_unexpired_safety_overrides
+    Dir.mktmpdir("rails_dependency_pruner_safety_override") do |dir|
+      manifest_path = File.join(dir, "coverage.yml")
+      File.write(manifest_path, <<~YAML)
+        version: 2
+        rails_env: production
+        overrides:
+          - id: allow_dynamic_constantize_admin_reports
+            reason: Admin reports constantize only app-owned report classes
+            owner: platform-team
+            expires_at: 2099-01-01
+            paths:
+              - app/services/report_runner.rb
+              - app/services/report_runner.rb
+          - id: expired_override
+            reason: expired
+            owner: platform-team
+            expires_at: 2000-01-01
+            paths:
+              - config/expired.rb
+          - id: incomplete_override
+            reason: missing owner
+            expires_at: 2099-01-01
+            paths:
+              - config/incomplete.rb
+      YAML
+
+      manifest = RailsDependencyPruner::CoverageManifest.load(manifest_path)
+      assert_equal [
+        {
+          "id" => "allow_dynamic_constantize_admin_reports",
+          "reason" => "Admin reports constantize only app-owned report classes",
+          "owner" => "platform-team",
+          "expires_at" => "2099-01-01",
+          "paths" => ["app/services/report_runner.rb"],
+        },
+      ], manifest.safety_overrides
     end
   end
 
